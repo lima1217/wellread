@@ -1,0 +1,414 @@
+import { BookMetadata, CalibreCustomColumn, EXTS } from '@/libs/document';
+import {
+  Book,
+  BOOK_CONFIG_SCHEMA_VERSION,
+  BookConfig,
+  BookProgress,
+  WritingMode,
+} from '@/types/book';
+import { SUPPORTED_LANGS } from '@/services/constants';
+import { getLocale, getUserLang, makeSafeFilename } from './misc';
+import { getStorageType } from './storage';
+import { getDirFromLanguage } from './rtl';
+import { code6392to6391, isValidLang, normalizedLangCode } from './lang';
+import { md5 } from './md5';
+
+export const getDir = (book: Book) => {
+  return `${book.hash}`;
+};
+export const getLibraryFilename = () => {
+  return 'library.json';
+};
+export const getLibraryBackupFilename = () => {
+  return 'library_backup.json';
+};
+export const getRemoteBookFilename = (book: Book) => {
+  // S3 storage: https://docs.aws.amazon.com/zh_cn/AmazonS3/latest/userguide/object-keys.html
+  if (getStorageType() === 'r2') {
+    return `${book.hash}/${makeSafeFilename(book.sourceTitle || book.title)}.${EXTS[book.format]}`;
+  } else if (getStorageType() === 's3') {
+    return `${book.hash}/${book.hash}.${EXTS[book.format]}`;
+  } else {
+    return '';
+  }
+};
+export const getLocalBookFilename = (book: Book) => {
+  return `${book.hash}/${makeSafeFilename(book.sourceTitle || book.title)}.${EXTS[book.format]}`;
+};
+export const getCoverFilename = (book: Book) => {
+  return `${book.hash}/cover.png`;
+};
+export const getConfigFilename = (book: Book) => {
+  return `${book.hash}/config.json`;
+};
+export const getBookNavFilename = (book: Book) => {
+  return `${book.hash}/nav.json`;
+};
+export const isBookFile = (filename: string) => {
+  return Object.values(EXTS).includes(filename.split('.').pop()!);
+};
+
+export const INIT_BOOK_CONFIG: BookConfig = {
+  schemaVersion: BOOK_CONFIG_SCHEMA_VERSION,
+  updatedAt: 0,
+};
+
+export interface LanguageMap {
+  [key: string]: string;
+}
+
+export interface Identifier {
+  scheme: string;
+  value: string;
+}
+
+export interface Contributor {
+  name: LanguageMap;
+}
+
+export interface Collection {
+  name: string;
+  position?: string;
+  total?: string;
+}
+
+const formatLanguageMap = (x: string | LanguageMap, defaultLang = false): string => {
+  const userLang = getUserLang();
+  if (!x) return '';
+  if (typeof x === 'string') return x;
+  const keys = Object.keys(x);
+  return defaultLang ? x[keys[0]!]! : x[userLang] || x[keys[0]!]!;
+};
+
+export const listFormater = (narrow = false, lang = '') => {
+  lang = lang ? lang : getUserLang();
+  if (narrow) {
+    return new Intl.ListFormat('en', { style: 'narrow', type: 'unit' });
+  } else {
+    return new Intl.ListFormat(lang, { style: 'long', type: 'conjunction' });
+  }
+};
+
+export const getBookLangCode = (lang: string | string[] | undefined) => {
+  try {
+    const bookLang = typeof lang === 'string' ? lang : lang?.[0];
+    return bookLang ? bookLang.split('-')[0]! : '';
+  } catch {
+    return '';
+  }
+};
+
+export const flattenContributors = (
+  contributors: string | string[] | Contributor | Contributor[],
+) => {
+  if (!contributors) return '';
+  return Array.isArray(contributors)
+    ? contributors
+        .map((contributor) =>
+          typeof contributor === 'string' ? contributor : formatLanguageMap(contributor?.name),
+        )
+        .join(', ')
+    : typeof contributors === 'string'
+      ? contributors
+      : formatLanguageMap(contributors?.name);
+};
+
+// biome-ignore format: keep the language codes compact on a single line
+const LASTNAME_AUTHOR_SORT_LANGS = [ 'ar', 'bo', 'de', 'en', 'es', 'fr', 'hi', 'it', 'nl', 'pl', 'pt', 'ru', 'th', 'tr', 'uk' ];
+
+const formatAuthorName = (name: string, lastNameFirst: boolean) => {
+  if (!name) return '';
+  const parts = name.split(' ');
+  if (lastNameFirst && parts.length > 1) {
+    return `${parts[parts.length - 1]}, ${parts.slice(0, -1).join(' ')}`;
+  }
+  return name;
+};
+
+export const formatAuthors = (
+  contributors: string | string[] | Contributor | Contributor[],
+  bookLang?: string | string[],
+  sortAs?: boolean,
+) => {
+  const langCode = getBookLangCode(bookLang) || 'en';
+  const lastNameFirst = !!sortAs && LASTNAME_AUTHOR_SORT_LANGS.includes(langCode);
+  return Array.isArray(contributors)
+    ? listFormater(langCode === 'zh', langCode).format(
+        contributors.map((contributor) =>
+          typeof contributor === 'string'
+            ? formatAuthorName(contributor, lastNameFirst)
+            : formatAuthorName(formatLanguageMap(contributor?.name), lastNameFirst),
+        ),
+      )
+    : typeof contributors === 'string'
+      ? formatAuthorName(contributors, lastNameFirst)
+      : formatAuthorName(formatLanguageMap(contributors?.name), lastNameFirst);
+};
+
+export const formatTitle = (title: string | LanguageMap) => {
+  return typeof title === 'string' ? title : formatLanguageMap(title);
+};
+
+export const formatDescription = (description?: string | LanguageMap) => {
+  if (!description) return '';
+  const text = typeof description === 'string' ? description : formatLanguageMap(description);
+  return text
+    .replace(/<\/?[^>]+(>|$)/g, '')
+    .replace(/&#\d+;/g, '')
+    .trim();
+};
+
+export const formatSeries = (series?: string, seriesIndex?: number) => {
+  const name = series?.trim();
+  if (!name) return '';
+  const hasIndex =
+    typeof seriesIndex === 'number' && Number.isFinite(seriesIndex) && seriesIndex > 0;
+  return hasIndex ? `${name} #${seriesIndex}` : name;
+};
+
+export const formatPublisher = (publisher: string | LanguageMap) => {
+  return typeof publisher === 'string' ? publisher : formatLanguageMap(publisher);
+};
+
+const langCodeToLangName = (langCode: string) => {
+  return SUPPORTED_LANGS[langCode] || langCode.toUpperCase();
+};
+
+export const formatLanguage = (lang: string | string[] | undefined): string => {
+  return Array.isArray(lang)
+    ? lang.map(langCodeToLangName).join(', ')
+    : langCodeToLangName(lang || '');
+};
+
+// Should return valid ISO-639-1 language code, fallback to 'en' if not valid
+export const getPrimaryLanguage = (lang: string | string[] | undefined) => {
+  const primaryLang = Array.isArray(lang) ? lang[0] : lang;
+  if (isValidLang(primaryLang)) {
+    const normalizedLang = normalizedLangCode(primaryLang);
+    return code6392to6391(normalizedLang) || normalizedLang;
+  }
+  return 'en';
+};
+
+// Immutably apply edited metadata to a book, returning a NEW book object.
+// Callers must not mutate the existing book in place: <BookCover> is memoized
+// and compares fields off the book, so an in-place mutation makes the memo's
+// previous snapshot point to the same object and skips re-rendering the cover.
+export const getBookWithUpdatedMetadata = (book: Book, metadata: BookMetadata): Book => {
+  const updatedBook: Book = {
+    ...book,
+    metadata,
+    title: formatTitle(metadata.title),
+    author: formatAuthors(metadata.author),
+    primaryLanguage: getPrimaryLanguage(metadata.language),
+    updatedAt: Date.now(),
+  };
+  const newCoverImageUrl = metadata.coverImageBlobUrl || metadata.coverImageUrl;
+  if (newCoverImageUrl) {
+    updatedBook.coverImageUrl = newCoverImageUrl;
+  }
+  return updatedBook;
+};
+
+export const formatDate = (date: string | number | Date | null | undefined, isUTC = false) => {
+  if (!date) return;
+  const userLang = getUserLang();
+  try {
+    return new Date(date).toLocaleDateString(userLang, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      timeZone: isUTC ? 'UTC' : undefined,
+    });
+  } catch {
+    return;
+  }
+};
+
+export const formatCalibreColumnValue = (column: CalibreCustomColumn): string => {
+  const { datatype, value, extra } = column;
+  if (Array.isArray(value)) return value.join(', ');
+  switch (datatype) {
+    case 'rating': {
+      // 0-10 in half stars, like calibre's own rendering
+      const rating = typeof value === 'number' ? value : 0;
+      return '★'.repeat(Math.floor(rating / 2)) + (rating % 2 ? '½' : '');
+    }
+    case 'series':
+      return extra != null ? `${value} [${extra}]` : String(value);
+    case 'datetime':
+      return formatDate(String(value), true) || '';
+    case 'comments':
+      return String(value)
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    case 'bool':
+      return value ? '✓' : '✗';
+    default:
+      return String(value);
+  }
+};
+
+export const formatLocaleDateTime = (date: number | Date) => {
+  const userLang = getLocale();
+  return new Date(date).toLocaleString(userLang);
+};
+
+export const formatBytes = (bytes?: number | null, locale = 'en-US') => {
+  if (!bytes) return '';
+  const units = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const value = bytes / Math.pow(1024, i);
+  const formatter = new Intl.NumberFormat(locale, {
+    style: 'unit',
+    unit: units[i],
+    unitDisplay: 'short',
+    maximumFractionDigits: 2,
+  });
+  return formatter.format(value);
+};
+
+export const getCurrentPage = (book: Book, progress: BookProgress) => {
+  const bookFormat = book.format;
+  const { section, pageinfo } = progress;
+  return bookFormat === 'PDF'
+    ? section
+      ? section.current + 1
+      : 0
+    : pageinfo
+      ? pageinfo.current + 1
+      : 0;
+};
+
+/**
+ * A book is "currently reading" iff it has real reading progress and has not
+ * been parked. Importing a book sets timestamps but never `progress` (only
+ * opening it does), so the progress gate drops freshly-added-but-unopened
+ * books; the status gate drops finished, abandoned (on hold) and
+ * manually-marked-unread books. A book actively being read has `readingStatus`
+ * either `undefined` (cleared from 'unread' on first open) or `'reading'`, both
+ * of which pass. Shared by the library's recently-read shelf and the
+ * home-screen reading widget so the two surfaces stay in sync.
+ */
+export const isCurrentlyReadingBook = (book: Book): boolean =>
+  !book.deletedAt &&
+  book.progress != null &&
+  book.readingStatus !== 'finished' &&
+  book.readingStatus !== 'abandoned' &&
+  book.readingStatus !== 'unread';
+
+export const getBookDirFromWritingMode = (writingMode: WritingMode) => {
+  switch (writingMode) {
+    case 'horizontal-tb':
+      return 'ltr';
+    case 'horizontal-rl':
+    case 'vertical-rl':
+      return 'rtl';
+    default:
+      return 'auto';
+  }
+};
+
+export const getBookDirFromLanguage = (language: string | string[] | undefined) => {
+  const lang = getPrimaryLanguage(language) || '';
+  return getDirFromLanguage(lang);
+};
+
+const getTitleForHash = (title: string | LanguageMap) => {
+  return typeof title === 'string' ? title : formatLanguageMap(title, true);
+};
+
+const getAuthorsList = (contributors: string | string[] | Contributor | Contributor[]) => {
+  if (!contributors) return [];
+  return Array.isArray(contributors)
+    ? contributors
+        .map((contributor) =>
+          typeof contributor === 'string'
+            ? contributor
+            : formatLanguageMap(contributor?.name, true),
+        )
+        .filter(Boolean)
+    : [
+        typeof contributors === 'string'
+          ? contributors
+          : formatLanguageMap(contributors?.name, true),
+      ];
+};
+
+const normalizeIdentifier = (identifier: string) => {
+  try {
+    if (identifier.includes('urn:')) {
+      // Slice after the last ':'
+      return identifier.match(/[^:]+$/)?.[0] || '';
+    } else if (identifier.includes(':')) {
+      // Slice after the first ':'
+      return identifier.match(/^[^:]+:(.+)$/)?.[1] || '';
+    }
+  } catch {
+    return identifier;
+  }
+  return identifier;
+};
+
+const getPreferredIdentifier = (identifiers: string[] | Identifier[]) => {
+  for (const scheme of ['uuid', 'calibre', 'isbn']) {
+    const found = identifiers.find((identifier) =>
+      typeof identifier === 'string'
+        ? identifier.toLowerCase().includes(scheme)
+        : identifier.scheme.toLowerCase() === scheme,
+    );
+    if (found) {
+      return typeof found === 'string' ? normalizeIdentifier(found) : found.value;
+    }
+  }
+  return;
+};
+
+const getIdentifiersList = (
+  identifiers: undefined | string | string[] | Identifier | Identifier[],
+) => {
+  if (!identifiers) return [];
+  if (Array.isArray(identifiers)) {
+    const preferred = getPreferredIdentifier(identifiers);
+    if (preferred) {
+      return [preferred];
+    }
+  }
+  return Array.isArray(identifiers)
+    ? identifiers
+        .map((identifier) =>
+          typeof identifier === 'string' ? normalizeIdentifier(identifier) : identifier.value,
+        )
+        .filter(Boolean)
+    : typeof identifiers === 'string'
+      ? [normalizeIdentifier(identifiers)]
+      : [identifiers.value];
+};
+
+export interface MetadataHashInfo {
+  title: string;
+  authors: string[];
+  identifiers: string[];
+  hashSource: string;
+  metaHash: string;
+}
+
+export const getMetadataHashInfo = (metadata: BookMetadata): MetadataHashInfo | undefined => {
+  if (!metadata) return;
+  try {
+    const title = getTitleForHash(metadata.title);
+    const authors = getAuthorsList(metadata.author);
+    const identifiers = getIdentifiersList(metadata.altIdentifier || metadata.identifier);
+    const hashSource = `${title}|${authors.join(',')}|${identifiers.join(',')}`;
+    const metaHash = md5(hashSource.normalize('NFC'));
+    return { title, authors, identifiers, hashSource, metaHash };
+  } catch (error) {
+    console.error('Error generating metadata hash:', error);
+  }
+  return;
+};
+
+export const getMetadataHash = (metadata: BookMetadata) => {
+  return getMetadataHashInfo(metadata)?.metaHash;
+};
