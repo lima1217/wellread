@@ -34,9 +34,13 @@ import { UserStorageQuota, UserDailyTranslationQuota } from '@/types/quota';
 import { getDefaultMaxBlockSize, getDefaultMaxInlineSize } from '@/utils/config';
 import { stubTranslation as _ } from '@/utils/misc';
 import { DEFAULT_AI_SETTINGS } from './ai/constants';
+import { DEFAULT_MODEL_CONFIG } from './wellread/modelConfig';
 import { DEFAULT_ANNOTATION_TOOLBAR_ITEMS } from '@/utils/annotationToolbar';
-import { DEFAULT_SENTENCE_GAP_SEC } from './tts/EdgeTTSClient';
-import { DEFAULT_PARAGRAPH_GAP_SEC } from './tts/TTSController';
+
+// Keep in sync with BufferedTTSClient / TTSController defaults — imported
+// inline here so constants.ts does not pull in the TTS module graph at load time.
+const DEFAULT_SENTENCE_GAP_SEC = 0.15;
+const DEFAULT_PARAGRAPH_GAP_SEC = 0.3;
 
 export const DATA_SUBDIR = 'Readest';
 export const LOCAL_BOOKS_SUBDIR = `${DATA_SUBDIR}/Books`;
@@ -203,6 +207,7 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   s3: DEFAULT_S3_SETTINGS,
   onedrive: DEFAULT_ONEDRIVE_SETTINGS,
   aiSettings: DEFAULT_AI_SETTINGS,
+  modelConfig: DEFAULT_MODEL_CONFIG,
 
   lastSyncedAtBooks: 0,
   lastSyncedAtConfigs: 0,

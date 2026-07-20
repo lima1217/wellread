@@ -38,6 +38,7 @@ import AppLockDialog from '@/components/settings/AppLockDialog';
 import PassphrasePrompt from '@/components/PassphrasePrompt';
 import TelemetryConsentDialog from '@/components/TelemetryConsentDialog';
 import { upgradeToKeychainIfAvailable } from '@/libs/crypto/passphrase';
+import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
 import { cryptoSession } from '@/libs/crypto/session';
 import { useAppLockStore } from '@/store/appLockStore';
 import { initSettingsSync } from '@/services/sync/replicaSettingsSync';
@@ -215,6 +216,10 @@ const Providers = ({ children }: { children: React.ReactNode }) => {
     if (!meta) return;
     const updated = getAndroidPatchedViewportContent(navigator.userAgent, meta.content);
     if (updated) meta.content = updated;
+  }, []);
+
+  useEffect(() => {
+    void useEveConnectionStore.getState().refresh();
   }, []);
 
   // Make sure appService is available in all children components

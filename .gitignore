@@ -55,3 +55,6 @@ result*
 .claude/settings.local.json
 
 .pnpm-store/
+
+apps/readest-app/src-tauri/binaries/node-*
+apps/eve-sidecar/node_modules/

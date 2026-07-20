@@ -85,6 +85,12 @@ function makeSettings(overrides: Partial<SystemSettings> = {}): SystemSettings {
       openrouterApiKey: 'or-secret-key',
       openrouterBaseUrl: 'https://openrouter.ai/api/v1',
     },
+    modelConfig: {
+      enabled: true,
+      baseURL: 'https://api.deepseek.com/v1',
+      modelId: 'deepseek-v4-flash',
+      contextWindowTokens: 1_000_000,
+    },
     globalReadSettings: {
       sideBarWidth: '20%',
       customThemes: [{ name: 'mytheme' }],
@@ -191,6 +197,10 @@ describe('sanitizeSettingsForBackup - credentials', () => {
     expect(rec(out.aiSettings)['openrouterApiKey']).toBeUndefined();
     // non-credential aiSettings fields (e.g. base URL) survive
     expect(rec(out.aiSettings)['openrouterBaseUrl']).toBe('https://openrouter.ai/api/v1');
+    // modelConfig never carries apiKey; non-secret fields survive backup
+    expect(out.modelConfig?.baseURL).toBe('https://api.deepseek.com/v1');
+    expect(out.modelConfig?.modelId).toBe('deepseek-v4-flash');
+    expect(rec(out.modelConfig)['apiKey']).toBeUndefined();
     expect(out.opdsCatalogs[0]!.username).toBeUndefined();
     expect(out.opdsCatalogs[0]!.password).toBeUndefined();
   });

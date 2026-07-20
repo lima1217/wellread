@@ -5,6 +5,10 @@ use std::{
 };
 
 fn main() {
+    println!(
+        "cargo:rustc-env=READEST_TARGET={}",
+        env::var("TARGET").expect("TARGET not set")
+    );
     println!("cargo:rerun-if-changed=../extensions/windows-thumbnail/src");
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if target_os == "windows" {
@@ -50,6 +54,8 @@ fn main() {
             "spawn_fresh_browser",
             "verify_update_signature",
             "install_nightly_update",
+            "get_eve_sidecar_info",
+            "reload_eve_sidecar",
         ]),
     ))
     .expect("failed to run tauri-build");

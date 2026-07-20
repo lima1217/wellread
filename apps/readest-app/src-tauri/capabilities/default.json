@@ -229,6 +229,8 @@
     "allow-clip-url",
     "allow-spawn-fresh-browser",
     "allow-verify-update-signature",
-    "allow-install-nightly-update"
+    "allow-install-nightly-update",
+    "allow-get-eve-sidecar-info",
+    "allow-reload-eve-sidecar"
   ]
 }

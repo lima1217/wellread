@@ -50,7 +50,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [],
+    "resources": {
+      "../../eve-sidecar/.output": "eve/.output"
+    },
+    "externalBin": ["binaries/node"],
     "windows": {
       "webviewInstallMode": {
         "type": "embedBootstrapper"

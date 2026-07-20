@@ -57,3 +57,7 @@ overrides:
   ws: '>=8.21.0'
   '@emnapi/core': 1.8.1
   '@emnapi/runtime': 1.8.1
+  # nanoid@3.3.12 / resolve@1.22.12 ship .claude/settings.local.json which
+  # Cursor's sandbox blocks; pin clean patch versions for agent installs.
+  nanoid: 3.3.11
+  resolve: 1.22.10

@@ -27,6 +27,8 @@ mod dir_scanner;
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod discord_rpc;
 mod epub_parser;
+#[cfg(desktop)]
+mod eve_sidecar;
 #[cfg(target_os = "macos")]
 mod macos;
 mod mobi_parser;
@@ -435,6 +437,10 @@ pub fn run() {
             nightly_update::verify_update_signature,
             #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             nightly_update::install_nightly_update,
+            #[cfg(desktop)]
+            eve_sidecar::get_eve_sidecar_info,
+            #[cfg(desktop)]
+            eve_sidecar::reload_eve_sidecar,
         ])
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_persisted_scope::init())
@@ -526,6 +532,12 @@ pub fn run() {
                 use std::sync::{Arc, Mutex};
                 let discord_client = Arc::new(Mutex::new(discord_rpc::DiscordRpcClient::new()));
                 app.manage(discord_client);
+            }
+
+            #[cfg(desktop)]
+            {
+                app.manage(eve_sidecar::EveSidecarState::new());
+                eve_sidecar::bootstrap(app.handle());
             }
 
             #[cfg(desktop)]
@@ -743,6 +755,10 @@ pub fn run() {
         .run(
             #[allow(unused_variables)]
             |app_handle, event| {
+                #[cfg(desktop)]
+                if let tauri::RunEvent::Exit = event {
+                    eve_sidecar::shutdown(app_handle);
+                }
                 #[cfg(target_os = "macos")]
                 match event {
                     tauri::RunEvent::Opened { urls } => {

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reload-eve-sidecar"
+description = "Enables the reload_eve_sidecar command without any pre-configured scope."
+commands.allow = ["reload_eve_sidecar"]
+
+[[permission]]
+identifier = "deny-reload-eve-sidecar"
+description = "Denies the reload_eve_sidecar command without any pre-configured scope."
+commands.deny = ["reload_eve_sidecar"]
