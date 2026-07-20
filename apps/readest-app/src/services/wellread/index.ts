@@ -22,3 +22,12 @@ export { testModelConnection } from './testModelConnection';
 export { getModelApiKey, setModelApiKey } from './modelApiKey';
 export { getEveSidecarInfo, reloadEveSidecar, type EveSidecarInfo } from './eveSidecar';
 export { useEveConnectionStore } from './eveConnectionStore';
+export {
+  isReadingAssistantAvailable,
+  formatAskAboutDraft,
+  buildReadingAssistantSystemPrompt,
+  extractSourcesFromChunkMarkdown,
+  summarizeToolTrace,
+} from './assistant/helpers';
+export { useReadingAssistantStore } from './assistant/readingAssistantStore';
+export { useEveAgent } from './assistant/useEveAgent';

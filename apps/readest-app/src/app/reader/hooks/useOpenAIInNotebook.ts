@@ -1,32 +1,62 @@
 import { useCallback } from 'react';
 import { useNotebookStore } from '@/store/notebookStore';
-import { useAIChatStore } from '@/store/aiChatStore';
+import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
+import { formatAskAboutDraft } from '@/services/wellread/assistant/helpers';
+import { createEveSession } from '@/services/wellread/assistant/eveClient';
 
-// Hook to open the Notebook panel with the AI tab and optionally load a specific conversation
-
+/**
+ * Open the notebook Reading Assistant tab.
+ * Optionally prefill an ask-about draft (does not auto-send).
+ */
 export function useOpenAIInNotebook() {
   const { setNotebookVisible, setNotebookActiveTab } = useNotebookStore();
-  const { setActiveConversation, createConversation } = useAIChatStore();
+  const setActiveSession = useReadingAssistantStore((s) => s.setActiveSession);
+  const setDraft = useReadingAssistantStore((s) => s.setDraft);
 
   const openAIInNotebook = useCallback(
     async (options?: {
-      conversationId?: string;
-      bookHash?: string;
+      sessionId?: string;
+      bookId?: string;
+      bookTitle?: string;
       newConversationTitle?: string;
+      /** Selection text for ask-about prefill */
+      selectionText?: string;
+      chapterTitle?: string | null;
     }) => {
-      // Open notebook and switch to AI tab
       setNotebookVisible(true);
       setNotebookActiveTab('ai');
 
-      if (options?.conversationId) {
-        // Load existing conversation
-        await setActiveConversation(options.conversationId);
-      } else if (options?.bookHash && options?.newConversationTitle) {
-        // Create new conversation
-        await createConversation(options.bookHash, options.newConversationTitle);
+      if (options?.selectionText) {
+        setDraft(
+          formatAskAboutDraft({
+            text: options.selectionText,
+            chapterTitle: options.chapterTitle,
+          }),
+        );
       }
+
+      if (options?.sessionId) {
+        setActiveSession(options.sessionId, options.bookId ?? null);
+        return;
+      }
+
+      if (!options?.bookId) return;
+
+      // Reuse the active session for this book when ask-about fires.
+      const state = useReadingAssistantStore.getState();
+      if (state.activeSessionId && state.activeBookId === options.bookId) {
+        setActiveSession(state.activeSessionId, options.bookId);
+        return;
+      }
+
+      const session = await createEveSession({
+        bookId: options.bookId,
+        bookTitle: options.bookTitle,
+        title: options.newConversationTitle,
+      });
+      setActiveSession(session.id, options.bookId);
     },
-    [setNotebookVisible, setNotebookActiveTab, setActiveConversation, createConversation],
+    [setNotebookVisible, setNotebookActiveTab, setActiveSession, setDraft],
   );
 
   const closeAIInNotebook = useCallback(() => {

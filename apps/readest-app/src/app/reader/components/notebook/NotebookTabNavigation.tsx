@@ -19,7 +19,7 @@ const NotebookTabNavigation: React.FC<NotebookTabNavigationProps> = ({
   const _ = useTranslation();
   const { appService } = useEnv();
   const { settings } = useSettingsStore();
-  const aiEnabled = settings?.aiSettings?.enabled ?? false;
+  const aiEnabled = settings?.modelConfig?.enabled ?? false;
 
   const tabs: NotebookTab[] = aiEnabled ? ['notes', 'ai'] : [];
 
@@ -28,7 +28,7 @@ const NotebookTabNavigation: React.FC<NotebookTabNavigationProps> = ({
       case 'notes':
         return _('Notes');
       case 'ai':
-        return _('AI');
+        return _('Assistant');
       default:
         return '';
     }

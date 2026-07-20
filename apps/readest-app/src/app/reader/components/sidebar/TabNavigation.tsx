@@ -16,7 +16,7 @@ const TabNavigation: React.FC<{
   const _ = useTranslation();
   const { appService } = useEnv();
   const { settings } = useSettingsStore();
-  const aiEnabled = settings?.aiSettings?.enabled ?? false;
+  const aiEnabled = settings?.modelConfig?.enabled ?? false;
 
   const forceMobileLayout =
     !!appService?.isMobile && window.innerWidth >= 640 && window.innerWidth <= window.innerHeight;

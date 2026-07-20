@@ -27,7 +27,7 @@ const SidebarContent: React.FC<{
   const [fade, setFade] = useState(false);
   const [targetTab, setTargetTab] = useState(activeTab);
   const isMobile = window.innerWidth < 640 || window.innerHeight < 640;
-  const aiEnabled = settings?.aiSettings?.enabled ?? false;
+  const aiEnabled = settings?.modelConfig?.enabled ?? false;
 
   useEffect(() => {
     if (!sideBarBookKey) return;

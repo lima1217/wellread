@@ -1,4 +1,4 @@
-import type { ChunkRow } from '@/services/reedy/db/types';
+import type { ChunkRow } from './CfiChunker';
 
 export type ExtractMeta = {
   bookId: string;

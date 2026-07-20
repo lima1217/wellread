@@ -3,7 +3,6 @@ import { CustomFont } from '@/styles/fonts';
 import { CustomTexture } from '@/styles/textures';
 import { HighlightColor, HighlightStyle, UserHighlightColor, ViewSettings } from './book';
 import { OPDSCatalog } from './opds';
-import type { AISettings } from '@/services/ai/types';
 import type { ModelConfig } from '@/services/wellread/modelConfig';
 import type { NotebookTab } from '@/store/notebookStore';
 import type { DictionarySettings, ImportedDictionary } from '@/services/dictionaries/types';
@@ -423,11 +422,9 @@ export interface SystemSettings {
   s3: S3Settings;
   onedrive: OneDriveSettings;
 
-  aiSettings: AISettings;
   /**
-   * BYO OpenAI-compatible model settings (wellread). Coexists with legacy
-   * `aiSettings` until ticket #7 deletes the old AI stack. apiKey is NOT
-   * stored here — OS keychain via `MODEL_API_KEY_SECURE_ITEM`.
+   * BYO OpenAI-compatible model settings (wellread). apiKey is NOT stored
+   * here — OS keychain via `MODEL_API_KEY_SECURE_ITEM`.
    */
   modelConfig: ModelConfig;
   /**

@@ -15,18 +15,19 @@ describe('annotationToolbar helpers', () => {
     expect(ALL_ANNOTATION_TOOL_TYPES).toEqual(annotationToolButtons.map((b) => b.type));
   });
 
-  test('default toolbar is the eight non-share tools in canonical order', () => {
+  test('default toolbar includes ask assistant and omits share', () => {
     expect(DEFAULT_ANNOTATION_TOOLBAR_ITEMS).toEqual([
       'copy',
       'highlight',
       'annotate',
       'search',
       'dictionary',
-      'translate',
+      'ask',
       'tts',
       'proofread',
     ]);
     expect(DEFAULT_ANNOTATION_TOOLBAR_ITEMS).not.toContain('share');
+    expect(DEFAULT_ANNOTATION_TOOLBAR_ITEMS).not.toContain('translate');
   });
 
   test('getToolbarToolTypes preserves order and falls back to default when undefined', () => {
@@ -50,6 +51,7 @@ describe('annotationToolbar helpers', () => {
       'search',
       'dictionary',
       'translate',
+      'ask',
       'tts',
       'proofread',
       'share',

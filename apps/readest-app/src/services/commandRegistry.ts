@@ -550,61 +550,31 @@ const languagePanelItems = [
   },
 ];
 
-// ai panel items
+// ai panel items (Reading Assistant / ModelConfig)
 const aiPanelItems = [
   {
     id: 'settings.ai.enableAssistant',
-    labelKey: _('Enable AI Assistant'),
-    keywords: ['ai', 'assistant', 'enable', 'chatbot', 'llm'],
+    labelKey: _('Enable Reading Assistant'),
+    keywords: ['ai', 'assistant', 'enable', 'reading', 'llm', 'model'],
     section: 'AI',
   },
   {
-    id: 'settings.ai.provider',
-    labelKey: _('AI Provider'),
-    keywords: ['ai', 'provider', 'ollama', 'gateway', 'service'],
-    section: 'AI',
-  },
-  {
-    id: 'settings.ai.ollamaUrl',
-    labelKey: _('Ollama URL'),
-    keywords: ['ollama', 'url', 'server', 'endpoint', 'api'],
-    section: 'Ollama',
-  },
-  {
-    id: 'settings.ai.ollamaModel',
-    labelKey: _('Ollama Model'),
-    keywords: ['ollama', 'model', 'llama', 'mistral', 'gemma'],
-    section: 'Ollama',
-  },
-  {
-    id: 'settings.ai.gatewayApiKey',
+    id: 'settings.ai.apiKey',
     labelKey: _('API Key'),
-    keywords: ['api', 'key', 'gateway', 'token', 'secret'],
-    section: 'AI Gateway',
+    keywords: ['api', 'key', 'token', 'secret', 'deepseek'],
+    section: 'AI',
   },
   {
-    id: 'settings.ai.gatewayModel',
-    labelKey: _('AI Gateway Model'),
-    keywords: ['gateway', 'model', 'openai', 'gpt', 'claude'],
-    section: 'AI Gateway',
+    id: 'settings.ai.modelId',
+    labelKey: _('Model'),
+    keywords: ['model', 'id', 'deepseek', 'openai'],
+    section: 'AI',
   },
   {
-    id: 'settings.ai.openrouterApiKey',
-    labelKey: _('OpenRouter API Key'),
-    keywords: ['openrouter', 'api', 'key', 'token', 'secret'],
-    section: 'OpenRouter',
-  },
-  {
-    id: 'settings.ai.openrouterBaseUrl',
-    labelKey: _('OpenRouter Base URL'),
-    keywords: ['openrouter', 'base', 'url', 'endpoint', 'openai', 'compatible'],
-    section: 'OpenRouter',
-  },
-  {
-    id: 'settings.ai.openrouterModel',
-    labelKey: _('OpenRouter Model'),
-    keywords: ['openrouter', 'model', 'claude', 'gpt', 'llama', 'deepseek'],
-    section: 'OpenRouter',
+    id: 'settings.ai.baseURL',
+    labelKey: _('Base URL'),
+    keywords: ['base', 'url', 'endpoint', 'openai', 'compatible'],
+    section: 'AI',
   },
 ];
 

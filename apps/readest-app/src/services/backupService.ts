@@ -87,8 +87,6 @@ export const BACKUP_SETTINGS_CREDENTIAL_FIELDS = [
   // unencrypted backup zips unless the user opts into including credentials.
   's3.accessKeyId',
   's3.secretAccessKey',
-  'aiSettings.aiGatewayApiKey',
-  'aiSettings.openrouterApiKey',
 ] as const;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>

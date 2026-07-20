@@ -1,19 +1,22 @@
 /**
- * wellread eve sidecar — loopback HTTP server.
+ * wellread eve sidecar — loopback HTTP server (Reading Assistant v1).
  *
  * Speaks the 05/10 handshake: listen on 127.0.0.1 with PORT=0, print a
  * `Listening http://127.0.0.1:<port>/` line, require Bearer loopback token,
- * expose GET /eve/v1 for readiness. Durable state under EVE_DATA_DIR.
+ * expose GET /eve/v1 for readiness + session/chat APIs under /eve/v1/*.
  */
 
 import http from 'node:http';
 import { mkdirSync } from 'node:fs';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createLanguageModel, normalizeModelEnv } from './createModel.mjs';
+import { createSessionStore } from '../../src/agent/sessionStore.mjs';
+import { runTurn } from '../../src/agent/runTurn.mjs';
 
 const HOST = '127.0.0.1';
 const token = (process.env.EVE_LOOPBACK_TOKEN || '').trim();
 const dataDir = process.env.EVE_DATA_DIR || './.eve-data';
+const booksRootEnv = (process.env.EVE_BOOKS_ROOT || '').trim();
 
 mkdirSync(dataDir, { recursive: true });
 
@@ -24,13 +27,24 @@ const modelConfig = normalizeModelEnv({
   contextWindowTokens: process.env.EVE_MODEL_CONTEXT_WINDOW,
 });
 
+let languageModel = null;
 let modelReady = false;
 let modelError = '';
 try {
-  createLanguageModel(modelConfig, { createOpenAI });
+  const built = createLanguageModel(modelConfig, { createOpenAI });
+  languageModel = built.model;
   modelReady = Boolean(modelConfig.apiKey);
 } catch (error) {
   modelError = error instanceof Error ? error.message : String(error);
+}
+
+const sessions = createSessionStore(dataDir);
+
+function getBooksRoot() {
+  if (!booksRootEnv) {
+    throw new Error('EVE_BOOKS_ROOT is not set');
+  }
+  return booksRootEnv;
 }
 
 function unauthorized(res) {
@@ -44,36 +58,149 @@ function checkAuth(req) {
   return header === `Bearer ${token}`;
 }
 
-const server = http.createServer((req, res) => {
+function sendJson(res, status, body) {
+  res.writeHead(status, { 'content-type': 'application/json' });
+  res.end(body === undefined ? '' : JSON.stringify(body));
+}
+
+/**
+ * @param {import('node:http').IncomingMessage} req
+ */
+async function readJson(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const raw = Buffer.concat(chunks).toString('utf8');
+  if (!raw) return {};
+  return JSON.parse(raw);
+}
+
+const server = http.createServer(async (req, res) => {
   if (!checkAuth(req)) {
     unauthorized(res);
     return;
   }
 
   const url = new URL(req.url || '/', `http://${HOST}`);
+  const path = url.pathname.replace(/\/$/, '') || '/';
 
-  if (req.method === 'GET' && (url.pathname === '/eve/v1' || url.pathname === '/eve/v1/')) {
-    res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(
-      JSON.stringify({
+  try {
+    if (req.method === 'GET' && (path === '/eve/v1' || path === '/eve/v1/')) {
+      sendJson(res, 200, {
         ok: true,
         modelReady,
         modelId: modelConfig.modelId,
         modelError: modelError || undefined,
         dataDir,
-      }),
-    );
-    return;
-  }
+        booksRoot: booksRootEnv || undefined,
+      });
+      return;
+    }
 
-  if (req.method === 'GET' && url.pathname === '/health') {
-    res.writeHead(200, { 'content-type': 'text/plain' });
-    res.end('ok');
-    return;
-  }
+    if (req.method === 'GET' && path === '/health') {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('ok');
+      return;
+    }
 
-  res.writeHead(404, { 'content-type': 'application/json' });
-  res.end(JSON.stringify({ error: 'not_found' }));
+    if (req.method === 'GET' && path === '/eve/v1/sessions') {
+      const bookId = url.searchParams.get('bookId') || undefined;
+      sendJson(res, 200, { sessions: sessions.list(bookId) });
+      return;
+    }
+
+    if (req.method === 'POST' && path === '/eve/v1/sessions') {
+      const body = await readJson(req);
+      if (!body.bookId || typeof body.bookId !== 'string') {
+        sendJson(res, 400, { error: 'bookId_required' });
+        return;
+      }
+      const session = sessions.create({
+        bookId: body.bookId,
+        bookTitle: body.bookTitle,
+        title: body.title,
+      });
+      sendJson(res, 201, session);
+      return;
+    }
+
+    const sessionMatch = path.match(/^\/eve\/v1\/sessions\/([^/]+)$/);
+    if (sessionMatch) {
+      const id = decodeURIComponent(sessionMatch[1]);
+      if (req.method === 'GET') {
+        const session = sessions.get(id);
+        if (!session) {
+          sendJson(res, 404, { error: 'not_found' });
+          return;
+        }
+        sendJson(res, 200, session);
+        return;
+      }
+      if (req.method === 'DELETE') {
+        if (!sessions.remove(id)) {
+          sendJson(res, 404, { error: 'not_found' });
+          return;
+        }
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+    }
+
+    const turnMatch = path.match(/^\/eve\/v1\/sessions\/([^/]+)\/turns$/);
+    if (req.method === 'POST' && turnMatch) {
+      const id = decodeURIComponent(turnMatch[1]);
+      const session = sessions.get(id);
+      if (!session) {
+        sendJson(res, 404, { error: 'not_found' });
+        return;
+      }
+      if (!languageModel || !modelReady) {
+        sendJson(res, 503, { error: 'model_not_ready', detail: modelError || 'missing apiKey' });
+        return;
+      }
+      const body = await readJson(req);
+      const message = typeof body.message === 'string' ? body.message.trim() : '';
+      if (!message) {
+        sendJson(res, 400, { error: 'message_required' });
+        return;
+      }
+
+      res.writeHead(200, {
+        'content-type': 'application/x-ndjson; charset=utf-8',
+        'cache-control': 'no-cache',
+        connection: 'keep-alive',
+      });
+
+      const writeEvent = (event) => {
+        res.write(`${JSON.stringify(event)}\n`);
+      };
+
+      try {
+        await runTurn({
+          model: languageModel,
+          session,
+          userMessage: message,
+          getBooksRoot,
+          onEvent: writeEvent,
+        });
+        sessions.save(session);
+      } catch (error) {
+        writeEvent({
+          type: 'error',
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      res.end();
+      return;
+    }
+
+    sendJson(res, 404, { error: 'not_found' });
+  } catch (error) {
+    sendJson(res, 500, {
+      error: 'internal',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
 });
 
 const preferredPort = Number(process.env.PORT || process.env.NITRO_PORT || '0');

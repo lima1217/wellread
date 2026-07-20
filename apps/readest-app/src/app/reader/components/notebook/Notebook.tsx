@@ -7,7 +7,7 @@ import { useBookDataStore } from '@/store/bookDataStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { useNotebookStore } from '@/store/notebookStore';
-import { useAIChatStore } from '@/store/aiChatStore';
+import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useThemeStore } from '@/store/themeStore';
 import { useEnv } from '@/context/EnvContext';
@@ -54,7 +54,7 @@ const Notebook: React.FC = ({}) => {
     useNotebookStore();
   const { setNotebookNewAnnotation, setNotebookNewHighlightId } = useNotebookStore();
   const { setNotebookEditAnnotation, setNotebookActiveTab } = useNotebookStore();
-  const { activeConversationId } = useAIChatStore();
+  const activeSessionId = useReadingAssistantStore((s) => s.activeSessionId);
 
   const [isSearchBarVisible, setIsSearchBarVisible] = useState(false);
   const [searchResults, setSearchResults] = useState<BookNote[] | null>(null);
@@ -437,7 +437,7 @@ const Notebook: React.FC = ({}) => {
         </div>
         {notebookActiveTab === 'ai' ? (
           <div className='flex min-h-0 flex-1 flex-col'>
-            <AIAssistant key={activeConversationId ?? 'new'} bookKey={sideBarBookKey} />
+            <AIAssistant key={activeSessionId ?? 'new'} bookKey={sideBarBookKey} />
           </div>
         ) : isNotesTabEmpty ? (
           <div className='flex flex-grow items-center justify-center overflow-y-auto px-3'>

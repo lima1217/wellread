@@ -3,14 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Loopback eve-compatible sidecar for wellread (health + BYO model).",
+  "description": "Loopback eve-compatible sidecar for wellread (Reading Assistant).",
   "scripts": {
     "start": "node .output/server/index.mjs",
     "build": "node scripts/build.mjs",
-    "test": "node --test src/*.test.mjs"
+    "test": "node --test src/**/*.test.mjs src/**/**/*.test.mjs"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^2.0.0"
+    "@ai-sdk/openai": "^2.0.0",
+    "ai": "^5.0.0",
+    "zod": "^3.25.0"
   },
   "engines": {
     "node": ">=24"

@@ -1,6 +1,6 @@
 import type { BookDoc } from '@/libs/document';
-import type { ChunkOptions } from '@/services/reedy/retrieval/CfiChunker';
-import { chunkSection } from '@/services/reedy/retrieval/CfiChunker';
+import type { ChunkOptions } from './CfiChunker';
+import { chunkSection } from './CfiChunker';
 import {
   chunkFileName,
   chunkRowToExtractInput,

@@ -33,7 +33,6 @@ import {
 import { UserStorageQuota, UserDailyTranslationQuota } from '@/types/quota';
 import { getDefaultMaxBlockSize, getDefaultMaxInlineSize } from '@/utils/config';
 import { stubTranslation as _ } from '@/utils/misc';
-import { DEFAULT_AI_SETTINGS } from './ai/constants';
 import { DEFAULT_MODEL_CONFIG } from './wellread/modelConfig';
 import { DEFAULT_ANNOTATION_TOOLBAR_ITEMS } from '@/utils/annotationToolbar';
 
@@ -206,7 +205,6 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   googleDrive: DEFAULT_GOOGLE_DRIVE_SETTINGS,
   s3: DEFAULT_S3_SETTINGS,
   onedrive: DEFAULT_ONEDRIVE_SETTINGS,
-  aiSettings: DEFAULT_AI_SETTINGS,
   modelConfig: DEFAULT_MODEL_CONFIG,
 
   lastSyncedAtBooks: 0,

@@ -27,6 +27,7 @@ import { useNotesSync } from '../../hooks/useNotesSync';
 import { useReadwiseSync } from '../../hooks/useReadwiseSync';
 import { useHardcoverSync } from '../../hooks/useHardcoverSync';
 import { useTextSelector } from '../../hooks/useTextSelector';
+import { useOpenAIInNotebook } from '../../hooks/useOpenAIInNotebook';
 import { Point, Position, TextSelection } from '@/utils/sel';
 import {
   getPopupPosition,
@@ -119,6 +120,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
   useNotesSync(bookKey);
   useReadwiseSync(bookKey);
   useHardcoverSync(bookKey);
+  const { openAIInNotebook } = useOpenAIInNotebook();
 
   useEffect(() => {
     void loadCustomDictionaries(envConfig).catch((error) => {
@@ -892,6 +894,9 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
         case 'translate':
           handleTranslation();
           break;
+        case 'ask':
+          handleAskAssistant();
+          break;
         case 'tts':
           handleSpeakText(true);
           break;
@@ -1304,6 +1309,20 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     setShowDeepLPopup(true);
   };
 
+  const handleAskAssistant = () => {
+    if (!selection || !selection.text) return;
+    const bookId = bookData.book?.hash;
+    if (!bookId) return;
+    const chapterTitle = progress?.sectionLabel || null;
+    void openAIInNotebook({
+      bookId,
+      bookTitle: bookData.book?.title,
+      selectionText: selection.text,
+      chapterTitle,
+    });
+    handleDismissPopupAndSelection();
+  };
+
   const handleSpeakText = async (oneTime = false) => {
     if (!selection || !selection.text) return;
     setShowAnnotPopup(false);
@@ -1675,6 +1694,8 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
         return { tooltipText: _(label), Icon, onClick: handleDictionary };
       case 'translate':
         return { tooltipText: _(label), Icon, onClick: handleTranslation };
+      case 'ask':
+        return { tooltipText: _(label), Icon, onClick: handleAskAssistant };
       case 'tts':
         return { tooltipText: _(label), Icon, onClick: handleSpeakText };
       case 'proofread':

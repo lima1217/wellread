@@ -80,12 +80,6 @@ const nextConfig = {
     },
   },
   transpilePackages: [
-    'ai',
-    'ai-sdk-ollama',
-    '@ai-sdk/react',
-    '@assistant-ui/react',
-    '@assistant-ui/react-ai-sdk',
-    '@assistant-ui/react-markdown',
     'streamdown',
     ...(isDev
       ? []

@@ -146,6 +146,15 @@ fn resolve_eve_data_dir(app: &AppHandle) -> PathBuf {
         .join("eve")
 }
 
+/// Books library root — mirrors LOCAL_BOOKS_SUBDIR (`Readest/Books`) under app data.
+fn resolve_books_root(app: &AppHandle) -> PathBuf {
+    app.path()
+        .app_data_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("Readest")
+        .join("Books")
+}
+
 fn stop_locked(inner: &mut EveSidecarInner) {
     if let Some(mut child) = inner.child.take() {
         let _ = child.kill();
@@ -226,6 +235,7 @@ pub fn start_or_restart(
             model.context_window_tokens.unwrap_or(1_000_000).to_string(),
         )
         .env("EVE_MODEL_API_KEY", api_key)
+        .env("EVE_BOOKS_ROOT", resolve_books_root(app))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
