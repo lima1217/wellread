@@ -1,6 +1,5 @@
 packages:
   - apps/*
-  - apps/readest-app/workers/send-email
   - apps/readest-app/extensions/*
   - packages/foliate-js
 

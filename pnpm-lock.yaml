@@ -111,7 +111,7 @@ importers:
         version: 1.1.4(@emnapi/core@1.8.1)(@emnapi/runtime@1.8.1)
       '@opennextjs/cloudflare':
         specifier: ^1.19.4
-        version: 1.19.9(next@16.2.6(@babel/core@7.29.7)(@opentelemetry/api@1.9.0)(@playwright/test@1.60.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(wrangler@4.90.0(@cloudflare/workers-types@4.20260518.1))
+        version: 1.19.9(next@16.2.6(@babel/core@7.29.7)(@opentelemetry/api@1.9.0)(@playwright/test@1.60.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(wrangler@4.90.0)
       '@radix-ui/react-collapsible':
         specifier: ^1.1.12
         version: 1.1.12(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -541,26 +541,7 @@ importers:
         version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.9)(@vitest/browser-webdriverio@4.1.9)(@vitest/coverage-v8@4.1.9)(jsdom@28.1.0(@noble/hashes@1.8.0))(vite@7.3.5(@types/node@22.19.19)(jiti@1.21.7)(terser@5.47.1)(tsx@4.21.0)(yaml@2.9.0))
       wrangler:
         specifier: ^4.85.0
-        version: 4.90.0(@cloudflare/workers-types@4.20260518.1)
-
-  apps/readest-app/workers/send-email:
-    dependencies:
-      '@supabase/supabase-js':
-        specifier: ^2.45.0
-        version: 2.105.4
-      postal-mime:
-        specifier: ^2.2.0
-        version: 2.7.4
-    devDependencies:
-      '@cloudflare/workers-types':
-        specifier: ^4.0.0
-        version: 4.20260518.1
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
-      wrangler:
-        specifier: ^4.0.0
-        version: 4.90.0(@cloudflare/workers-types@4.20260518.1)
+        version: 4.90.0
 
   packages/foliate-js:
     dependencies:
@@ -1154,9 +1135,6 @@ packages:
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
-
-  '@cloudflare/workers-types@4.20260518.1':
-    resolution: {integrity: sha512-xXzGrbRi8RHRBNQFgXYkzrB4DgF0RXvmp8E1vCxoBmINpeitM/ZjVDd1CNC+N3uXjgcNjacoz4OgTa0rxgig1A==}
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -2882,33 +2860,6 @@ packages:
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
-
-  '@supabase/auth-js@2.105.4':
-    resolution: {integrity: sha512-Ejfa37M5xoIwoxVebxRahnwubPo8g22qkXQ4p50+N9MIvU9UZoN+A8dwVPtczzGf8oV/YXN80ZPxK4aWXuSN/A==}
-    engines: {node: '>=20.0.0'}
-
-  '@supabase/functions-js@2.105.4':
-    resolution: {integrity: sha512-JVNKbBft3Qkja+WlGaE026AJ2AH9K0UTsxsfvEIHgd4zFrBor4BYRCrYFrv9IDsvVqkF72wKDsODJl5GY/C4tA==}
-    engines: {node: '>=20.0.0'}
-
-  '@supabase/phoenix@0.4.2':
-    resolution: {integrity: sha512-YSAGnmDAfuleFCVt3CeurQZAhxRfXWeZIIkwp7NhYzQ1UwW6ePSnzsFAiUm/mbCkfoCf70QQHKW/K6RKh52a4A==}
-
-  '@supabase/postgrest-js@2.105.4':
-    resolution: {integrity: sha512-SppIyLo/kTwIlz1qpv2HN1EQqBg0GVktrDDFsXygYROha3MgVn4rT7p5EjFHFqXQm2rdRGb/BI7bc+jr10m91w==}
-    engines: {node: '>=20.0.0'}
-
-  '@supabase/realtime-js@2.105.4':
-    resolution: {integrity: sha512-6ov6c59+8D9h7q4M4Gy/uDJlC0Akxl9/714Y+6vJ+Sijuc16TS/p5DwhfRCLNcIhNiej1gEt+CQUwsjiPt4PxQ==}
-    engines: {node: '>=20.0.0'}
-
-  '@supabase/storage-js@2.105.4':
-    resolution: {integrity: sha512-Jx+pzMP1Whjof2PWHoVBUA75/p7PQE9CqKBzn1oXVyJDOggMLSH2OzVWwsXYaxEpdC1K/KltwmOX44nL3LHl9g==}
-    engines: {node: '>=20.0.0'}
-
-  '@supabase/supabase-js@2.105.4':
-    resolution: {integrity: sha512-cEnx+k49knU+qdIP7rXwR6fqEXPHZs+74xFK1R0S8MgQ7v9tbePVdGxvO03n3bPympMdJWVLadARBfU4TgNHCQ==}
-    engines: {node: '>=20.0.0'}
 
   '@swc/helpers@0.5.15':
     resolution: {integrity: sha512-JQ5TuMi45Owi4/BIMAJBoSQoOJu12oOk/gADqlcUL9JEdHB8vyjUSsxqeNXnmXHjYKMi2WcYtezGEEhqUI/E2g==}
@@ -5287,10 +5238,6 @@ packages:
       typescript:
         optional: true
 
-  iceberg-js@0.8.1:
-    resolution: {integrity: sha512-1dhVQZXhcHje7798IVM+xoo/1ZdVfzOMIc8/rgVSijRK38EDqOJoGula9N/8ZI5RD8QTxNQtK/Gozpr+qUqRRA==}
-    engines: {node: '>=20.0.0'}
-
   iconv-lite@0.6.3:
     resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
     engines: {node: '>=0.10.0'}
@@ -6401,9 +6348,6 @@ packages:
 
   points-on-path@0.2.1:
     resolution: {integrity: sha512-25ClnWWuw7JbWZcgqY/gJ4FQWadKxGWk+3kR/7kD0tCaDtPPMj7oHu2ToLaVhfpnHrZzYby2w6tUA0eOIuUg8g==}
-
-  postal-mime@2.7.4:
-    resolution: {integrity: sha512-0WdnFQYUrPGGTFu1uOqD2s7omwua8xaeYGdO6rb88oD5yJ/4pPHDA4sdWqfD8wQVfCny563n/HQS7zTFft+f/g==}
 
   postcss-cli@11.0.1:
     resolution: {integrity: sha512-0UnkNPSayHKRe/tc2YGW6XnSqqOA9eqpiRMgRlV1S6HdGi16vwJBx7lviARzbV1HpQHqLLRH3o8vTcB0cLc+5g==}
@@ -9111,8 +9055,6 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260507.1':
     optional: true
 
-  '@cloudflare/workers-types@4.20260518.1': {}
-
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
@@ -9749,7 +9691,7 @@ snapshots:
       - aws-crt
       - supports-color
 
-  '@opennextjs/cloudflare@1.19.9(next@16.2.6(@babel/core@7.29.7)(@opentelemetry/api@1.9.0)(@playwright/test@1.60.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(wrangler@4.90.0(@cloudflare/workers-types@4.20260518.1))':
+  '@opennextjs/cloudflare@1.19.9(next@16.2.6(@babel/core@7.29.7)(@opentelemetry/api@1.9.0)(@playwright/test@1.60.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(wrangler@4.90.0)':
     dependencies:
       '@ast-grep/napi': 0.40.5
       '@dotenvx/dotenvx': 1.31.0
@@ -9761,7 +9703,7 @@ snapshots:
       glob: 12.0.0
       next: 16.2.6(@babel/core@7.29.7)(@opentelemetry/api@1.9.0)(@playwright/test@1.60.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       ts-tqdm: 0.8.6
-      wrangler: 4.90.0(@cloudflare/workers-types@4.20260518.1)
+      wrangler: 4.90.0
       yargs: 18.0.0
     transitivePeerDependencies:
       - aws-crt
@@ -10680,38 +10622,6 @@ snapshots:
   '@speed-highlight/core@1.2.15': {}
 
   '@standard-schema/spec@1.1.0': {}
-
-  '@supabase/auth-js@2.105.4':
-    dependencies:
-      tslib: 2.8.1
-
-  '@supabase/functions-js@2.105.4':
-    dependencies:
-      tslib: 2.8.1
-
-  '@supabase/phoenix@0.4.2': {}
-
-  '@supabase/postgrest-js@2.105.4':
-    dependencies:
-      tslib: 2.8.1
-
-  '@supabase/realtime-js@2.105.4':
-    dependencies:
-      '@supabase/phoenix': 0.4.2
-      tslib: 2.8.1
-
-  '@supabase/storage-js@2.105.4':
-    dependencies:
-      iceberg-js: 0.8.1
-      tslib: 2.8.1
-
-  '@supabase/supabase-js@2.105.4':
-    dependencies:
-      '@supabase/auth-js': 2.105.4
-      '@supabase/functions-js': 2.105.4
-      '@supabase/postgrest-js': 2.105.4
-      '@supabase/realtime-js': 2.105.4
-      '@supabase/storage-js': 2.105.4
 
   '@swc/helpers@0.5.15':
     dependencies:
@@ -13467,8 +13377,6 @@ snapshots:
     optionalDependencies:
       typescript: 5.9.3
 
-  iceberg-js@0.8.1: {}
-
   iconv-lite@0.6.3:
     dependencies:
       safer-buffer: 2.1.2
@@ -14769,8 +14677,6 @@ snapshots:
     dependencies:
       path-data-parser: 0.1.0
       points-on-curve: 0.2.0
-
-  postal-mime@2.7.4: {}
 
   postcss-cli@11.0.1(jiti@1.21.7)(postcss@8.5.14)(tsx@4.21.0):
     dependencies:
@@ -16460,7 +16366,7 @@ snapshots:
 
   workerpool@6.5.1: {}
 
-  wrangler@4.90.0(@cloudflare/workers-types@4.20260518.1):
+  wrangler@4.90.0:
     dependencies:
       '@cloudflare/kv-asset-handler': 0.5.0
       '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260507.1)
@@ -16471,7 +16377,6 @@ snapshots:
       unenv: 2.0.0-rc.24
       workerd: 1.20260507.1
     optionalDependencies:
-      '@cloudflare/workers-types': 4.20260518.1
       fsevents: 2.3.3
     transitivePeerDependencies:
       - bufferutil
