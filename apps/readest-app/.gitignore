@@ -9,6 +9,8 @@
 # testing
 /coverage
 .test-sandbox-node/
+.test-sandbox-wellread-fs/
+.test-sandbox-wellread-search/
 .vitest-attachments/
 
 # benchmarks — personal local perf history; share via PR/issue copy-paste

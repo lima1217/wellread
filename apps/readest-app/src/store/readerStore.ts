@@ -293,6 +293,17 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       // book.metaHash = book.metaHash ?? getMetadataHash(bookDoc.metadata);
       book.metaHash = getMetadataHash(bookDoc.metadata);
 
+      // Host-side extract tree for Reading Assistant (Books/.wellread/extract/<bookId>/).
+      // Failures must not block opening the book — sidecar can retry later.
+      try {
+        const { ensureExtractForOpenedBook } = await import(
+          '@/services/wellread/extract/ensureExtractForOpenedBook'
+        );
+        await ensureExtractForOpenedBook({ appService, book, bookDoc });
+      } catch (e) {
+        console.warn('Failed to ensure book extract for Reading Assistant:', e);
+      }
+
       const isFixedLayout =
         bookDoc.rendition?.layout === 'pre-paginated' || FIXED_LAYOUT_FORMATS.has(book.format);
       const newBookData: BookData = { id, book, file, config, bookDoc, isFixedLayout };
