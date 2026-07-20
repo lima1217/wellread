@@ -7,7 +7,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { isOPDSCatalog, getPublication, getFeed, getOpenSearch } from 'foliate-js/opds.js';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useEnv } from '@/context/EnvContext';
-import { useAuth } from '@/context/AuthContext';
 import { isWebAppPlatform } from '@/services/environment';
 import { downloadFile } from '@/libs/storage';
 import { Toast } from '@/components/Toast';
@@ -17,9 +16,6 @@ import { useKeyDownActions } from '@/hooks/useKeyDownActions';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useCustomOPDSStore } from '@/store/customOPDSStore';
-import { transferManager } from '@/services/transferManager';
-import { isReadestCloudStorageActive } from '@/services/sync/cloudSyncProvider';
-import { useTransferQueue } from '@/hooks/useTransferQueue';
 import { useTheme } from '@/hooks/useTheme';
 import { useLibrary } from '@/hooks/useLibrary';
 import { eventDispatcher } from '@/utils/event';
@@ -82,7 +78,6 @@ export default function BrowserPage() {
   const _ = useTranslation();
   const router = useRouter();
   const { appService, envConfig } = useEnv();
-  const { user } = useAuth();
   const { libraryLoaded } = useLibrary();
   // Subscribe to library so the publication detail page can detect copies
   // already imported (shown as "Open & Read" instead of "Download"), and
@@ -136,7 +131,6 @@ export default function BrowserPage() {
   const searchTermRef = useRef('');
 
   useTheme({ systemUIVisible: false });
-  useTransferQueue(libraryLoaded);
 
   useEffect(() => {
     startURLRef.current = state.startURL;
@@ -628,17 +622,6 @@ export default function BrowserPage() {
                 console.error('OPDS: failed to update source map:', sourceMapError);
               }
             }
-            if (
-              user &&
-              book &&
-              !book.uploadedAt &&
-              settings.autoUpload &&
-              isReadestCloudStorageActive(settings)
-            ) {
-              setTimeout(() => {
-                transferManager.queueUpload(book);
-              }, 3000);
-            }
             setLibrary(library);
             appService.saveLibraryBooks(library);
             return book;
@@ -652,7 +635,7 @@ export default function BrowserPage() {
         throw e;
       }
     },
-    [user, state.baseURL, appService, libraryLoaded, settings.autoUpload, catalogSourceId],
+    [state.baseURL, appService, libraryLoaded, settings.autoUpload, catalogSourceId],
   );
 
   const handleStream = useCallback(

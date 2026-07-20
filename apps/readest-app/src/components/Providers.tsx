@@ -4,9 +4,7 @@ import '@/utils/polyfill';
 import i18n from '@/i18n/i18n';
 import { useEffect } from 'react';
 import { IconContext } from 'react-icons';
-import { AuthProvider } from '@/context/AuthContext';
 import { useEnv } from '@/context/EnvContext';
-import { SyncProvider } from '@/context/SyncContext';
 import { initSystemThemeListener, loadDataTheme } from '@/store/themeStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useCustomTextureStore } from '@/store/customTextureStore';
@@ -24,12 +22,8 @@ import { CommandPaletteProvider, CommandPalette } from '@/components/command-pal
 import AtmosphereOverlay from '@/components/AtmosphereOverlay';
 import AppLockScreen from '@/components/AppLockScreen';
 import AppLockDialog from '@/components/settings/AppLockDialog';
-import PassphrasePrompt from '@/components/PassphrasePrompt';
-import { upgradeToKeychainIfAvailable } from '@/libs/crypto/passphrase';
 import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
-import { cryptoSession } from '@/libs/crypto/session';
 import { useAppLockStore } from '@/store/appLockStore';
-import { initSettingsSync } from '@/services/sync/replicaSettingsSync';
 
 const Providers = ({ children }: { children: React.ReactNode }) => {
   const { envConfig, appService } = useEnv();
@@ -98,16 +92,6 @@ const Providers = ({ children }: { children: React.ReactNode }) => {
           salt: settings.pinCodeSalt,
           biometricUnlockEnabled: !!settings.biometricUnlockEnabled,
         });
-        // Subscribe the bundled-settings publisher to settingsStore
-        // changes, AFTER priming the publish snapshot from the just-
-        // loaded disk settings. Without this priming, the very first
-        // setSettings(disk_default) at boot (typically from library
-        // page's initLibrary) would diff every whitelisted field
-        // against `undefined`, treat them all as "new", and push the
-        // local defaults to the server with a fresh HLC — overwriting
-        // the cross-device authoritative values another device set.
-        // Idempotent — safe to call on remount.
-        initSettingsSync(settings);
       });
     }
   }, [
@@ -118,18 +102,6 @@ const Providers = ({ children }: { children: React.ReactNode }) => {
     applyEinkMode,
     initializeAppLock,
   ]);
-
-  // Sync-passphrase boot path: upgrade the passphrase store from
-  // ephemeral to OS keychain on Tauri (probe is async — must run after
-  // the platform check resolves), then attempt a silent unlock from
-  // the saved passphrase. Failures are silent — the gate prompts on
-  // first encrypted-field operation if we couldn't restore.
-  useEffect(() => {
-    void (async () => {
-      await upgradeToKeychainIfAvailable();
-      await cryptoSession.tryRestoreFromStore();
-    })();
-  }, []);
 
   useEffect(() => {
     const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
@@ -153,27 +125,22 @@ const Providers = ({ children }: { children: React.ReactNode }) => {
   const appShellHidden = !isLockInitialized || !isUnlocked;
 
   return (
-    <AuthProvider>
-      <IconContext.Provider value={{ size: `${iconSize}px` }}>
-        <SyncProvider>
-          <DropdownProvider>
-            <CommandPaletteProvider>
-              <div
-                aria-hidden={appShellHidden}
-                style={appShellHidden ? { display: 'none' } : undefined}
-              >
-                {children}
-                <CommandPalette />
-                <AtmosphereOverlay />
-                <PassphrasePrompt />
-              </div>
-              <AppLockDialog />
-              {showAppLockScreen && <AppLockScreen />}
-            </CommandPaletteProvider>
-          </DropdownProvider>
-        </SyncProvider>
-      </IconContext.Provider>
-    </AuthProvider>
+    <IconContext.Provider value={{ size: `${iconSize}px` }}>
+      <DropdownProvider>
+        <CommandPaletteProvider>
+          <div
+            aria-hidden={appShellHidden}
+            style={appShellHidden ? { display: 'none' } : undefined}
+          >
+            {children}
+            <CommandPalette />
+            <AtmosphereOverlay />
+          </div>
+          <AppLockDialog />
+          {showAppLockScreen && <AppLockScreen />}
+        </CommandPaletteProvider>
+      </DropdownProvider>
+    </IconContext.Provider>
   );
 };
 

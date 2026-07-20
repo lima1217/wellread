@@ -23,7 +23,6 @@ import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 import { useDeviceControlStore } from '@/store/deviceStore';
 import { useFoliateEvents } from '../../hooks/useFoliateEvents';
 import { useRendererInputListeners } from '../../hooks/useRendererInputListeners';
-import { useNotesSync } from '../../hooks/useNotesSync';
 import { useReadwiseSync } from '../../hooks/useReadwiseSync';
 import { useHardcoverSync } from '../../hooks/useHardcoverSync';
 import { useTextSelector } from '../../hooks/useTextSelector';
@@ -112,11 +111,10 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
   const { setNotebookVisible, setNotebookNewAnnotation, setNotebookNewHighlightId } =
     useNotebookStore();
   const { clearBooknotesNav } = useSidebarStore();
-  const { listenToNativeTouchEvents } = useDeviceControlStore();
   const { loadCustomDictionaries } = useCustomDictionaryStore();
+  const { listenToNativeTouchEvents } = useDeviceControlStore();
   const { selectFiles } = useFileSelector(appService, _);
 
-  useNotesSync(bookKey);
   useReadwiseSync(bookKey);
   useHardcoverSync(bookKey);
   const { openAIInNotebook } = useOpenAIInNotebook();

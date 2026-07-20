@@ -41,7 +41,6 @@ export const BACKUP_SETTINGS_BLACKLIST = [
   'savedBookCoverForLockScreenPath',
   // Per-device identity — restoring causes sync identity / HLC collisions.
   'replicaDeviceId',
-  'kosync.deviceId',
   // Sync cursors — stale values make sync skip pulls or re-push everything.
   'lastSyncedAtBooks',
   'lastSyncedAtConfigs',
@@ -49,19 +48,6 @@ export const BACKUP_SETTINGS_BLACKLIST = [
   'lastSyncedAtReplicas',
   'readwise.lastSyncedAt',
   'hardcover.lastSyncedAt',
-  'googleDrive.deviceId',
-  'googleDrive.lastSyncedAt',
-  'webdav.deviceId',
-  'webdav.lastSyncedAt',
-  'webdav.providerSelectedAt',
-  'googleDrive.providerSelectedAt',
-  'onedrive.deviceId',
-  'onedrive.lastSyncedAt',
-  'onedrive.providerSelectedAt',
-  's3.deviceId',
-  's3.lastSyncedAt',
-  's3.providerSelectedAt',
-  'readestCloud.disabledAt',
   // Transient runtime state — book keys may not exist post-restore; screen
   // brightness is live device state.
   'lastOpenBooks',
@@ -78,15 +64,8 @@ export const BACKUP_SETTINGS_BLACKLIST = [
  * and are handled separately in `sanitizeSettingsForBackup`.
  */
 export const BACKUP_SETTINGS_CREDENTIAL_FIELDS = [
-  'kosync.username',
-  'kosync.userkey',
-  'kosync.password',
   'readwise.accessToken',
   'hardcover.accessToken',
-  // S3 access keys are strong, long-lived cloud credentials — strip them from
-  // unencrypted backup zips unless the user opts into including credentials.
-  's3.accessKeyId',
-  's3.secretAccessKey',
 ] as const;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>

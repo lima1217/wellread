@@ -147,9 +147,6 @@ export class BookTTSCacheStore implements TTSCacheStore {
         void touchTTSCacheMeta(this.#appService, bookHash).then(() =>
           sweepTTSCaches(this.#appService, bookHash, this.#budgetBytes),
         );
-        // Adopt packs other devices produced (existence-checked, validated
-        // on import); fire-and-forget like all cache housekeeping.
-        this.#syncPacks(bookHash, store, 'pull');
         return { db, store };
       } catch (err) {
         console.warn('TTS cache unavailable for this session', err);
@@ -185,14 +182,11 @@ export class BookTTSCacheStore implements TTSCacheStore {
     await opened?.store.recordMarkKey(section, ordinal, key);
   }
 
-  // Immediate compaction for downloads (bypasses the debounced timer), then a
-  // push if any packs were created and sync is on.
+  // Immediate compaction for downloads (bypasses the debounced timer).
   async compact(): Promise<void> {
     const opened = await this.#open();
     if (!opened) return;
-    const created = await opened.store.compact();
-    const bookHash = this.#getBookHash();
-    if (created > 0 && bookHash) this.#syncPacks(bookHash, opened.store, 'push');
+    await opened.store.compact();
   }
 
   async getSectionStatuses(): Promise<
@@ -226,34 +220,10 @@ export class BookTTSCacheStore implements TTSCacheStore {
     try {
       const opened = await this.#opening;
       if (!opened) return;
-      const created = await opened.store.compact();
-      const bookHash = this.#getBookHash();
-      if (created > 0 && bookHash) this.#syncPacks(bookHash, opened.store, 'push');
+      await opened.store.compact();
     } catch (err) {
       console.warn('TTS cache compaction failed', err);
     }
-  }
-
-  // Push/pull section packs through the selected file-sync provider. The
-  // sync module is imported lazily: it must stay out of the TTS module
-  // graph (settingsStore -> constants -> EdgeTTSClient would cycle) and out
-  // of sessions that never enable sync.
-  #syncPacks(bookHash: string, store: SqliteTTSCacheStore, direction: 'push' | 'pull'): void {
-    if (!getTTSCacheConfig().syncEnabled) return;
-    void (async () => {
-      const { getActiveTTSPackSyncProvider, pullTTSPacks, pushTTSPacks } = await import(
-        '@/services/sync/file/ttsPackSync'
-      );
-      const provider = await getActiveTTSPackSyncProvider();
-      if (!provider) return;
-      if (direction === 'pull') {
-        await pullTTSPacks(provider, bookHash, store);
-      } else {
-        await pushTTSPacks(provider, bookHash, store);
-      }
-    })().catch((err) => {
-      console.warn('TTS pack sync failed', err);
-    });
   }
 
   async close(): Promise<void> {
@@ -268,9 +238,7 @@ export class BookTTSCacheStore implements TTSCacheStore {
     try {
       // Session end is the natural compaction point: sections finished
       // during this session merge into packs before the database closes.
-      const created = await opened.store.compact();
-      const bookHash = this.#getBookHash();
-      if (created > 0 && bookHash) this.#syncPacks(bookHash, opened.store, 'push');
+      await opened.store.compact();
       await opened.store.flush();
     } catch (err) {
       console.warn('TTS cache close housekeeping failed', err);

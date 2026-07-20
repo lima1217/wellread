@@ -9,11 +9,7 @@ import { eventDispatcher } from '@/utils/event';
 import { navigateToReader, showReaderWindow } from '@/utils/nav';
 
 interface UseOpenBookOptions {
-  setLoading: Dispatch<SetStateAction<boolean>>;
-  handleBookDownload: (
-    book: Book,
-    options?: { redownload?: boolean; queued?: boolean },
-  ) => Promise<boolean>;
+  setLoading?: Dispatch<SetStateAction<boolean>>;
 }
 
 /**
@@ -23,7 +19,7 @@ interface UseOpenBookOptions {
  * progress without the file blob) are downloaded on demand, and a stale
  * in-place record is dropped instead of bouncing the user into a broken reader.
  */
-export const useOpenBook = ({ setLoading, handleBookDownload }: UseOpenBookOptions) => {
+export const useOpenBook = (_options: UseOpenBookOptions = {}) => {
   const _ = useTranslation();
   const router = useAppRouter();
   const { envConfig, appService } = useEnv();
@@ -47,19 +43,10 @@ export const useOpenBook = ({ setLoading, handleBookDownload }: UseOpenBookOptio
         }
         return true;
       }
-      let available = false;
-      const loadingTimeout = setTimeout(() => setLoading(true), 200);
-      try {
-        available = await handleBookDownload(book, { queued: false });
-        await updateBook(envConfig, book);
-      } finally {
-        if (loadingTimeout) clearTimeout(loadingTimeout);
-        setLoading(false);
-      }
-      return available;
+      return false;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [appService, envConfig, handleBookDownload, setLoading],
+    [appService, envConfig],
   );
 
   const openBook = useCallback(

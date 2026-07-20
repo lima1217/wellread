@@ -27,7 +27,6 @@ fn main() {
     // Keep this list in sync with the generate_handler! list in lib.rs.
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
-            "start_server",
             "download_file",
             "upload_file",
             "get_environment_variable",
@@ -40,12 +39,9 @@ fn main() {
             "parse_epub_full",
             "parse_mobi_metadata",
             "extract_mobi_cover_full",
-            "auth_with_safari",
-            "start_apple_sign_in",
             "set_traffic_lights",
             "show_lookup_popover",
             "clip_url",
-            "spawn_fresh_browser",
             "verify_update_signature",
             "install_nightly_update",
             "get_eve_sidecar_info",

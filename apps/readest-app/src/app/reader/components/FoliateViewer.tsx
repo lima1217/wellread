@@ -19,14 +19,11 @@ import { useBrightnessGesture } from '../hooks/useBrightnessGesture';
 import BrightnessOverlay from './BrightnessOverlay';
 import { usePagination, viewPagination } from '../hooks/usePagination';
 import { useFoliateEvents } from '../hooks/useFoliateEvents';
-import { useProgressSync } from '../hooks/useProgressSync';
 import { useProgressAutoSave } from '../hooks/useProgressAutoSave';
 import { useBackgroundTexture } from '@/hooks/useBackgroundTexture';
 import { useAutoFocus } from '@/hooks/useAutoFocus';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useEinkMode } from '@/hooks/useEinkMode';
-import { useKOSync } from '../hooks/useKOSync';
-import { useFileSync } from '../hooks/useFileSync';
 import {
   applyFixedlayoutStyles,
   applyImageStyle,
@@ -84,7 +81,6 @@ import AutoscrollIndicator from './AutoscrollIndicator';
 import AutoScrollControl from './AutoScrollControl';
 import AutoScrollSpeedOverlay from './AutoScrollSpeedOverlay';
 import Spinner from '@/components/Spinner';
-import KOSyncConflictResolver from './KOSyncResolver';
 import ImageViewer from './ImageViewer';
 import TableViewer from './TableViewer';
 import {
@@ -162,11 +158,8 @@ const FoliateViewer: React.FC<{
   }, [toastMessage]);
 
   useUICSS(bookKey);
-  useProgressSync(bookKey);
   useProgressAutoSave(bookKey);
   useBookCoverAutoSave(bookKey);
-  const { syncState, conflictDetails, resolveWithLocal, resolveWithRemote } = useKOSync(bookKey);
-  useFileSync(bookKey);
 
   // Coalesce setProgress writes within a single animation frame.
   //
@@ -1056,14 +1049,6 @@ const FoliateViewer: React.FC<{
         <div className='absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center'>
           <Spinner loading={true} />
         </div>
-      )}
-      {syncState === 'conflict' && conflictDetails && (
-        <KOSyncConflictResolver
-          details={conflictDetails}
-          onResolveWithLocal={resolveWithLocal}
-          onResolveWithRemote={resolveWithRemote}
-          onClose={resolveWithLocal}
-        />
       )}
     </>
   );

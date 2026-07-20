@@ -6,7 +6,6 @@ import { MdAdd, MdDelete, MdRefresh, MdArrowBack } from 'react-icons/md';
 import Dialog from '@/components/Dialog';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useEnv } from '@/context/EnvContext';
-import { useAuth } from '@/context/AuthContext';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useFeedStore } from '@/store/feedStore';
@@ -25,7 +24,6 @@ export function FeedsView({ onClose }: FeedsViewProps) {
   const _ = useTranslation();
   const router = useRouter();
   const { envConfig, appService } = useEnv();
-  const { user } = useAuth();
   const { settings } = useSettingsStore();
   const feeds = useFeedStore((s) => s.feeds);
   const [selectedFeed, setSelectedFeed] = useState<RssFeed | null>(null);
@@ -80,7 +78,7 @@ export function FeedsView({ onClose }: FeedsViewProps) {
         books: useLibraryStore.getState().library,
         appService,
         settings,
-        isLoggedIn: !!user,
+        isLoggedIn: false,
         translate: _,
       },
       {

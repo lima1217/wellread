@@ -25,7 +25,6 @@ function makeSettings(overrides: Partial<SystemSettings> = {}): SystemSettings {
     localBooksDir: '/Users/me/Books',
     customRootDir: '/Users/me/readest',
     externalLibraryFolders: ['/Users/me/Duokan', '/Users/me/Calibre'],
-    keepLogin: true,
     screenBrightness: 0.7,
     autoScreenBrightness: false,
     lastOpenBooks: ['book-1', 'book-2'],
@@ -48,35 +47,8 @@ function makeSettings(overrides: Partial<SystemSettings> = {}): SystemSettings {
         password: 'opds-pass',
       },
     ],
-    kosync: {
-      enabled: true,
-      serverUrl: 'https://kosync.example',
-      username: 'kuser',
-      userkey: 'kkey',
-      password: 'kpass',
-      deviceId: 'kosync-device-id',
-      deviceName: 'My Phone',
-      checksumMethod: 'binary',
-      strategy: 'prompt',
-    },
-    webdav: {
-      enabled: true,
-      serverUrl: 'https://dav.example',
-      username: 'wuser',
-      password: 'wpass',
-      rootPath: '/',
-      deviceId: 'webdav-device-id',
-      lastSyncedAt: 666,
-    },
     readwise: { enabled: true, accessToken: 'rw-token', lastSyncedAt: 999 },
     hardcover: { enabled: false, accessToken: 'hc-token', lastSyncedAt: 888 },
-    googleDrive: {
-      enabled: true,
-      accountLabel: 'me@gmail.com',
-      strategy: 'silent',
-      deviceId: 'gdrive-device-id',
-      lastSyncedAt: 777,
-    },
     modelConfig: {
       enabled: true,
       baseURL: 'https://api.deepseek.com/v1',
@@ -107,15 +79,6 @@ describe('sanitizeSettingsForBackup - blacklist', () => {
   it('strips per-device identity fields', () => {
     const out = rec(sanitizeSettingsForBackup(makeSettings()));
     expect(out['replicaDeviceId']).toBeUndefined();
-    expect(rec(out['kosync'])['deviceId']).toBeUndefined();
-    expect(rec(out['googleDrive'])['deviceId']).toBeUndefined();
-    // Non-identity Drive settings still travel with the backup.
-    expect(rec(out['googleDrive'])['enabled']).toBe(true);
-    // WebDAV device identity and cursor stay on the device; restoring
-    // them onto a second device would duplicate WebDAV sync identity.
-    expect(rec(out['webdav'])['deviceId']).toBeUndefined();
-    expect(rec(out['webdav'])['lastSyncedAt']).toBeUndefined();
-    expect(rec(out['webdav'])['serverUrl']).toBe('https://dav.example');
   });
 
   it('strips sync cursors', () => {
@@ -126,20 +89,6 @@ describe('sanitizeSettingsForBackup - blacklist', () => {
     expect(out['lastSyncedAtReplicas']).toBeUndefined();
     expect(rec(out['readwise'])['lastSyncedAt']).toBeUndefined();
     expect(rec(out['hardcover'])['lastSyncedAt']).toBeUndefined();
-    expect(rec(out['googleDrive'])['lastSyncedAt']).toBeUndefined();
-  });
-
-  it('strips readestCloud.disabledAt but keeps readestCloud.enabled', () => {
-    // disabledAt is device-local: it records when THIS device stopped
-    // writing native sync rows, and anchors the mixed-fleet probe. A value
-    // restored from another device's backup would corrupt that probe.
-    // enabled must survive restore, matching the other providers' `enabled`
-    // flags (see issue #5062).
-    const out = sanitizeSettingsForBackup(
-      makeSettings({ readestCloud: { enabled: false, disabledAt: 1234 } }),
-    );
-    expect(out.readestCloud?.disabledAt).toBeUndefined();
-    expect(out.readestCloud?.enabled).toBe(false);
   });
 
   it('strips transient runtime state', () => {
@@ -156,11 +105,9 @@ describe('sanitizeSettingsForBackup - blacklist', () => {
 
   it('keeps preferences, layout and customization fields', () => {
     const out = sanitizeSettingsForBackup(makeSettings());
-    expect(out.keepLogin).toBe(true);
     expect(out.libraryViewMode).toBe('grid');
     expect(out.libraryColumns).toBe(4);
-    expect(out.kosync.serverUrl).toBe('https://kosync.example');
-    expect(out.kosync.deviceName).toBe('My Phone');
+    expect(out.readwise.enabled).toBe(true);
     expect(out.globalReadSettings.customThemes).toEqual([{ name: 'mytheme' }]);
     expect(out.globalViewSettings.userStylesheet).toBe('body { color: red }');
   });
@@ -180,9 +127,6 @@ describe('sanitizeSettingsForBackup - blacklist', () => {
 describe('sanitizeSettingsForBackup - credentials', () => {
   it('strips credentials by default', () => {
     const out = sanitizeSettingsForBackup(makeSettings());
-    expect(rec(out.kosync)['username']).toBeUndefined();
-    expect(rec(out.kosync)['userkey']).toBeUndefined();
-    expect(rec(out.kosync)['password']).toBeUndefined();
     expect(rec(out.readwise)['accessToken']).toBeUndefined();
     expect(rec(out.hardcover)['accessToken']).toBeUndefined();
     // modelConfig never carries apiKey; non-secret fields survive backup
@@ -201,7 +145,6 @@ describe('sanitizeSettingsForBackup - credentials', () => {
 
   it('keeps credentials when includeCredentials is true', () => {
     const out = sanitizeSettingsForBackup(makeSettings(), { includeCredentials: true });
-    expect(out.kosync.password).toBe('kpass');
     expect(out.readwise.accessToken).toBe('rw-token');
     expect(out.hardcover.accessToken).toBe('hc-token');
     expect(out.opdsCatalogs[0]!.username).toBe('opds-user');
@@ -243,27 +186,23 @@ describe('mergeRestoredSettings', () => {
   });
 
   it('deep-merges nested objects, keeping current-only nested keys', () => {
-    const current = makeSettings();
+    const current = makeSettings({
+      readwise: { enabled: true, accessToken: 'rw-token', lastSyncedAt: 999 },
+    });
     const backup = sanitizeSettingsForBackup(
       makeSettings({
-        kosync: {
-          enabled: true,
-          serverUrl: 'https://new-kosync.example',
-          username: 'kuser',
-          userkey: 'kkey',
-          password: 'kpass',
-          deviceId: 'kosync-device-id',
-          deviceName: 'Restored Name',
-          checksumMethod: 'binary',
-          strategy: 'prompt',
+        readwise: {
+          enabled: false,
+          accessToken: 'rw-token',
+          lastSyncedAt: 999,
+          baseUrl: 'https://rw.example',
         },
       }),
     );
     const merged = mergeRestoredSettings(current, backup);
-    // serverUrl/deviceName come from the backup, deviceId stays the device's own
-    expect(merged.kosync.serverUrl).toBe('https://new-kosync.example');
-    expect(merged.kosync.deviceName).toBe('Restored Name');
-    expect(merged.kosync.deviceId).toBe('kosync-device-id');
+    expect(merged.readwise.enabled).toBe(false);
+    expect(merged.readwise.baseUrl).toBe('https://rw.example');
+    expect(merged.readwise.lastSyncedAt).toBe(999);
   });
 
   it('replaces arrays wholesale rather than concatenating', () => {

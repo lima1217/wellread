@@ -35,11 +35,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { isPWA, isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
 import {
   navigateToReader,
-  navigateToLogin,
-  navigateToProfile,
   navigateToLibrary,
-  navigateToResetPassword,
-  navigateToUpdatePassword,
   redirectToLibrary,
   showReaderWindow,
   showLibraryWindow,
@@ -160,44 +156,6 @@ describe('navigateToReader', () => {
   });
 });
 
-describe('navigateToLogin', () => {
-  test('navigates to /auth with redirect from current path', () => {
-    Object.defineProperty(window, 'location', {
-      value: { pathname: '/library', search: '?q=test' },
-      writable: true,
-    });
-
-    const router = mockRouter();
-    navigateToLogin(router);
-
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toContain('/auth?redirect=');
-    expect(url).toContain(encodeURIComponent('/library?q=test'));
-  });
-
-  test('uses / as redirect when already on /auth', () => {
-    Object.defineProperty(window, 'location', {
-      value: { pathname: '/auth', search: '' },
-      writable: true,
-    });
-
-    const router = mockRouter();
-    navigateToLogin(router);
-
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toBe('/auth?redirect=%2F');
-  });
-});
-
-describe('navigateToProfile', () => {
-  test('navigates to /user', () => {
-    const router = mockRouter();
-    navigateToProfile(router);
-
-    expect(router.push).toHaveBeenCalledWith('/user');
-  });
-});
-
 describe('navigateToLibrary', () => {
   test('replaces to /library without params by default', () => {
     const router = mockRouter();
@@ -251,64 +209,6 @@ describe('redirectToLibrary', () => {
   test('calls redirect to /library', () => {
     redirectToLibrary();
     expect(redirect).toHaveBeenCalledWith('/library');
-  });
-});
-
-describe('navigateToResetPassword', () => {
-  test('navigates to /auth/recovery with redirect', () => {
-    Object.defineProperty(window, 'location', {
-      value: { pathname: '/settings', search: '' },
-      writable: true,
-    });
-
-    const router = mockRouter();
-    navigateToResetPassword(router);
-
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toContain('/auth/recovery?redirect=');
-    expect(url).toContain(encodeURIComponent('/settings'));
-  });
-
-  test('uses / as redirect when on /auth', () => {
-    Object.defineProperty(window, 'location', {
-      value: { pathname: '/auth', search: '' },
-      writable: true,
-    });
-
-    const router = mockRouter();
-    navigateToResetPassword(router);
-
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toBe('/auth/recovery?redirect=%2F');
-  });
-});
-
-describe('navigateToUpdatePassword', () => {
-  test('navigates to /auth/update with redirect', () => {
-    Object.defineProperty(window, 'location', {
-      value: { pathname: '/user', search: '?tab=security' },
-      writable: true,
-    });
-
-    const router = mockRouter();
-    navigateToUpdatePassword(router);
-
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toContain('/auth/update?redirect=');
-    expect(url).toContain(encodeURIComponent('/user?tab=security'));
-  });
-
-  test('uses / as redirect when on /auth', () => {
-    Object.defineProperty(window, 'location', {
-      value: { pathname: '/auth', search: '' },
-      writable: true,
-    });
-
-    const router = mockRouter();
-    navigateToUpdatePassword(router);
-
-    const url = router.push.mock.calls[0]![0] as string;
-    expect(url).toBe('/auth/update?redirect=%2F');
   });
 });
 

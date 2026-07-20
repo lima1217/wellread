@@ -1,14 +1,6 @@
 import clsx from 'clsx';
 import React from 'react';
-import {
-  MdOutlineCloudDownload,
-  MdOutlineCloudUpload,
-  MdOutlineDelete,
-  MdOutlineEdit,
-  MdMenu,
-  MdExpandMore,
-  MdExpandLess,
-} from 'react-icons/md';
+import { MdOutlineDelete, MdOutlineEdit, MdMenu, MdExpandMore, MdExpandLess } from 'react-icons/md';
 
 import { Book } from '@/types/book';
 import { BookMetadata } from '@/libs/document';
@@ -35,14 +27,10 @@ interface BookDetailViewProps {
   book: Book;
   metadata: BookMetadata | null;
   fileSize: number | null;
-  shareEnabled?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
   onDeleteCloudBackup?: () => void;
   onDeleteLocalCopy?: () => void;
-  onDownload?: () => void;
-  onUpload?: () => void;
-  onShare?: () => void;
   onExport?: () => void;
 }
 
@@ -50,22 +38,18 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
   book,
   metadata,
   fileSize,
-  shareEnabled,
   onEdit,
   onDelete,
   onDeleteCloudBackup,
   onDeleteLocalCopy,
-  onDownload,
-  onUpload,
-  onShare,
   onExport,
 }) => {
   const _ = useTranslation();
   const { envConfig } = useEnv();
   const { settings } = useSettingsStore();
 
-  // Export and Share both read the book file off disk; `fileSize` is only
-  // non-null when getBookFileSize could actually open the local copy.
+  // Export reads the book file off disk; `fileSize` is only non-null when
+  // getBookFileSize could actually open the local copy.
   const hasLocalFile = fileSize !== null;
 
   const toggleSeriesCollapse = () => {
@@ -107,16 +91,6 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                 title={_('Edit Metadata')}
               >
                 <MdOutlineEdit className='hover:fill-blue-500' />
-              </button>
-            )}
-            {book.uploadedAt && onDownload && (
-              <button onClick={onDownload} title={_('Download from Cloud')}>
-                <MdOutlineCloudDownload className='fill-base-content' />
-              </button>
-            )}
-            {book.downloadedAt && onUpload && (
-              <button onClick={onUpload} title={_('Upload to Cloud')}>
-                <MdOutlineCloudUpload className='fill-base-content' />
               </button>
             )}
             {onDelete && (
@@ -180,20 +154,6 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                     openExternalUrl(getGoodreadsSearchUrl(getBookGoodreadsQuery(book)))
                   }
                 />
-                {onShare && (
-                  <MenuItem
-                    noIcon
-                    transient
-                    label={_('Share Book')}
-                    disabled={!shareEnabled}
-                    tooltip={
-                      shareEnabled
-                        ? undefined
-                        : _('Sign in and make the book available to share it')
-                    }
-                    onClick={onShare}
-                  />
-                )}
                 {onExport && (
                   <MenuItem
                     noIcon

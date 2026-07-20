@@ -20,8 +20,6 @@ interface RecentShelfProps {
   autoColumns: boolean;
   fixedColumns: number;
   onOpenBook: (book: Book) => void;
-  handleBookUpload: (book: Book) => void;
-  handleBookDownload: (book: Book, options?: { redownload?: boolean; queued?: boolean }) => void;
   showBookDetailsModal: (book: Book) => void;
   showTimeRemaining: boolean;
 }
@@ -38,20 +36,13 @@ const RECENT_SLIDE_WIDTH =
 
 type RecentSlideProps = Pick<
   RecentShelfProps,
-  | 'coverFit'
-  | 'onOpenBook'
-  | 'handleBookUpload'
-  | 'handleBookDownload'
-  | 'showBookDetailsModal'
-  | 'showTimeRemaining'
+  'coverFit' | 'onOpenBook' | 'showBookDetailsModal' | 'showTimeRemaining'
 > & { book: Book };
 
 const RecentSlide: React.FC<RecentSlideProps> = ({
   book,
   coverFit,
   onOpenBook,
-  handleBookUpload,
-  handleBookDownload,
   showBookDetailsModal,
   showTimeRemaining,
 }) => {
@@ -95,8 +86,6 @@ const RecentSlide: React.FC<RecentSlideProps> = ({
             isSelectMode={false}
             bookSelected={false}
             transferProgress={null}
-            handleBookUpload={handleBookUpload}
-            handleBookDownload={handleBookDownload}
             showBookDetailsModal={showBookDetailsModal}
             showTimeRemaining={showTimeRemaining}
           />
@@ -119,8 +108,6 @@ const RecentShelf: React.FC<RecentShelfProps> = ({
   autoColumns,
   fixedColumns,
   onOpenBook,
-  handleBookUpload,
-  handleBookDownload,
   showBookDetailsModal,
   showTimeRemaining,
 }) => {
@@ -201,8 +188,6 @@ const RecentShelf: React.FC<RecentShelfProps> = ({
                 book={book}
                 coverFit={coverFit}
                 onOpenBook={onOpenBook}
-                handleBookUpload={handleBookUpload}
-                handleBookDownload={handleBookDownload}
                 showBookDetailsModal={showBookDetailsModal}
                 showTimeRemaining={showTimeRemaining}
               />

@@ -58,8 +58,6 @@ import Spinner from '@/components/Spinner';
 import ModalPortal from '@/components/ModalPortal';
 import BookshelfItem, { generateBookshelfItems } from './BookshelfItem';
 import SelectModeActions from './SelectModeActions';
-import ShareBookDialog from './ShareBookDialog';
-import { useAuth } from '@/context/AuthContext';
 import GroupingModal from './GroupingModal';
 import SetStatusAlert from './SetStatusAlert';
 import RecentShelf, { RECENT_SHELF_BOOK_COUNT } from './RecentShelf';
@@ -72,18 +70,12 @@ interface BookshelfProps {
   isSelectNone: boolean;
   onScrollerRef: (el: HTMLDivElement | null) => void;
   handleImportBooks: () => void;
-  handleBookDownload: (
-    book: Book,
-    options?: { redownload?: boolean; queued?: boolean },
-  ) => Promise<boolean>;
-  handleBookUpload: (book: Book, syncBooks?: boolean) => Promise<boolean>;
   handleBookDelete: (book: Book, syncBooks?: boolean) => Promise<boolean>;
   handleBookPurge: (book: Book, syncBooks?: boolean) => Promise<boolean>;
   handleSetSelectMode: (selectMode: boolean) => void;
   handleShowDetailsBook: (book: Book) => void;
   handleLibraryNavigation: (targetGroup: string) => void;
   handlePushLibrary: () => Promise<void>;
-  booksTransferProgress: { [key: string]: number | null };
 }
 
 /**
@@ -174,15 +166,12 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   isSelectNone,
   onScrollerRef,
   handleImportBooks,
-  handleBookUpload,
-  handleBookDownload,
   handleBookDelete,
   handleBookPurge,
   handleSetSelectMode,
   handleShowDetailsBook,
   handleLibraryNavigation,
   handlePushLibrary,
-  booksTransferProgress,
 }) => {
   const _ = useTranslation();
   const router = useRouter();
@@ -635,31 +624,6 @@ const Bookshelf: React.FC<BookshelfProps> = ({
     };
   }, []);
 
-  const { user } = useAuth();
-  const [shareDialogBook, setShareDialogBook] = useState<Book | null>(null);
-
-  useEffect(() => {
-    const handleShareIntent = (event: CustomEvent) => {
-      const book = (event.detail as { book?: Book } | undefined)?.book;
-      if (!book) return;
-      if (!user) {
-        // Logged-out users can't share their own files; route through the
-        // login flow instead. The /auth route preserves a return path.
-        eventDispatcher.dispatch('toast', {
-          type: 'info',
-          message: _('Sign in to share books'),
-          timeout: 2500,
-        });
-        return;
-      }
-      setShareDialogBook(book);
-    };
-    eventDispatcher.on('show-share-dialog', handleShareIntent);
-    return () => {
-      eventDispatcher.off('show-share-dialog', handleShareIntent);
-    };
-  }, [user, _]);
-
   // OverlayScrollbars + Virtuoso integration: Virtuoso manages its own
   // scroller; OverlayScrollbars wraps it for overlay scrollbar rendering.
   const osRootRef = useRef<HTMLDivElement>(null);
@@ -706,7 +670,7 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   // taps so cloud-only synced books download before opening. `openBook` is
   // memoized inside the hook, keeping `openRecentBook` -> `recentShelfHeader`
   // -> `listContext` identities stable (no full-grid re-render churn).
-  const { openBook } = useOpenBook({ setLoading, handleBookDownload });
+  const { openBook } = useOpenBook({ setLoading });
   const openRecentBook = useCallback((book: Book) => openBook(book), [openBook]);
 
   // Flat recency slice of the whole library, independent of the main shelf's
@@ -734,8 +698,6 @@ const Bookshelf: React.FC<BookshelfProps> = ({
           autoColumns={settings.libraryAutoColumns}
           fixedColumns={settings.libraryColumns}
           onOpenBook={openRecentBook}
-          handleBookUpload={handleBookUpload}
-          handleBookDownload={handleBookDownload}
           showBookDetailsModal={handleShowDetailsBook}
           showTimeRemaining={showTimeRemaining}
         />
@@ -747,8 +709,6 @@ const Bookshelf: React.FC<BookshelfProps> = ({
       settings.libraryAutoColumns,
       settings.libraryColumns,
       openRecentBook,
-      handleBookUpload,
-      handleBookDownload,
       handleShowDetailsBook,
       showTimeRemaining,
     ],
@@ -822,16 +782,10 @@ const Bookshelf: React.FC<BookshelfProps> = ({
           setLoading={setLoading}
           toggleSelection={toggleSelection}
           handleGroupBooks={groupSelectedBooks}
-          handleBookUpload={handleBookUpload}
-          handleBookDownload={handleBookDownload}
-          handleBookDelete={handleBookDelete}
           handleSetSelectMode={handleSetSelectMode}
           handleShowDetailsBook={handleShowDetailsBook}
           handleLibraryNavigation={handleLibraryNavigation}
           handleUpdateReadingStatus={handleUpdateReadingStatus}
-          transferProgress={
-            'hash' in item ? booksTransferProgress[(item as Book).hash] || null : null
-          }
           showTimeRemaining={showTimeRemaining}
         />
       );
@@ -844,13 +798,9 @@ const Bookshelf: React.FC<BookshelfProps> = ({
       viewMode,
       coverFit,
       isSelectMode,
-      booksTransferProgress,
       iconSize15,
       handleImportBooks,
       toggleSelection,
-      handleBookUpload,
-      handleBookDownload,
-      handleBookDelete,
       handleSetSelectMode,
       handleShowDetailsBook,
       handleLibraryNavigation,
@@ -983,11 +933,6 @@ const Bookshelf: React.FC<BookshelfProps> = ({
           onUpdateStatus={updateBooksStatus}
         />
       )}
-      <ShareBookDialog
-        isOpen={!!shareDialogBook}
-        book={shareDialogBook}
-        onClose={() => setShareDialogBook(null)}
-      />
     </div>
   );
 };

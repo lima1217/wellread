@@ -1,22 +1,13 @@
 import clsx from 'clsx';
 import { useEffect, useState } from 'react';
 import { MdCheckCircle, MdCheckCircleOutline } from 'react-icons/md';
-import {
-  LiaCloudUploadAltSolid,
-  LiaCloudDownloadAltSolid,
-  LiaInfoCircleSolid,
-} from 'react-icons/lia';
+import { LiaInfoCircleSolid } from 'react-icons/lia';
 
 import { Book } from '@/types/book';
 import { useEnv } from '@/context/EnvContext';
-import { useAuth } from '@/context/AuthContext';
-import { useRouter } from 'next/navigation';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useSettingsStore } from '@/store/settingsStore';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 import { LibraryCoverFitType, LibraryViewModeType } from '@/types/settings';
-import { navigateToLogin } from '@/utils/nav';
-import { isReadestCloudStorageActive } from '@/services/sync/cloudSyncProvider';
 import { formatAuthors, formatDescription, formatSeries } from '@/utils/book';
 import ReadingProgress from './ReadingProgress';
 import BookCover from '@/components/BookCover';
@@ -28,8 +19,6 @@ interface BookItemProps {
   isSelectMode: boolean;
   bookSelected: boolean;
   transferProgress: number | null;
-  handleBookUpload: (book: Book) => void;
-  handleBookDownload: (book: Book, options?: { redownload?: boolean; queued?: boolean }) => void;
   showBookDetailsModal: (book: Book) => void;
   showTimeRemaining: boolean;
 }
@@ -41,16 +30,11 @@ const BookItem: React.FC<BookItemProps> = ({
   isSelectMode,
   bookSelected,
   transferProgress,
-  handleBookUpload,
-  handleBookDownload,
   showBookDetailsModal,
   showTimeRemaining,
 }) => {
   const _ = useTranslation();
-  const router = useRouter();
-  const { user } = useAuth();
   const { appService } = useEnv();
-  const { settings } = useSettingsStore();
   const iconSize15 = useResponsiveSize(15);
 
   const [coverAspect, setCoverAspect] = useState<number | null>(null);
@@ -186,35 +170,7 @@ const BookItem: React.FC<BookItemProps> = ({
                   role='progressbar'
                 ></div>
               )
-            ) : (
-              (!book.uploadedAt || (book.uploadedAt && !book.downloadedAt)) && (
-                <button
-                  aria-label={!book.uploadedAt ? _('Upload Book') : _('Download Book')}
-                  className='show-cloud-button -m-2 p-2'
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => {
-                    if (!user) {
-                      navigateToLogin(router);
-                      return;
-                    }
-                    if (!book.uploadedAt) {
-                      handleBookUpload(book);
-                    } else if (!book.downloadedAt) {
-                      handleBookDownload(book, { queued: true });
-                    }
-                  }}
-                >
-                  {!book.uploadedAt &&
-                    settings.autoUpload &&
-                    isReadestCloudStorageActive(settings) && (
-                      <LiaCloudUploadAltSolid size={iconSize15} />
-                    )}
-                  {book.uploadedAt && !book.downloadedAt && (
-                    <LiaCloudDownloadAltSolid size={iconSize15} />
-                  )}
-                </button>
-              )
-            )}
+            ) : null}
           </div>
         </div>
       </div>

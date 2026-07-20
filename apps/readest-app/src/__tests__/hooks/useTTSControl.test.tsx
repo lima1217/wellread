@@ -10,10 +10,6 @@ vi.mock('@/context/EnvContext', () => ({
   }),
 }));
 
-vi.mock('@/context/AuthContext', () => ({
-  useAuth: () => ({ user: null }),
-}));
-
 vi.mock('@/store/themeStore', () => ({
   useThemeStore: () => ({ isDarkMode: false }),
 }));

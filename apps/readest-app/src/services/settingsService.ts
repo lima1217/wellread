@@ -153,11 +153,6 @@ export async function loadSettings(ctx: Context): Promise<SystemSettings> {
     settings.globalViewSettings.annotationQuickAction = 'dictionary';
   }
 
-  if (!settings.kosync.deviceId) {
-    settings.kosync.deviceId = uuidv4();
-    await saveSettings(ctx.fs, settings);
-  }
-
   if (!settings.replicaDeviceId) {
     settings.replicaDeviceId = uuidv4();
     await saveSettings(ctx.fs, settings);

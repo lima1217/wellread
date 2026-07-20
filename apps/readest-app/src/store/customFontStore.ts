@@ -9,19 +9,6 @@ import {
 } from '@/styles/fonts';
 import { useSettingsStore } from './settingsStore';
 import { getReplicaPersistEnv } from '@/services/sync/replicaPersist';
-import { publishReplicaDelete, publishReplicaUpsert } from '@/services/sync/replicaPublish';
-import { FONT_KIND } from '@/services/sync/adapters/font';
-import { computeFontContentId } from '@/services/fontService';
-import { migrateLegacyReplicas } from '@/services/sync/migrateLegacy';
-
-const publishFontUpsert = (font: CustomFont): void => {
-  if (!font.contentId) return;
-  void publishReplicaUpsert(FONT_KIND, font, font.contentId, font.reincarnation);
-};
-
-const publishFontDelete = (contentId: string): void => {
-  void publishReplicaDelete(FONT_KIND, contentId);
-};
 
 interface FontStoreState {
   fonts: CustomFont[];
@@ -120,7 +107,6 @@ export const useCustomFontStore = create<FontStoreState>((set, get) => ({
         fonts: [...state.fonts],
       }));
       const refreshed = get().getFont(font.id) ?? existingFont;
-      publishFontUpsert(refreshed);
       return refreshed;
     }
 
@@ -133,7 +119,6 @@ export const useCustomFontStore = create<FontStoreState>((set, get) => ({
       fonts: [...state.fonts, newFont],
     }));
 
-    publishFontUpsert(newFont);
     return newFont;
   },
 
@@ -154,7 +139,6 @@ export const useCustomFontStore = create<FontStoreState>((set, get) => ({
     set((state) => ({
       fonts: [...state.fonts],
     }));
-    if (font.contentId) publishFontDelete(font.contentId);
     return result;
   },
 
@@ -442,19 +426,7 @@ export const findFontByContentId = (contentId: string): CustomFont | undefined =
  * skips fonts that already carry `contentId`. Implementation lives in
  * `migrateLegacyReplicas` — shared with custom textures.
  */
-export const migrateLegacyFonts = (envConfig: EnvConfigType): Promise<void> =>
-  migrateLegacyReplicas<CustomFont>(envConfig, {
-    kind: FONT_KIND,
-    baseDir: 'Fonts',
-    getCandidates: () =>
-      useCustomFontStore
-        .getState()
-        .fonts.filter((f) => !f.contentId && !f.bundleDir && !f.deletedAt && !f.path.includes('/')),
-    computeContentId: computeFontContentId,
-    updateRecord: (id, next) => useCustomFontStore.getState().updateFont(id, next),
-    saveStore: (env) => useCustomFontStore.getState().saveCustomFonts(env),
-    publishUpsert: publishFontUpsert,
-  });
+export const migrateLegacyFonts = (_envConfig: EnvConfigType): Promise<void> => Promise.resolve();
 
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
