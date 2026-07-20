@@ -33,8 +33,6 @@ export default defineConfig({
       '**/*.browser.test.ts',
       '**/*.browser.test.tsx',
       '**/*.tauri.test.ts',
-      // Android device e2e — run via `pnpm test:android`, not the unit lane.
-      '**/*.android.test.ts',
     ],
     coverage: {
       provider: 'v8',

@@ -31,8 +31,7 @@
             "$APPDATA/**/*",
             "$APPCACHE/**/*",
             "$TEMP/**/*",
-            "**/Readest/**/*",
-            "/private/var/mobile/Containers/Data/Application/**/*"
+            "**/Readest/**/*"
           ],
           "deny": []
         }
@@ -67,14 +66,6 @@
       "deb": {
         "section": "text"
       }
-    },
-    "android": {
-      "minSdkVersion": 26
-    },
-    "iOS": {
-      "developmentTeam": "J5W48D69VR",
-      "infoPlist": "./Info-ios.plist",
-      "minimumSystemVersion": "15.0"
     },
     "fileAssociations": [
       {
@@ -127,7 +118,7 @@
         "role": "Viewer"
       }
     ],
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": false
   },
   "plugins": {
     "fs": {
@@ -159,25 +150,6 @@
       ]
     },
     "deep-link": {
-      "mobile": [
-        {
-          "scheme": ["https"],
-          "host": "web.readest.com",
-          "appLink": true
-        },
-        {
-          "scheme": ["readest"],
-          "appLink": false
-        },
-        {
-          "scheme": ["readest-onedrive"],
-          "appLink": false
-        },
-        {
-          "scheme": ["com.googleusercontent.apps.209390247301-ctpmep68ppfa56r1b8tr35e4qi4p60kq"],
-          "appLink": false
-        }
-      ],
       "desktop": {
         "schemes": [
           "readest",

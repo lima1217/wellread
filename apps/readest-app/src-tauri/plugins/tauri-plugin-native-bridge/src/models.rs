@@ -451,9 +451,8 @@ pub struct CaptureWebviewRegionRequest {
     pub height: f64,
 }
 
-/// Mobile-side response: Swift/Kotlin can only resolve JSON, so the
-/// PNG crosses the plugin boundary base64-encoded; `mobile.rs` decodes
-/// it back to bytes so the JS-facing command stays binary.
+/// Response for `capture_webview_region`: PNG payload as a base64 string
+/// (shared wire shape historically used by the mobile plugin boundary).
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureWebviewRegionResponse {

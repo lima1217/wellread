@@ -223,66 +223,6 @@ if (fs.existsSync(srcTarget) && !fs.existsSync(dstTarget)) {
   fs.symlinkSync(srcTarget, dstTarget, 'junction');
 }
 
-// Initialize Tauri Android gen directory (needs platform-specific paths regenerated)
-const genDir = path.join(dstAppDir, 'src-tauri', 'gen');
-const androidGenDir = path.join(genDir, 'android');
-if (fs.existsSync(androidGenDir)) {
-  console.error('\n--- Initializing Tauri Android ---');
-  fs.rmSync(androidGenDir, { recursive: true });
-  execSync('pnpm tauri android init', { stdio: gitStdio, cwd: dstAppDir });
-  execSync('pnpm tauri icon ../../data/icons/readest-book.png', {
-    stdio: gitStdio,
-    cwd: dstAppDir,
-  });
-  execSync(`git checkout ${appRelPath}/src-tauri/gen/android ${appRelPath}/src-tauri/icons`, {
-    stdio: gitStdio,
-    cwd: worktreePath,
-  });
-}
-
-// Copy Tauri iOS gen from the bare repo, skipping rebuildable artifacts so
-// the worktree owns its own Xcode project. `project.yml` and the Xcode build
-// script walk up to `../../src` / `../../Cargo.toml`, which now resolve to
-// the worktree's Rust source instead of the bare repo's — so `pnpm tauri ios
-// dev` from a worktree actually builds the worktree's code. Symlinking
-// silently routed every iOS build through the bare repo, even when running
-// `pnpm tauri ios dev` from a worktree path.
-//
-// Skipped: `build/` (~300 MB of Xcode derived output), `Externals/<arch>/
-// {debug,release}/` (Rust static libs — rebuilt against the worktree's
-// src-tauri), per-user Xcode state, and `Pods/` (defensive; Readest's iOS
-// uses SPM, not Cocoapods).
-const appleGenDir = path.join(genDir, 'apple');
-const srcAppleGen = path.join(srcAppDir, 'src-tauri', 'gen', 'apple');
-if (fs.existsSync(srcAppleGen) && !fs.existsSync(appleGenDir)) {
-  console.error('\n--- Copying Tauri iOS gen ---');
-  fs.cpSync(srcAppleGen, appleGenDir, {
-    recursive: true,
-    dereference: false,
-    filter: (src) => {
-      const rel = path.relative(srcAppleGen, src);
-      if (rel === 'build' || rel.startsWith('build/')) return false;
-      if (/^Externals\/[^/]+\/(debug|release)(\/|$)/.test(rel)) return false;
-      if (rel.endsWith('/xcuserdata') || rel.includes('/xcuserdata/')) return false;
-      if (rel.endsWith('.xcuserstate')) return false;
-      if (rel === 'Pods' || rel.startsWith('Pods/')) return false;
-      return true;
-    },
-  });
-}
-
-// Symlink the remaining shared gen dirs (schemas are generated at build time
-// and don't differ per branch; keystore.properties is signing config that
-// must stay identical across worktrees to produce matching APKs).
-for (const sub of ['schemas', 'android/keystore.properties']) {
-  const src = path.join(srcAppDir, 'src-tauri', 'gen', sub);
-  const dst = path.join(genDir, sub);
-  if (fs.existsSync(src) && !fs.existsSync(dst)) {
-    console.error(`  Symlinking src-tauri/gen/${sub}`);
-    fs.symlinkSync(src, dst, 'junction');
-  }
-}
-
 // Copy public/vendor to the new worktree (built assets not in git)
 const srcVendor = path.join(srcAppDir, 'public', 'vendor');
 const dstVendor = path.join(dstAppDir, 'public', 'vendor');
