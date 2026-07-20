@@ -1,15 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock the access module before importing fetch utilities
-vi.mock('@/utils/access', () => ({
-  getAccessToken: vi.fn(),
-}));
-
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-import { fetchWithTimeout, fetchWithAuth } from '@/utils/fetch';
-import { getAccessToken } from '@/utils/access';
+import { fetchWithTimeout } from '@/utils/fetch';
 
 describe('fetchWithTimeout', () => {
   beforeEach(() => {
@@ -112,86 +106,5 @@ describe('fetchWithTimeout', () => {
     expect(opts.headers).toEqual({ 'Content-Type': 'application/json' });
     expect(opts.body).toBe('{"key": "value"}');
     expect(opts.signal).toBeDefined();
-  });
-});
-
-describe('fetchWithAuth', () => {
-  beforeEach(() => {
-    mockFetch.mockReset();
-    vi.mocked(getAccessToken).mockReset();
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('throws when not authenticated (no token)', async () => {
-    vi.mocked(getAccessToken).mockResolvedValueOnce(null);
-
-    await expect(fetchWithAuth('https://api.example.com/data', { method: 'GET' })).rejects.toThrow(
-      'Not authenticated',
-    );
-
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it('adds Authorization header with Bearer token', async () => {
-    vi.mocked(getAccessToken).mockResolvedValueOnce('my-token-123');
-    mockFetch.mockResolvedValueOnce(new Response('OK', { status: 200 }));
-
-    await fetchWithAuth('https://api.example.com/data', { method: 'GET' });
-
-    const opts = mockFetch.mock.calls[0]![1];
-    expect(opts.headers.Authorization).toBe('Bearer my-token-123');
-  });
-
-  it('merges existing headers with Authorization', async () => {
-    vi.mocked(getAccessToken).mockResolvedValueOnce('token');
-    mockFetch.mockResolvedValueOnce(new Response('OK', { status: 200 }));
-
-    await fetchWithAuth('https://api.example.com', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    const opts = mockFetch.mock.calls[0]![1];
-    expect(opts.headers.Authorization).toBe('Bearer token');
-    expect(opts.headers['Content-Type']).toBe('application/json');
-  });
-
-  it('returns the response on success', async () => {
-    vi.mocked(getAccessToken).mockResolvedValueOnce('token');
-    const mockResponse = new Response('data', { status: 200 });
-    mockFetch.mockResolvedValueOnce(mockResponse);
-
-    const result = await fetchWithAuth('https://api.example.com', { method: 'GET' });
-    expect(result).toBe(mockResponse);
-  });
-
-  it('throws when response is not ok', async () => {
-    vi.mocked(getAccessToken).mockResolvedValueOnce('token');
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      statusText: 'Forbidden',
-      json: async () => ({ error: 'Access denied' }),
-    });
-
-    await expect(fetchWithAuth('https://api.example.com', { method: 'GET' })).rejects.toThrow(
-      'Access denied',
-    );
-  });
-
-  it('uses statusText when error field is missing from response', async () => {
-    vi.mocked(getAccessToken).mockResolvedValueOnce('token');
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      statusText: 'Internal Server Error',
-      json: async () => ({}),
-    });
-
-    await expect(fetchWithAuth('https://api.example.com', { method: 'GET' })).rejects.toThrow(
-      'Request failed',
-    );
   });
 });

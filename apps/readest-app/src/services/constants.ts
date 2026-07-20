@@ -19,18 +19,18 @@ import {
 } from '@/types/book';
 import {
   HardcoverSettings,
-  KOSyncSettings,
   LibraryGroupByType,
   LibrarySortByType,
   ReadSettings,
   ReadwiseSettings,
   SystemSettings,
-  WebDAVSettings,
-  GoogleDriveSettings,
-  S3Settings,
-  OneDriveSettings,
 } from '@/types/settings';
-import { UserStorageQuota, UserDailyTranslationQuota } from '@/types/quota';
+type UserQuota = {
+  free: number;
+  plus: number;
+  pro: number;
+  purchase: number;
+};
 import { getDefaultMaxBlockSize, getDefaultMaxInlineSize } from '@/utils/config';
 import { stubTranslation as _ } from '@/utils/misc';
 import { DEFAULT_AI_SETTINGS } from './ai/constants';
@@ -40,8 +40,6 @@ import { DEFAULT_PARAGRAPH_GAP_SEC } from './tts/TTSController';
 
 export const DATA_SUBDIR = 'Readest';
 export const LOCAL_BOOKS_SUBDIR = `${DATA_SUBDIR}/Books`;
-export const CLOUD_BOOKS_SUBDIR = `${DATA_SUBDIR}/Books`;
-export const CLOUD_REPLICAS_SUBDIR = `${DATA_SUBDIR}/Replicas`;
 export const LOCAL_FONTS_SUBDIR = `${DATA_SUBDIR}/Fonts`;
 export const LOCAL_IMAGES_SUBDIR = `${DATA_SUBDIR}/Images`;
 export const LOCAL_DICTIONARIES_SUBDIR = `${DATA_SUBDIR}/Dictionaries`;
@@ -67,17 +65,6 @@ export const BOOK_UNGROUPED_ID = '';
 export const SUPPORTED_IMAGE_EXTS = ['png', 'jpg', 'jpeg'];
 export const IMAGE_ACCEPT_FORMATS = SUPPORTED_IMAGE_EXTS.map((ext) => `.${ext}`).join(', ');
 
-export const DEFAULT_KOSYNC_SETTINGS = {
-  serverUrl: 'https://sync.koreader.rocks/', // https://kosync.ak-team.com:3042/
-  username: '',
-  userkey: '',
-  deviceId: '',
-  deviceName: '',
-  checksumMethod: 'binary',
-  strategy: 'prompt',
-  enabled: false,
-} as KOSyncSettings;
-
 export const READWISE_API_BASE_URL = 'https://readwise.io/api/v2';
 
 export const DEFAULT_READWISE_SETTINGS = {
@@ -93,57 +80,7 @@ export const DEFAULT_HARDCOVER_SETTINGS = {
   autoSync: false,
 } as HardcoverSettings;
 
-export const DEFAULT_WEBDAV_SETTINGS = {
-  enabled: false,
-  serverUrl: '',
-  username: '',
-  password: '',
-  rootPath: '/',
-  syncProgress: true,
-  syncNotes: true,
-  syncBooks: false,
-  strategy: 'silent',
-  deviceId: '',
-  lastSyncedAt: 0,
-} as WebDAVSettings;
-
-export const DEFAULT_GOOGLE_DRIVE_SETTINGS = {
-  enabled: false,
-  syncProgress: true,
-  syncNotes: true,
-  syncBooks: false,
-  strategy: 'silent',
-  deviceId: '',
-  lastSyncedAt: 0,
-} as GoogleDriveSettings;
-
-export const DEFAULT_S3_SETTINGS = {
-  enabled: false,
-  endpoint: '',
-  region: 'auto',
-  bucket: '',
-  accessKeyId: '',
-  secretAccessKey: '',
-  syncProgress: true,
-  syncNotes: true,
-  syncBooks: false,
-  strategy: 'silent',
-  deviceId: '',
-  lastSyncedAt: 0,
-} as S3Settings;
-
-export const DEFAULT_ONEDRIVE_SETTINGS = {
-  enabled: false,
-  syncProgress: true,
-  syncNotes: true,
-  syncBooks: false,
-  strategy: 'silent',
-  deviceId: '',
-  lastSyncedAt: 0,
-} as OneDriveSettings;
-
 export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
-  keepLogin: false,
   autoUpload: true,
   alwaysOnTop: false,
   openBookInNewWindow: true,
@@ -195,29 +132,14 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
     },
   },
 
-  kosync: DEFAULT_KOSYNC_SETTINGS,
   readwise: DEFAULT_READWISE_SETTINGS,
   hardcover: DEFAULT_HARDCOVER_SETTINGS,
-  webdav: DEFAULT_WEBDAV_SETTINGS,
-  googleDrive: DEFAULT_GOOGLE_DRIVE_SETTINGS,
-  s3: DEFAULT_S3_SETTINGS,
-  onedrive: DEFAULT_ONEDRIVE_SETTINGS,
   aiSettings: DEFAULT_AI_SETTINGS,
 
   lastSyncedAtBooks: 0,
   lastSyncedAtConfigs: 0,
   lastSyncedAtNotes: 0,
   lastSyncedAtReplicas: {},
-  syncCategories: {
-    book: true,
-    progress: true,
-    note: true,
-    dictionary: true,
-    font: true,
-    texture: true,
-    opds_catalog: true,
-    settings: true,
-  },
 };
 
 export const DEFAULT_MOBILE_SYSTEM_SETTINGS: Partial<SystemSettings> = {
@@ -846,9 +768,6 @@ export const DOWNLOAD_READEST_URL = 'https://readest.com?utm_source=readest_web'
 export const READEST_WEB_BASE_URL = 'https://web.readest.com';
 export const READEST_NODE_BASE_URL = 'https://node.readest.com';
 
-export const SHARE_BASE_URL = `${READEST_WEB_BASE_URL}/s`;
-export const SHARE_EXPIRATION_DAYS = [1, 3, 7] as const;
-
 // Send to Readest — the domain inbound capture emails are addressed to, the
 // R2 bucket holding raw inbound payloads, and the per-user cap on undrained
 // inbox items (defense against a leaked address).
@@ -861,12 +780,6 @@ export const SEND_INBOX_PENDING_LIMIT = 50;
 // overhead. Beyond this size a clipped article is almost certainly an
 // over-illustrated page that would never read well in the EPUB anyway.
 export const SEND_INBOX_FILE_MAX_BYTES = 40 * 1024 * 1024;
-export const SHARE_DEFAULT_EXPIRATION_DAYS = 3;
-export const SHARE_MAX_PER_USER = 50;
-export const SHARE_TOKEN_LENGTH = 22;
-export const SHARE_PRESIGN_TTL_SECONDS = 300;
-export const SHARE_CFI_MAX_LENGTH = 512;
-
 const LATEST_DOWNLOAD_BASE_URL = 'https://download.readest.com/releases';
 
 export const READEST_UPDATER_FILE = `${LATEST_DOWNLOAD_BASE_URL}/latest.json`;
@@ -906,14 +819,14 @@ export const AUTO_SCROLL_SPEED_STEP = 25;
 
 export const SHOW_UNREAD_STATUS_BADGE = false;
 
-export const DEFAULT_STORAGE_QUOTA: UserStorageQuota = {
+export const DEFAULT_STORAGE_QUOTA: UserQuota = {
   free: 500 * 1024 * 1024,
   plus: 5 * 1024 * 1024 * 1024,
   pro: 20 * 1024 * 1024 * 1024,
   purchase: 0,
 };
 
-export const DEFAULT_DAILY_TRANSLATION_QUOTA: UserDailyTranslationQuota = {
+export const DEFAULT_DAILY_TRANSLATION_QUOTA: UserQuota = {
   free: 10 * 1024,
   plus: 100 * 1024,
   pro: 500 * 1024,

@@ -101,44 +101,6 @@ pub(crate) async fn lock_screen_orientation<R: Runtime>(
 }
 
 #[command]
-pub(crate) async fn iap_is_available<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<IAPIsAvailableResponse> {
-    app.native_bridge().iap_is_available()
-}
-
-#[command]
-pub(crate) async fn iap_initialize<R: Runtime>(
-    app: AppHandle<R>,
-    payload: IAPInitializeRequest,
-) -> Result<IAPInitializeResponse> {
-    app.native_bridge().iap_initialize(payload)
-}
-
-#[command]
-pub(crate) async fn iap_fetch_products<R: Runtime>(
-    app: AppHandle<R>,
-    payload: IAPFetchProductsRequest,
-) -> Result<IAPFetchProductsResponse> {
-    app.native_bridge().iap_fetch_products(payload)
-}
-
-#[command]
-pub(crate) async fn iap_purchase_product<R: Runtime>(
-    app: AppHandle<R>,
-    payload: IAPPurchaseProductRequest,
-) -> Result<IAPPurchaseProductResponse> {
-    app.native_bridge().iap_purchase_product(payload)
-}
-
-#[command]
-pub(crate) async fn iap_restore_purchases<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<IAPRestorePurchasesResponse> {
-    app.native_bridge().iap_restore_purchases()
-}
-
-#[command]
 pub(crate) async fn get_system_color_scheme<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<GetSystemColorSchemeResponse> {

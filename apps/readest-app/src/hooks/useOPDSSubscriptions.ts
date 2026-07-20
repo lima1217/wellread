@@ -1,19 +1,15 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { useAuth } from '@/context/AuthContext';
 import { useEnv } from '@/context/EnvContext';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useSettingsStore } from '@/store/settingsStore';
-import { isReadestCloudStorageActive } from '@/services/sync/cloudSyncProvider';
 import { useTranslation } from '@/hooks/useTranslation';
 import { syncSubscribedCatalogs } from '@/services/opds';
 import { AUTO_CHECK_INTERVAL_MS } from '@/services/opds/types';
-import { transferManager } from '@/services/transferManager';
 import { eventDispatcher } from '@/utils/event';
 
 export function useOPDSSubscriptions() {
   const _ = useTranslation();
   const { appService } = useEnv();
-  const { user } = useAuth();
   const { libraryLoaded } = useLibraryStore();
   const isSyncingRef = useRef(false);
 
@@ -46,27 +42,6 @@ export function useOPDSSubscriptions() {
             useLibraryStore.getState().setLibrary(merged);
             appService.saveLibraryBooks(merged);
           }
-
-          // Mirror the manual OPDS download path: queue cloud upload for each
-          // newly imported book when the user is logged in and has the global
-          // autoUpload setting on. Delay so the transfer manager has a chance
-          // to finish initializing if this fires right after libraryLoaded.
-          const { settings: currentSettings } = useSettingsStore.getState();
-          if (
-            user &&
-            currentSettings.autoUpload &&
-            isReadestCloudStorageActive(currentSettings) &&
-            uniqueNewBooks.length > 0
-          ) {
-            const booksToUpload = uniqueNewBooks.filter((b) => !b.uploadedAt);
-            if (booksToUpload.length > 0) {
-              setTimeout(() => {
-                for (const book of booksToUpload) {
-                  transferManager.queueUpload(book);
-                }
-              }, 3000);
-            }
-          }
         }
 
         if (verbose && totalNewBooks > 0) {
@@ -91,7 +66,7 @@ export function useOPDSSubscriptions() {
         eventDispatcher.dispatch('opds-sync-complete');
       }
     },
-    [_, appService, libraryLoaded, user],
+    [_, appService, libraryLoaded],
   );
 
   // Auto-trigger on startup after library is loaded

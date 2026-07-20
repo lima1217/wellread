@@ -136,55 +136,6 @@ impl<R: Runtime> NativeBridge<R> {
 }
 
 impl<R: Runtime> NativeBridge<R> {
-    pub fn iap_is_available(&self) -> crate::Result<IAPIsAvailableResponse> {
-        self.0
-            .run_mobile_plugin("iap_is_available", ())
-            .map_err(Into::into)
-    }
-}
-
-impl<R: Runtime> NativeBridge<R> {
-    pub fn iap_initialize(
-        &self,
-        payload: IAPInitializeRequest,
-    ) -> crate::Result<IAPInitializeResponse> {
-        self.0
-            .run_mobile_plugin("iap_initialize", payload)
-            .map_err(Into::into)
-    }
-}
-
-impl<R: Runtime> NativeBridge<R> {
-    pub fn iap_fetch_products(
-        &self,
-        payload: IAPFetchProductsRequest,
-    ) -> crate::Result<IAPFetchProductsResponse> {
-        self.0
-            .run_mobile_plugin("iap_fetch_products", payload)
-            .map_err(Into::into)
-    }
-}
-
-impl<R: Runtime> NativeBridge<R> {
-    pub fn iap_purchase_product(
-        &self,
-        payload: IAPPurchaseProductRequest,
-    ) -> crate::Result<IAPPurchaseProductResponse> {
-        self.0
-            .run_mobile_plugin("iap_purchase_product", payload)
-            .map_err(Into::into)
-    }
-}
-
-impl<R: Runtime> NativeBridge<R> {
-    pub fn iap_restore_purchases(&self) -> crate::Result<IAPRestorePurchasesResponse> {
-        self.0
-            .run_mobile_plugin("iap_restore_purchases", ())
-            .map_err(Into::into)
-    }
-}
-
-impl<R: Runtime> NativeBridge<R> {
     pub fn get_system_color_scheme(&self) -> crate::Result<GetSystemColorSchemeResponse> {
         self.0
             .run_mobile_plugin("get_system_color_scheme", ())

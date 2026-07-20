@@ -24,8 +24,6 @@ describe('getBookContextMenuItemIds', () => {
       'showDetails',
       'showInFinder',
       'searchGoodreads',
-      'upload',
-      'share',
       'delete',
     ]);
   });
@@ -41,8 +39,6 @@ describe('getBookContextMenuItemIds', () => {
       'showDetails',
       'showInFinder',
       'searchGoodreads',
-      'upload',
-      'share',
       'delete',
     ]);
   });
@@ -58,8 +54,6 @@ describe('getBookContextMenuItemIds', () => {
       'showDetails',
       'showInFinder',
       'searchGoodreads',
-      'upload',
-      'share',
       'delete',
     ]);
   });
@@ -74,13 +68,11 @@ describe('getBookContextMenuItemIds', () => {
       'showDetails',
       'showInFinder',
       'searchGoodreads',
-      'upload',
-      'share',
       'delete',
     ]);
   });
 
-  it('offers Download (not Upload) for a cloud-only book', () => {
+  it('omits download/upload for a cloud-only book', () => {
     const book = createBook({ uploadedAt: 1 });
     expect(getBookContextMenuItemIds(book)).toEqual([
       'select',
@@ -90,13 +82,11 @@ describe('getBookContextMenuItemIds', () => {
       'showDetails',
       'showInFinder',
       'searchGoodreads',
-      'download',
-      'share',
       'delete',
     ]);
   });
 
-  it('omits download/upload/share for a book that is neither downloaded nor uploaded', () => {
+  it('omits download/upload for a book that is neither downloaded nor uploaded', () => {
     const book = createBook({ filePath: '/some/external/file.epub' });
     expect(getBookContextMenuItemIds(book)).toEqual([
       'select',

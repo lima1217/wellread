@@ -9,10 +9,8 @@ vi.mock('@/services/environment', async (orig) => {
   return { ...actual, isTauriAppPlatform: () => true };
 });
 vi.mock('@/context/EnvContext', () => ({ useEnv: () => ({ appService: {}, envConfig: {} }) }));
-vi.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: null }) }));
 vi.mock('@/hooks/useTranslation', () => ({ useTranslation: () => (k: string) => k }));
-// Clip pipeline collaborators — should never be reached for share links; stub
-// so an accidental article-clip can't blow up the test environment.
+// Clip pipeline collaborators — stub so clipAndImport can't blow up the test environment.
 vi.mock('@/services/send/clipOptions', () => ({ getClipOptions: () => ({}) }));
 vi.mock('@/services/send/conversion/conversionWorker', () => ({
   convertToEpubWithWorker: vi.fn(),
@@ -29,16 +27,6 @@ beforeEach(() => {
 });
 
 describe('useClipUrlIngress deep-link routing', () => {
-  it('does NOT run the article clipper on share deep links', async () => {
-    renderHook(() => useClipUrlIngress());
-    await eventDispatcher.dispatch('app-incoming-url', {
-      urls: ['https://web.readest.com/s/Qmup0X1A8ovl2FmKJKA8mB'],
-    });
-    await Promise.resolve();
-    // Share links belong to useOpenShareLink; the clipper must leave them alone.
-    expect(invokeMock).not.toHaveBeenCalled();
-  });
-
   it('still clips ordinary article URLs', async () => {
     renderHook(() => useClipUrlIngress());
     await eventDispatcher.dispatch('app-incoming-url', {

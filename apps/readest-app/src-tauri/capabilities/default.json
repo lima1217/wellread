@@ -81,16 +81,10 @@
       "identifier": "http:default",
       "allow": [
         {
-          "url": "https://*.readest.com"
-        },
-        {
           "url": "https://github.com/readest/*"
         },
         {
           "url": "https://*.deepl.com"
-        },
-        {
-          "url": "https://*.cloudflarestorage.com"
         },
         {
           "url": "https://edge.microsoft.com"
@@ -144,9 +138,6 @@
     "process:default",
     "process:allow-exit",
     "process:allow-restart",
-    "oauth:allow-start",
-    "oauth:allow-cancel",
-    "sign-in-with-apple:default",
     "opener:default",
     {
       "identifier": "opener:allow-open-url",
@@ -206,7 +197,6 @@
     "native-tts:default",
     "native-bridge:default",
     "sentry:default",
-    "allow-start-server",
     "allow-download-file",
     "allow-upload-file",
     "allow-get-environment-variable",
@@ -220,14 +210,11 @@
     "allow-parse-epub-full",
     "allow-parse-mobi-metadata",
     "allow-extract-mobi-cover-full",
-    "allow-auth-with-safari",
-    "allow-start-apple-sign-in",
     "allow-set-traffic-lights",
     "allow-show-lookup-popover",
     "allow-update-book-presence",
     "allow-clear-book-presence",
     "allow-clip-url",
-    "allow-spawn-fresh-browser",
     "allow-verify-update-signature",
     "allow-install-nightly-update"
   ]

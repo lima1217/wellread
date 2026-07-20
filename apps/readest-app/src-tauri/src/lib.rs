@@ -34,19 +34,16 @@ mod nightly_update;
 mod parser_common;
 mod range_file;
 mod sentry_config;
-#[cfg(desktop)]
-mod spawn_fresh_browser;
 mod transfer_file;
 #[cfg(desktop)]
 mod window_state;
 #[cfg(target_os = "windows")]
 use tauri::webview::ScrollBarStyle;
-use tauri::{command, Emitter, WebviewUrl, WebviewWindowBuilder, Window};
+use tauri::{command, Emitter, WebviewUrl, WebviewWindowBuilder};
 #[cfg(target_os = "android")]
 use tauri_plugin_native_bridge::register_select_directory_callback;
 #[cfg(target_os = "android")]
 use tauri_plugin_native_bridge::{NativeBridgeExt, OpenExternalUrlRequest};
-use tauri_plugin_oauth::start;
 #[cfg(not(target_os = "android"))]
 use tauri_plugin_opener::OpenerExt;
 use transfer_file::{download_file, upload_file};
@@ -224,16 +221,6 @@ fn set_window_open_with_files(app: &AppHandle, files: Vec<PathBuf>) {
     }
 }
 
-#[command]
-async fn start_server(window: Window) -> Result<u16, String> {
-    start(move |url| {
-        // Because of the unprotected localhost port, you must verify the URL here.
-        // Preferebly send back only the token, or nothing at all if you can handle everything else in Rust.
-        let _ = window.emit("redirect_uri", url);
-    })
-    .map_err(|err| err.to_string())
-}
-
 #[tauri::command]
 fn get_environment_variable(name: &str) -> String {
     std::env::var(String::from(name)).unwrap_or(String::from(""))
@@ -400,9 +387,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_oauth::init())
         .invoke_handler(tauri::generate_handler![
-            start_server,
             download_file,
             upload_file,
             get_environment_variable,
@@ -418,10 +403,6 @@ pub fn run() {
             mobi_parser::parse_mobi_metadata,
             mobi_parser::extract_mobi_cover_full,
             #[cfg(target_os = "macos")]
-            macos::safari_auth::auth_with_safari,
-            #[cfg(target_os = "macos")]
-            macos::apple_auth::start_apple_sign_in,
-            #[cfg(target_os = "macos")]
             macos::traffic_light::set_traffic_lights,
             #[cfg(target_os = "macos")]
             macos::system_dictionary::show_lookup_popover,
@@ -430,8 +411,6 @@ pub fn run() {
             #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             discord_rpc::clear_book_presence,
             clip_url::clip_url,
-            #[cfg(desktop)]
-            spawn_fresh_browser::spawn_fresh_browser,
             nightly_update::verify_update_signature,
             #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             nightly_update::install_nightly_update,
@@ -490,12 +469,6 @@ pub fn run() {
 
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(macos::traffic_light::init());
-
-    #[cfg(target_os = "macos")]
-    let builder = builder.plugin(macos::safari_auth::init());
-
-    #[cfg(target_os = "ios")]
-    let builder = builder.plugin(tauri_plugin_sign_in_with_apple::init());
 
     #[cfg(any(target_os = "ios", target_os = "android"))]
     let builder = builder.plugin(tauri_plugin_haptics::init());

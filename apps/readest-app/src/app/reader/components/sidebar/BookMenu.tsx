@@ -98,14 +98,6 @@ const BookMenu: React.FC<BookMenuProps> = ({ menuClassName, setIsDropdownOpen })
     setProofreadRulesVisibility(true);
     setIsDropdownOpen?.(false);
   };
-  const handlePullKOSync = () => {
-    eventDispatcher.dispatch('pull-kosync', { bookKey: sideBarBookKey });
-    setIsDropdownOpen?.(false);
-  };
-  const handlePushKOSync = () => {
-    eventDispatcher.dispatch('push-kosync', { bookKey: sideBarBookKey });
-    setIsDropdownOpen?.(false);
-  };
   const handlePushReadwise = () => {
     eventDispatcher.dispatch('readwise-push-all', { bookKey: sideBarBookKey });
     setIsDropdownOpen?.(false);
@@ -169,16 +161,8 @@ const BookMenu: React.FC<BookMenuProps> = ({ menuClassName, setIsDropdownOpen })
         ) : (
           <MenuItem label={_('Enter Parallel Read')} onClick={handleSetParallel} />
         ))}
-      {(settings.kosync.enabled || settings.readwise.enabled || settings.hardcover.enabled) && (
+      {(settings.readwise.enabled || settings.hardcover.enabled) && (
         <hr aria-hidden='true' className='border-base-200 my-1' />
-      )}
-      {settings.kosync.enabled && (
-        <MenuItem label={_('KOReader Sync')} detailsOpen={false} buttonClass='py-2'>
-          <ul className='flex flex-col ps-1'>
-            <MenuItem label={_('Push Progress')} noIcon onClick={handlePushKOSync} />
-            <MenuItem label={_('Pull Progress')} noIcon onClick={handlePullKOSync} />
-          </ul>
-        </MenuItem>
       )}
       {settings.readwise.enabled && (
         <MenuItem label={_('Readwise Sync')} detailsOpen={false} buttonClass='py-2'>

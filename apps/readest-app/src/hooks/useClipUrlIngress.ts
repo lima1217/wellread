@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { useAuth } from '@/context/AuthContext';
 import { useEnv } from '@/context/EnvContext';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -10,7 +9,6 @@ import { convertToEpubWithWorker } from '@/services/send/conversion/conversionWo
 import { getClipOptions } from '@/services/send/clipOptions';
 import { eventDispatcher } from '@/utils/event';
 import { parseAnnotationDeepLink } from '@/utils/deeplink';
-import { parseShareDeepLink } from '@/utils/share';
 import { useTranslation } from './useTranslation';
 
 interface ClipOptions {
@@ -56,7 +54,6 @@ interface PendingShareSave {
 export function useClipUrlIngress() {
   const _ = useTranslation();
   const { envConfig, appService } = useEnv();
-  const { user } = useAuth();
   const inflight = useRef<Set<string>>(new Set());
 
   const clipAndImport = useCallback(
@@ -81,7 +78,7 @@ export function useClipUrlIngress() {
         const { settings } = useSettingsStore.getState();
         const ingested = await ingestFile(
           { file: book.file, books: library, forceUpload: true },
-          { appService, settings, isLoggedIn: !!user },
+          { appService, settings, isLoggedIn: false },
         );
         if (!ingested) {
           throw new Error('Import produced no book');
@@ -112,7 +109,7 @@ export function useClipUrlIngress() {
         inflight.current.delete(url);
       }
     },
-    [_, appService, envConfig, user],
+    [_, appService, envConfig],
   );
 
   // Deep-link path (existing).
@@ -150,11 +147,6 @@ export function useClipUrlIngress() {
       // Annotation deep links can come over https (web.readest.com).
       // Skip them — useOpenAnnotationLink owns that path.
       if (parseAnnotationDeepLink(url)) return;
-      // Share links (https://web.readest.com/s/{token}) also arrive over https.
-      // Skip them — useOpenShareLink owns that path. Without this guard the
-      // share landing URL is run through the article clipper instead of
-      // importing the shared book.
-      if (parseShareDeepLink(url)) return;
       void clipAndImport(url);
     };
 

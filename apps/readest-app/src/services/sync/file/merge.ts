@@ -1,5 +1,16 @@
 import { Book, BookConfig, BookNote } from '@/types/book';
-import { RemoteBookConfig } from './wire';
+
+/** Trimmed remote config envelope used by file-sync merge helpers. */
+export interface RemoteBookConfig {
+  schemaVersion: 1;
+  bookHash: string;
+  metaHash?: string;
+  config: Partial<BookConfig>;
+  booknotes: BookNote[];
+  writerDeviceId: string;
+  writerVersion: 'readest-webdav-1';
+  updatedAt: number;
+}
 
 /**
  * Declarative merge policies for the file-sync engine. Each function is

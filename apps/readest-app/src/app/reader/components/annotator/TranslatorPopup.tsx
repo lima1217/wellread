@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Popup from '@/components/Popup';
 import { Position } from '@/utils/sel';
-import { useAuth } from '@/context/AuthContext';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useTranslator } from '@/hooks/useTranslator';
@@ -48,7 +47,6 @@ const TranslatorPopup: React.FC<TranslatorPopupProps> = ({
   onDismiss,
 }) => {
   const _ = useTranslation();
-  const { token } = useAuth();
   const { settings, setSettings } = useSettingsStore();
   const [providers, setProviders] = useState<TranslatorType[]>([]);
   const [sourceLang, setSourceLang] = useState('AUTO');
@@ -77,7 +75,7 @@ const TranslatorPopup: React.FC<TranslatorPopupProps> = ({
 
   const handleProviderChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const requestedProvider = event.target.value;
-    const availableTranslators = getTranslators().filter((t) => isTranslatorAvailable(t, !!token));
+    const availableTranslators = getTranslators().filter((t) => isTranslatorAvailable(t, true));
     const selectedTranslator =
       availableTranslators.find((t) => t.name === requestedProvider) || availableTranslators[0]!;
     if (selectedTranslator) {
@@ -90,7 +88,7 @@ const TranslatorPopup: React.FC<TranslatorPopupProps> = ({
   useEffect(() => {
     const availableProviders = translators.map((t) => ({
       name: t.name,
-      label: getTranslatorDisplayLabel(t, !!token, _),
+      label: getTranslatorDisplayLabel(t, true, _),
       disabled: !!t.disabled,
     }));
     setProviders(availableProviders);
@@ -119,11 +117,7 @@ const TranslatorPopup: React.FC<TranslatorPopupProps> = ({
         }
       } catch (err) {
         console.error(err);
-        if (!token) {
-          setError(_('Unable to fetch the translation. Please log in first and try again.'));
-        } else {
-          setError(_('Unable to fetch the translation. Try again later.'));
-        }
+        setError(_('Unable to fetch the translation. Try again later.'));
       } finally {
         setLoading(false);
       }
@@ -131,7 +125,7 @@ const TranslatorPopup: React.FC<TranslatorPopupProps> = ({
 
     fetchTranslation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, token, sourceLang, targetLang, provider, translate]);
+  }, [text, sourceLang, targetLang, provider, translate]);
 
   return (
     <div>

@@ -98,13 +98,9 @@ const renderItem = () =>
       coverFit='crop'
       isSelectMode={false}
       itemSelected={false}
-      transferProgress={null}
       setLoading={vi.fn()}
       toggleSelection={vi.fn()}
       handleGroupBooks={vi.fn()}
-      handleBookDownload={vi.fn(async () => true)}
-      handleBookUpload={vi.fn(async () => true)}
-      handleBookDelete={vi.fn(async () => true)}
       handleSetSelectMode={vi.fn()}
       handleShowDetailsBook={vi.fn()}
       handleLibraryNavigation={vi.fn()}

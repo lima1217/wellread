@@ -37,7 +37,6 @@ import {
   isSystemDictionarySupported,
   type RememberedLookupApp,
 } from '@/services/dictionaries/systemDictionary';
-import { queueDictionaryBinaryUpload } from '@/services/sync/replicaBinaryUpload';
 import type { ImportedDictionary, WebSearchEntry } from '@/services/dictionaries/types';
 import {
   getBuiltinWebSearch,
@@ -542,14 +541,12 @@ const CustomDictionaries: React.FC<CustomDictionariesProps> = ({ onBack }) => {
         // `unavailable` flag on an in-memory entry with the same contentId
         // (e.g. when a prior import lost its bundle dir for any reason).
         if (dict.contentId) markAvailableByContentId(dict.contentId);
-        if (appService) void queueDictionaryBinaryUpload(dict, appService);
         added += 1;
       }
       let replaced = 0;
       for (const { oldIds, newDict } of importResult.replacements) {
         replaceDictionaries(oldIds, newDict);
         if (newDict.contentId) markAvailableByContentId(newDict.contentId);
-        if (appService) void queueDictionaryBinaryUpload(newDict, appService);
         // Invalidate any cached provider instances for the replaced ids so
         // their next lookup picks up the new bundle's files.
         for (const oldId of oldIds) evictProvider(oldId);

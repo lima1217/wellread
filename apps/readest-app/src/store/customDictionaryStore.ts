@@ -7,18 +7,6 @@ import type {
 } from '@/services/dictionaries/types';
 import { BUILTIN_PROVIDER_IDS, BUILTIN_WEB_SEARCH_IDS } from '@/services/dictionaries/types';
 import { useSettingsStore } from './settingsStore';
-import { publishReplicaDelete, publishReplicaUpsert } from '@/services/sync/replicaPublish';
-import { DICTIONARY_KIND } from '@/services/sync/adapters/dictionary';
-import { markExplicitProviderOrderPublish } from '@/services/sync/replicaSettingsSync';
-
-const publishDictUpsert = (dict: ImportedDictionary): void => {
-  if (!dict.contentId) return;
-  void publishReplicaUpsert(DICTIONARY_KIND, dict, dict.contentId, dict.reincarnation);
-};
-
-const publishDictDelete = (contentId: string): void => {
-  void publishReplicaDelete(DICTIONARY_KIND, contentId);
-};
 
 /**
  * Built-in web-search ids are seeded into `providerOrder` but disabled by
@@ -218,7 +206,6 @@ export const useCustomDictionaryStore = create<DictionaryStoreState>((set, get) 
         settings: { ...state.settings, providerOrder: order, providerEnabled: enabled },
       };
     });
-    publishDictUpsert(dict);
   },
 
   applyRemoteDictionary: (dict) => {
@@ -312,7 +299,6 @@ export const useCustomDictionaryStore = create<DictionaryStoreState>((set, get) 
       const dictionaries = state.dictionaries.map((d, i) => (i === idx ? updated! : d));
       return { dictionaries };
     });
-    if (updated) publishDictUpsert(updated);
   },
 
   replaceDictionaries: (oldIds, newDict) => {
@@ -321,13 +307,6 @@ export const useCustomDictionaryStore = create<DictionaryStoreState>((set, get) 
       return;
     }
     const oldIdSet = new Set(oldIds);
-    // Capture contentIds of replaced dicts so we can tombstone them on the
-    // server. Only contentId-bearing entries actually existed cross-device;
-    // legacy bundleDir-only ids never published, so nothing to tombstone.
-    const oldContentIds = get()
-      .dictionaries.filter((d) => oldIdSet.has(d.id))
-      .map((d) => d.contentId)
-      .filter((id): id is string => Boolean(id));
     set((state) => {
       // Drop all old entries (hard-remove since the disk bundles are gone)
       // and append the new one. Soft-delete isn't needed: the previously
@@ -368,19 +347,6 @@ export const useCustomDictionaryStore = create<DictionaryStoreState>((set, get) 
         settings: { ...state.settings, providerOrder, providerEnabled },
       };
     });
-    // When reincarnating (re-import after delete), the server-side row is
-    // already tombstoned — re-publishing the tombstone is redundant. The
-    // upsert below carries a reincarnation token so clients see the row
-    // as alive again. For non-reincarnation replacements (re-import of a
-    // still-live entry, importer collapsing duplicate names), we skip
-    // tombstoning if the contentId is preserved across the swap (same
-    // content → same row → no need to delete then immediately recreate).
-    const isContentSurvivingSwap =
-      Boolean(newDict.contentId) && oldContentIds.includes(newDict.contentId!);
-    if (!isContentSurvivingSwap) {
-      for (const contentId of oldContentIds) publishDictDelete(contentId);
-    }
-    publishDictUpsert(newDict);
   },
 
   removeDictionary: (id) => {
@@ -398,7 +364,6 @@ export const useCustomDictionaryStore = create<DictionaryStoreState>((set, get) 
         ),
       },
     }));
-    if (dict.contentId) publishDictDelete(dict.contentId);
     return true;
   },
 
@@ -618,7 +583,7 @@ export const useCustomDictionaryStore = create<DictionaryStoreState>((set, get) 
       // Auto-saves from replica pull / download-complete leave it
       // closed so automatic local order changes never publish.
       if (opts?.publishOrderChange) {
-        markExplicitProviderOrderPublish();
+        // Local-only build: no cross-device settings publish.
       }
       setSettings(next);
       saveSettings(envConfig, next);

@@ -50,35 +50,9 @@ export const SETTINGS_WHITELIST = [
   'dictionarySettings.providerEnabled',
   'dictionarySettings.webSearches',
   'dictionarySettings.fontScale',
-  // External integrations. Server URL + identifiers sync as plaintext;
-  // the credential fields are listed in `encryptedFields` below so the
-  // publish/pull middleware wraps them in cipher envelopes.
-  'kosync.serverUrl',
-  'kosync.username',
-  'kosync.userkey',
-  'kosync.password',
   'readwise.baseUrl',
   'readwise.accessToken',
   'hardcover.accessToken',
-  // WebDAV connection. serverUrl + rootPath sync as plaintext so a fresh
-  // device pre-fills the connect form; username / password are listed in
-  // `encryptedFields` below. Per-device bookkeeping (enabled, deviceId,
-  // lastSyncedAt, sync sub-toggles) is deliberately excluded — see KOSync,
-  // which likewise syncs credentials but not its `enabled` flag.
-  'webdav.serverUrl',
-  'webdav.username',
-  'webdav.password',
-  'webdav.rootPath',
-  // S3-compatible object store. endpoint / region / bucket sync as plaintext so
-  // a fresh device pre-fills the connect form; accessKeyId / secretAccessKey are
-  // listed in `encryptedFields` below. Per-device bookkeeping (enabled,
-  // deviceId, lastSyncedAt, providerSelectedAt, sync sub-toggles) is
-  // deliberately excluded — mirrors WebDAV.
-  's3.endpoint',
-  's3.region',
-  's3.bucket',
-  's3.accessKeyId',
-  's3.secretAccessKey',
 ] as const;
 
 /**
@@ -94,17 +68,7 @@ export const SETTINGS_WHITELIST = [
  * prompt itself — credential sync is opt-in via that explicit
  * unlock; the rest of the bundled settings keep syncing quietly.
  */
-export const SETTINGS_ENCRYPTED_FIELDS = [
-  'kosync.username',
-  'kosync.userkey',
-  'kosync.password',
-  'readwise.accessToken',
-  'hardcover.accessToken',
-  'webdav.username',
-  'webdav.password',
-  's3.accessKeyId',
-  's3.secretAccessKey',
-] as const;
+export const SETTINGS_ENCRYPTED_FIELDS = ['readwise.accessToken', 'hardcover.accessToken'] as const;
 
 export type SettingsWhitelistKey = (typeof SETTINGS_WHITELIST)[number];
 

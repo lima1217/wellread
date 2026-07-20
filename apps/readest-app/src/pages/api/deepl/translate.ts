@@ -2,16 +2,11 @@ import crypto from 'crypto';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { corsAllMethods, runMiddleware } from '@/utils/cors';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
-import {
-  getDailyTranslationPlanData,
-  getSubscriptionPlan,
-  validateUserAndToken,
-} from '@/utils/access';
+import { DEFAULT_DAILY_TRANSLATION_QUOTA } from '@/services/constants';
 import { ErrorCodes } from '@/services/translators';
-import { UsageStatsManager } from '@/utils/usage';
+import { getDailyUsage } from '@/services/translators/utils';
 
 const DEFAULT_DEEPL_FREE_API = 'https://api-free.deepl.com/v2/translate';
-const DEFAULT_DEEPL_PRO_API = 'https://api.deepl.com/v2/translate';
 
 interface KVNamespace {
   get(key: string): Promise<string | null>;
@@ -39,41 +34,13 @@ const generateCacheKey = (text: string, sourceLang: string, targetLang: string):
   return `tr:${hash}`;
 };
 
-const checkDailyUsage = async (userId: string, token: string, chars: number) => {
-  const { quota: dailyQuota } = getDailyTranslationPlanData(token);
-  const dailyUsage = await UsageStatsManager.getCurrentUsage(userId, 'translation_chars', 'daily');
-
+const checkDailyUsage = (chars: number) => {
+  const dailyQuota = DEFAULT_DAILY_TRANSLATION_QUOTA.free;
+  const dailyUsage = getDailyUsage() || 0;
   if (dailyQuota <= dailyUsage + chars) {
     throw new Error(ErrorCodes.DAILY_QUOTA_EXCEEDED);
   }
   return dailyUsage;
-};
-
-const updateDailyUsage = async (
-  userId: string | undefined,
-  token: string | undefined,
-  incrementUsage: number,
-) => {
-  if (!userId || !token) return 0;
-
-  try {
-    const userPlan = getSubscriptionPlan(token);
-    const newUsage = await UsageStatsManager.trackUsage(
-      userId,
-      'translation_chars',
-      incrementUsage,
-      {
-        plan_type: userPlan,
-        source: 'deepl_api',
-      },
-    );
-
-    return newUsage;
-  } catch (cacheError) {
-    console.error('Update daily usage error:', cacheError);
-  }
-
-  return 0;
 };
 
 const handler = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -91,21 +58,10 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   }
   const hasKVCache = !!env['TRANSLATIONS_KV'];
 
-  const { user, token } = await validateUserAndToken(req.headers['authorization']);
-  const { DEEPL_PRO_API, DEEPL_FREE_API } = process.env;
+  const { DEEPL_FREE_API } = process.env;
   const deepFreeApiUrl = DEEPL_FREE_API || DEFAULT_DEEPL_FREE_API;
-  const deeplProApiUrl = DEEPL_PRO_API || DEFAULT_DEEPL_PRO_API;
-
-  let deeplApiUrl = deepFreeApiUrl;
-  let userPlan = 'free';
-  if (user && token) {
-    userPlan = getSubscriptionPlan(token);
-    if (userPlan === 'pro') deeplApiUrl = deeplProApiUrl;
-  }
-  const deeplAuthKey =
-    deeplApiUrl === deeplProApiUrl
-      ? getDeepLAPIKey(process.env['DEEPL_PRO_API_KEYS'])
-      : getDeepLAPIKey(process.env['DEEPL_FREE_API_KEYS']);
+  const deeplApiUrl = deepFreeApiUrl;
+  const deeplAuthKey = getDeepLAPIKey(process.env['DEEPL_FREE_API_KEYS']);
 
   const {
     text,
@@ -137,8 +93,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
           }
         }
 
-        if (!user || !token) return res.status(401).json({ error: ErrorCodes.UNAUTHORIZED });
-        await checkDailyUsage(user?.id, token, singleText.length);
+        checkDailyUsage(singleText.length);
 
         return await callDeepLAPI(
           singleText,
@@ -151,18 +106,6 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
         );
       }),
     );
-    const originalCharsCount = text.reduce((a, b) => a + b.length, 0);
-    const translatedCharsCount = translations.reduce((a, b) => a + (b?.text.length || 0), 0);
-    const newDailyUsage = await updateDailyUsage(
-      user?.id,
-      token,
-      originalCharsCount + translatedCharsCount,
-    );
-    translations.forEach((translation) => {
-      if (translation && translation.text) {
-        translation.daily_usage = newDailyUsage;
-      }
-    });
     return res.status(200).json({ translations });
   } catch (error) {
     if (error instanceof Error && error.message.includes(ErrorCodes.DAILY_QUOTA_EXCEEDED)) {
@@ -185,8 +128,6 @@ async function callDeepLAPI(
 ) {
   const isV2Api = apiUrl.endsWith('/v2/translate');
 
-  // TODO: this should be processed in the client, but for now, we need to do it here
-  // please remove this when most clients are updated
   const input = text.replaceAll('\n', '').trim();
 
   const requestBody: {

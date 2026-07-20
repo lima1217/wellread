@@ -121,35 +121,6 @@ impl<R: Runtime> NativeBridge<R> {
         Err(crate::Error::UnsupportedPlatformError)
     }
 
-    pub fn iap_is_available(&self) -> crate::Result<IAPIsAvailableResponse> {
-        Err(crate::Error::UnsupportedPlatformError)
-    }
-
-    pub fn iap_initialize(
-        &self,
-        _payload: IAPInitializeRequest,
-    ) -> crate::Result<IAPInitializeResponse> {
-        Err(crate::Error::UnsupportedPlatformError)
-    }
-
-    pub fn iap_fetch_products(
-        &self,
-        _payload: IAPFetchProductsRequest,
-    ) -> crate::Result<IAPFetchProductsResponse> {
-        Err(crate::Error::UnsupportedPlatformError)
-    }
-
-    pub fn iap_purchase_product(
-        &self,
-        _payload: IAPPurchaseProductRequest,
-    ) -> crate::Result<IAPPurchaseProductResponse> {
-        Err(crate::Error::UnsupportedPlatformError)
-    }
-
-    pub fn iap_restore_purchases(&self) -> crate::Result<IAPRestorePurchasesResponse> {
-        Err(crate::Error::UnsupportedPlatformError)
-    }
-
     pub fn get_system_color_scheme(&self) -> crate::Result<GetSystemColorSchemeResponse> {
         Err(crate::Error::UnsupportedPlatformError)
     }
