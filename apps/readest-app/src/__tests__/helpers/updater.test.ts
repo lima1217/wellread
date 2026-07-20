@@ -68,11 +68,7 @@ import {
   resolveNightlyUpdate,
   getNightlyPlatformKey,
 } from '@/helpers/updater';
-import {
-  buildNightlyManifest,
-  buildStableManifest,
-  baseVersion,
-} from '../../../scripts/nightly-verify-harness/serve.mjs';
+import { buildNightlyManifest, buildStableManifest, baseVersion } from './nightlyManifestFixtures';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -512,10 +508,8 @@ describe('resolveNightlyUpdate', () => {
   });
 });
 
-// Runs the REAL resolver against the local verify harness's own manifest
-// builders (scripts/nightly-verify-harness/serve.mjs), so the harness and the
-// production decision logic can't drift, and the "what would the app offer"
-// decision for each scenario is asserted without the GUI.
+// Runs the REAL resolver against the local nightly manifest fixtures so the
+// production decision logic can't drift from the expected harness shapes.
 describe('resolveNightlyUpdate — harness scenarios', () => {
   const platformKey = 'darwin-aarch64';
   const base = baseVersion();

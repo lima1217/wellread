@@ -19,7 +19,6 @@ dependencies = [
  "futures",
  "futures-util",
  "image",
- "libc",
  "log",
  "md-5",
  "minisign-verify",
@@ -8048,7 +8047,6 @@ name = "tauri-plugin-native-bridge"
 version = "0.1.0"
 dependencies = [
  "apple-native-keyring-store",
- "base64 0.22.1",
  "block",
  "cocoa",
  "dbus-secret-service-keyring-store",

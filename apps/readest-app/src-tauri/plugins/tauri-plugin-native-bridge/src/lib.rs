@@ -6,11 +6,7 @@ use tauri::{
 
 pub use models::*;
 
-#[cfg(desktop)]
 mod desktop;
-#[cfg(mobile)]
-mod mobile;
-
 mod commands;
 mod error;
 mod models;
@@ -21,10 +17,7 @@ pub use error::{Error, Result};
 use std::path::PathBuf;
 use tauri::AppHandle;
 
-#[cfg(desktop)]
 use desktop::NativeBridge;
-#[cfg(mobile)]
-use mobile::NativeBridge;
 
 /// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the native-bridge APIs.
 pub trait NativeBridgeExt<R: Runtime> {
@@ -94,9 +87,6 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::set_text_selection_suppressed,
         ])
         .setup(|app, api| {
-            #[cfg(mobile)]
-            let native_bridge = mobile::init(app, api)?;
-            #[cfg(desktop)]
             let native_bridge = desktop::init(app, api)?;
             app.manage(native_bridge);
             app.manage(DirectoryCallbackState::<R>::default());
