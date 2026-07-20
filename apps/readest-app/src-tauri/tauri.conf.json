@@ -7,8 +7,8 @@
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "beforeDevCommand": "pnpm --dir ../eve-sidecar build && pnpm dev",
+    "beforeBuildCommand": "pnpm --dir ../eve-sidecar build && pnpm build"
   },
   "app": {
     "windows": [],

@@ -353,8 +353,8 @@ importers:
         specifier: ^3.4.0
         version: 3.6.0
       tauri-plugin-device-info-api:
-        specifier: ^1.0.1
-        version: 1.0.1
+        specifier: file:../../patches/vendor/tauri-plugin-device-info-api
+        version: file:patches/vendor/tauri-plugin-device-info-api
       tinycolor2:
         specifier: ^1.6.0
         version: 1.6.0
@@ -498,8 +498,8 @@ importers:
         specifier: ^3.0.1
         version: 3.0.1
       node-env-run:
-        specifier: ^4.0.2
-        version: 4.0.2
+        specifier: file:../../patches/vendor/node-env-run
+        version: file:patches/vendor/node-env-run
       playwright:
         specifier: ^1.58.2
         version: 1.60.0
@@ -6116,8 +6116,8 @@ packages:
     engines: {node: '>=10.5.0'}
     deprecated: Use your platform's native DOMException instead
 
-  node-env-run@4.0.2:
-    resolution: {integrity: sha512-qAGmXrM32xUGdaCBmkQG8RIgm+8Oj22rURkAoX9HuKDQiM0Vm66QebkWEnU5nozYgPbO/PFPrPmerI6ZEPp8UQ==}
+  node-env-run@file:patches/vendor/node-env-run:
+    resolution: {directory: patches/vendor/node-env-run, type: directory}
     hasBin: true
 
   node-fetch@2.7.0:
@@ -7261,8 +7261,8 @@ packages:
   tar-stream@3.2.0:
     resolution: {integrity: sha512-ojzvCvVaNp6aOTFmG7jaRD0meowIAuPc3cMMhSgKiVWws1GyHbGd/xvnyuRKcKlMpt3qvxx6r0hreCNITP9hIg==}
 
-  tauri-plugin-device-info-api@1.0.1:
-    resolution: {integrity: sha512-d2QoatWeQ6X09fdEDdWSKzBVSZv9x8LpksJP/gfv4WeRmZwJRsLLMf1++qOw7PdOmQlNoKHFcKXPZlr2n4irdg==}
+  tauri-plugin-device-info-api@file:patches/vendor/tauri-plugin-device-info-api:
+    resolution: {directory: patches/vendor/tauri-plugin-device-info-api, type: directory}
 
   teex@1.0.1:
     resolution: {integrity: sha512-eYE6iEI62Ni1H8oIa7KlDU6uQBtqr4Eajni3wX7rpfXD8ysFx8z0+dri+KWEPWpBsxXfxu58x/0jvTVT1ekOSg==}
@@ -14502,7 +14502,7 @@ snapshots:
 
   node-domexception@1.0.0: {}
 
-  node-env-run@4.0.2:
+  node-env-run@file:patches/vendor/node-env-run:
     dependencies:
       '@types/common-tags': 1.8.4
       '@types/debug': 4.1.13
@@ -15806,9 +15806,9 @@ snapshots:
       - bare-buffer
       - react-native-b4a
 
-  tauri-plugin-device-info-api@1.0.1:
+  tauri-plugin-device-info-api@file:patches/vendor/tauri-plugin-device-info-api:
     dependencies:
-      '@tauri-apps/api': 2.10.1
+      '@tauri-apps/api': 2.11.1
 
   teex@1.0.1:
     dependencies:

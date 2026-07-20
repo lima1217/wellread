@@ -112,13 +112,31 @@ fn read_model_config_from_settings(app: &AppHandle) -> ModelConfigPayload {
 fn resolve_node_bin(app: &AppHandle) -> PathBuf {
     let triple = env!("READEST_TARGET");
     let sidecar_name = format!("node-{triple}");
+
+    // Production: Tauri copies externalBin next to the main executable as `node`
+    // (triple suffix stripped). Prefer that before falling back to PATH.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let bundled = dir.join("node");
+            if bundled.exists() {
+                return bundled;
+            }
+            let triple_named = dir.join(&sidecar_name);
+            if triple_named.exists() {
+                return triple_named;
+            }
+        }
+    }
+
     if let Ok(resource) = app.path().resource_dir() {
         let candidate = resource.join("binaries").join(&sidecar_name);
         if candidate.exists() {
             return candidate;
         }
     }
-    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries").join(&sidecar_name);
+    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("binaries")
+        .join(&sidecar_name);
     if dev.exists() {
         return dev;
     }
@@ -137,6 +155,29 @@ fn resolve_eve_output(app: &AppHandle) -> PathBuf {
         }
     }
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../eve-sidecar/.output/server/index.mjs")
+}
+
+/// Prefer packaged `.output/node_modules`, then repo eve-sidecar node_modules (dev).
+fn resolve_node_modules(app: &AppHandle, entry: &PathBuf) -> Option<PathBuf> {
+    if let Some(server_dir) = entry.parent() {
+        if let Some(output_dir) = server_dir.parent() {
+            let packaged = output_dir.join("node_modules");
+            if packaged.exists() {
+                return Some(packaged);
+            }
+        }
+    }
+    if let Ok(resource) = app.path().resource_dir() {
+        let packaged = resource.join("eve").join(".output").join("node_modules");
+        if packaged.exists() {
+            return Some(packaged);
+        }
+    }
+    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../eve-sidecar/node_modules");
+    if dev.exists() {
+        return Some(dev);
+    }
+    None
 }
 
 fn resolve_eve_data_dir(app: &AppHandle) -> PathBuf {
@@ -243,12 +284,8 @@ pub fn start_or_restart(
         cmd.current_dir(parent);
     }
 
-    let sidecar_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../eve-sidecar");
-    if sidecar_root.join("node_modules").exists() {
-        cmd.env(
-            "NODE_PATH",
-            sidecar_root.join("node_modules").display().to_string(),
-        );
+    if let Some(node_path) = resolve_node_modules(app, &entry) {
+        cmd.env("NODE_PATH", node_path);
     }
 
     let mut child = cmd.spawn().map_err(|e| format!("spawn eve sidecar: {e}"))?;

@@ -9,9 +9,9 @@
 import http from 'node:http';
 import { mkdirSync } from 'node:fs';
 import { createOpenAI } from '@ai-sdk/openai';
-import { createLanguageModel, normalizeModelEnv } from './createModel.mjs';
-import { createSessionStore } from '../../src/agent/sessionStore.mjs';
-import { runTurn } from '../../src/agent/runTurn.mjs';
+import { createLanguageModel, normalizeModelEnv } from '../createModel.mjs';
+import { createSessionStore } from '../agent/sessionStore.mjs';
+import { runTurn } from '../agent/runTurn.mjs';
 
 const HOST = '127.0.0.1';
 const token = (process.env.EVE_LOOPBACK_TOKEN || '').trim();

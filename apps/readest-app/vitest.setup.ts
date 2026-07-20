@@ -39,6 +39,52 @@ if (typeof globalWithCSS.CSS.escape !== 'function') {
   };
 }
 
+// Node 22+/25 experimental `--localstorage-file` can replace jsdom's Storage
+// with an empty object (getItem undefined). Restore a working in-memory Storage.
+if (
+  typeof window !== 'undefined' &&
+  (typeof window.localStorage?.getItem !== 'function' ||
+    typeof window.sessionStorage?.getItem !== 'function')
+) {
+  const createMemoryStorage = (): Storage => {
+    const map = new Map<string, string>();
+    return {
+      get length() {
+        return map.size;
+      },
+      clear() {
+        map.clear();
+      },
+      getItem(key: string) {
+        return map.has(String(key)) ? map.get(String(key))! : null;
+      },
+      key(index: number) {
+        return Array.from(map.keys())[index] ?? null;
+      },
+      removeItem(key: string) {
+        map.delete(String(key));
+      },
+      setItem(key: string, value: string) {
+        map.set(String(key), String(value));
+      },
+    } as Storage;
+  };
+  if (typeof window.localStorage?.getItem !== 'function') {
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      enumerable: true,
+      value: createMemoryStorage(),
+    });
+  }
+  if (typeof window.sessionStorage?.getItem !== 'function') {
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      enumerable: true,
+      value: createMemoryStorage(),
+    });
+  }
+}
+
 // matchMedia mock
 if (typeof window !== 'undefined' && !window.matchMedia) {
   window.matchMedia = (query: string) =>

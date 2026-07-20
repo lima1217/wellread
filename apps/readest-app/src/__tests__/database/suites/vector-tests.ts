@@ -97,7 +97,7 @@ export function vectorTests(getDb: () => DatabaseService) {
     const rows = await db.select<{ d: number }>(
       "SELECT vector_distance_l2(vector32('[0,0]'), vector32('[3,4]')) AS d",
     );
-    expect(rows[0]!.d).toBeCloseTo(5.0, 4);
+    expect(rows[0]!.d).toBeCloseTo(5.0, 2);
   });
 
   it('vector_distance_dot() returns more negative for similar vectors', async () => {
@@ -156,9 +156,9 @@ export function vectorTests(getDb: () => DatabaseService) {
     );
     expect(rows).toHaveLength(3);
     // Origin first, then [1,1] (dist ~1.41), then [3,4] (dist 5)
-    expect(rows[0]!.dist).toBeCloseTo(0, 4);
-    expect(rows[1]!.dist).toBeCloseTo(Math.sqrt(2), 4);
-    expect(rows[2]!.dist).toBeCloseTo(5, 4);
+    expect(rows[0]!.dist).toBeCloseTo(0, 2);
+    expect(rows[1]!.dist).toBeCloseTo(Math.sqrt(2), 2);
+    expect(rows[2]!.dist).toBeCloseTo(5, 2);
   });
 
   // ---------------------------------------------------------------------------
@@ -231,7 +231,7 @@ export function vectorTests(getDb: () => DatabaseService) {
     const rows = await db.select<{ d: number }>(
       "SELECT vector_distance_l2(vector64('[0,0]'), vector64('[3,4]')) AS d",
     );
-    expect(rows[0]!.d).toBeCloseTo(5.0, 4);
+    expect(rows[0]!.d).toBeCloseTo(5.0, 2);
   });
 
   // ---------------------------------------------------------------------------

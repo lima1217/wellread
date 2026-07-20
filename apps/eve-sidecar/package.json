@@ -5,9 +5,11 @@
   "type": "module",
   "description": "Loopback eve-compatible sidecar for wellread (Reading Assistant).",
   "scripts": {
-    "start": "node .output/server/index.mjs",
+    "start": "NODE_PATH=.output/node_modules node .output/server/index.mjs",
     "build": "node scripts/build.mjs",
-    "test": "node --test src/**/*.test.mjs src/**/**/*.test.mjs"
+    "vendor-node": "node scripts/vendor-node.mjs",
+    "dod:static": "node scripts/dod-static-check.mjs",
+    "test": "node --test src/**/*.test.mjs src/**/**/*.test.mjs scripts/build.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.0",

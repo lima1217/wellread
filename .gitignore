@@ -56,3 +56,4 @@ result*
 
 apps/readest-app/src-tauri/binaries/node-*
 apps/eve-sidecar/node_modules/
+apps/eve-sidecar/.output/

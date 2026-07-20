@@ -17,9 +17,13 @@ vi.mock('@/utils/misc', async (importOriginal) => {
   };
 });
 
-vi.mock('@/services/environment', () => ({
-  isPWA: vi.fn().mockReturnValue(false),
-}));
+vi.mock('@/services/environment', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/services/environment')>();
+  return {
+    ...original,
+    isPWA: vi.fn().mockReturnValue(false),
+  };
+});
 
 // Mock settingsService, bookService, etc. to avoid deep deps
 vi.mock('@/services/settingsService', () => ({
