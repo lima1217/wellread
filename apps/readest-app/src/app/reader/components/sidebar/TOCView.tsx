@@ -7,7 +7,6 @@ import { TOCItem } from '@/libs/document';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { eventDispatcher } from '@/utils/event';
-import { useTextTranslation } from '../../hooks/useTextTranslation';
 import {
   buildTOCDisplayItems,
   CurrentPositionRow,
@@ -150,8 +149,6 @@ const TOCView: React.FC<{
   const handleScrollerRef = useCallback((el: HTMLElement | Window | null) => {
     setScroller(el instanceof HTMLElement ? el : null);
   }, []);
-
-  useTextTranslation(bookKey, containerRef.current, false, 'translation-target-toc');
 
   useEffect(() => {
     const updateHeight = () => {

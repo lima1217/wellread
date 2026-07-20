@@ -18,7 +18,6 @@ import {
   DEFAULT_BOOK_STYLE,
   DEFAULT_VIEW_CONFIG,
   DEFAULT_TTS_CONFIG,
-  DEFAULT_TRANSLATOR_CONFIG,
   DEFAULT_ANNOTATOR_CONFIG,
   DEFAULT_SCREEN_CONFIG,
 } from '@/services/constants';
@@ -32,7 +31,6 @@ function makeViewSettings(overrides: Partial<ViewSettings> = {}): ViewSettings {
     ...DEFAULT_BOOK_STYLE,
     ...DEFAULT_VIEW_CONFIG,
     ...DEFAULT_TTS_CONFIG,
-    ...DEFAULT_TRANSLATOR_CONFIG,
     ...DEFAULT_ANNOTATOR_CONFIG,
     ...DEFAULT_SCREEN_CONFIG,
     ...overrides,
@@ -397,10 +395,9 @@ describe('getLayoutStyles branches (via getStyles)', () => {
     expect(css).toContain('--margin-right:');
     expect(css).toContain('--margin-bottom:');
     expect(css).toContain('--margin-left:');
-    // font/color/translation sections must still be present
+    // font/color sections must still be present
     expect(css).toContain('--serif:');
     expect(css).toContain('--theme-bg-color');
-    expect(css).toContain('.translation-source');
   });
 
   it('includes paragraph layout rules when useBookLayout is false', () => {
@@ -716,35 +713,6 @@ describe('getColorStyles branches (via getStyles)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// getTranslationStyles branches
-// ---------------------------------------------------------------------------
-describe('getTranslationStyles branches (via getStyles)', () => {
-  const theme = makeThemeCode();
-
-  it('adds margin to translation-target-block when showTranslateSource is true', () => {
-    const vs = makeViewSettings({ showTranslateSource: true });
-    const css = getStyles(vs, theme);
-    expect(css).toContain('margin: 0.5em 0 !important');
-  });
-
-  it('does not add margin to translation-target-block when showTranslateSource is false', () => {
-    const vs = makeViewSettings({ showTranslateSource: false });
-    const css = getStyles(vs, theme);
-    expect(css).not.toContain('margin: 0.5em 0 !important');
-  });
-
-  it('always includes translation-source and translation-target classes', () => {
-    const vs = makeViewSettings({ showTranslateSource: false });
-    const css = getStyles(vs, theme);
-    expect(css).toContain('.translation-source');
-    expect(css).toContain('.translation-target');
-    expect(css).toContain('.translation-target.hidden');
-    expect(css).toContain('.translation-target-block');
-    expect(css).toContain('.translation-target-toc');
-  });
-});
-
-// ---------------------------------------------------------------------------
 // getRubyStyles branches (Word Lens gloss <rt> size + color)
 // ---------------------------------------------------------------------------
 describe('getRubyStyles branches (via getStyles)', () => {
@@ -794,8 +762,6 @@ describe('getStyles integration', () => {
     expect(css).toContain('--serif:');
     // color styles
     expect(css).toContain('--theme-bg-color');
-    // translation styles
-    expect(css).toContain('.translation-source');
   });
 
   it('uses default themeCode (via getThemeCode) when none is provided', () => {

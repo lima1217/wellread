@@ -1,9 +1,8 @@
 import { jwtDecode } from 'jwt-decode';
 import { supabase } from '@/utils/supabase';
 import { UserPlan } from '@/types/quota';
-import { DEFAULT_DAILY_TRANSLATION_QUOTA, DEFAULT_STORAGE_QUOTA } from '@/services/constants';
+import { DEFAULT_STORAGE_QUOTA } from '@/services/constants';
 import { isWebAppPlatform } from '@/services/environment';
-import { getDailyUsage } from '@/services/translators/utils';
 import { getRuntimeConfig } from '@/services/runtimeConfig';
 
 interface Token {
@@ -114,39 +113,6 @@ export const getStoragePlanData = (token: string) => {
   return {
     plan,
     usage,
-    quota,
-  };
-};
-
-export const getTranslationQuota = (plan: UserPlan): number => {
-  const runtimeConfig = getRuntimeConfig();
-  const fixedQuota =
-    runtimeConfig?.translationFixedQuota ?? parseInt(process.env['TRANSLATION_FIXED_QUOTA'] ?? '0');
-  return (
-    fixedQuota || DEFAULT_DAILY_TRANSLATION_QUOTA[plan] || DEFAULT_DAILY_TRANSLATION_QUOTA['free']
-  );
-};
-
-export const getTranslationPlanData = (token: string) => {
-  const data = jwtDecode<Token>(token) || {};
-  const plan: UserPlan = data['plan'] || 'free';
-  const usage = getDailyUsage() || 0;
-  const quota = getTranslationQuota(plan);
-
-  return {
-    plan,
-    usage,
-    quota,
-  };
-};
-
-export const getDailyTranslationPlanData = (token: string) => {
-  const data = jwtDecode<Token>(token) || {};
-  const plan = data['plan'] || 'free';
-  const quota = getTranslationQuota(plan);
-
-  return {
-    plan,
     quota,
   };
 };

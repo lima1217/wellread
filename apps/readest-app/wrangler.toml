@@ -33,10 +33,6 @@ traces = { head_sampling_rate = 0.01 }
 directory = ".open-next/assets"
 binding = "ASSETS"
 
-[[kv_namespaces]]
-binding = "TRANSLATIONS_KV"
-id = "fa6e3eb1988a424bbf3c952e01650ced"
-
 [[r2_buckets]]
 binding = "NEXT_INC_CACHE_R2_BUCKET"
 bucket_name = "readest-next-inc-cache"

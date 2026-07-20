@@ -38,10 +38,6 @@ vi.mock('@/utils/event', () => ({
 
 vi.mock('@/utils/misc', () => ({ getContentMd5: (s: string) => s }));
 
-vi.mock('@/app/reader/hooks/useTextTranslation', () => ({
-  useTextTranslation: () => {},
-}));
-
 // Virtuoso is replaced with a stub that exposes a spy-able `scrollToIndex`
 // through the imperative handle and hands TOCView a scroller element.
 vi.mock('react-virtuoso', async () => {

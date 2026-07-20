@@ -77,7 +77,6 @@ import SelectionRangeEditor from './SelectionRangeEditor';
 import AnnotationPopup from './AnnotationPopup';
 import DictionaryPopup from './DictionaryPopup';
 import DictionarySheet from './DictionarySheet';
-import TranslatorPopup from './TranslatorPopup';
 import useShortcuts from '@/hooks/useShortcuts';
 import ProofreadPopup from './ProofreadPopup';
 import { setProofreadRulesVisibility } from '@/app/reader/components/ProofreadRules';
@@ -146,12 +145,10 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
   const [selection, setSelection] = useState<TextSelection | null>(null);
   const [showAnnotPopup, setShowAnnotPopup] = useState(false);
   const [showDictionaryPopup, setShowDictionaryPopup] = useState(false);
-  const [showDeepLPopup, setShowDeepLPopup] = useState(false);
   const [showProofreadPopup, setShowProofreadPopup] = useState(false);
   const [trianglePosition, setTrianglePosition] = useState<Position>();
   const [annotPopupPosition, setAnnotPopupPosition] = useState<Position>();
   const [dictPopupPosition, setDictPopupPosition] = useState<Position>();
-  const [translatorPopupPosition, setTranslatorPopupPosition] = useState<Position>();
   const [proofreadPopupPosition, setProofreadPopupPosition] = useState<Position>();
   const [highlightOptionsVisible, setHighlightOptionsVisible] = useState(false);
   const [showAnnotationNotes, setShowAnnotationNotes] = useState(false);
@@ -189,8 +186,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
   // annotation toolbar. Cleared as soon as it's consumed.
   const pendingWordLensDictRef = useRef(false);
 
-  const showingPopup =
-    showAnnotPopup || showDictionaryPopup || showDeepLPopup || showProofreadPopup;
+  const showingPopup = showAnnotPopup || showDictionaryPopup || showProofreadPopup;
 
   const popupPadding = useResponsiveSize(10);
   const trianglePadding = popupPadding * 2 + 6;
@@ -201,8 +197,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
   // shows all enabled providers stacked (no tabs) so it needs more vertical
   // room than the legacy single-tab layout.
   const dictPopupHeight = Math.min(360, maxHeight);
-  const transPopupWidth = Math.min(480, maxWidth);
-  const transPopupHeight = Math.min(265, maxHeight);
   const proofreadPopupWidth = Math.min(440, maxWidth);
   const proofreadPopupHeight = Math.min(200, maxHeight);
   const canShare = canShareText(appService);
@@ -247,13 +241,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
       dictPopupHeight,
       popupPadding,
     );
-    const transPopupPos = getPopupPosition(
-      triangPos,
-      rect,
-      transPopupWidth,
-      transPopupHeight,
-      popupPadding,
-    );
     const proofreadPopupPos = getPopupPosition(
       triangPos,
       rect,
@@ -264,7 +251,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     if (triangPos.point.x == 0 || triangPos.point.y == 0) return;
     setAnnotPopupPosition(annotPopupPos);
     setDictPopupPosition(dictPopupPos);
-    setTranslatorPopupPosition(transPopupPos);
     setProofreadPopupPosition(proofreadPopupPos);
     setTrianglePosition(triangPos);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -305,7 +291,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
       setSelection(null);
       setShowAnnotPopup(false);
       setShowDictionaryPopup(false);
-      setShowDeepLPopup(false);
       setShowProofreadPopup(false);
       setEditingAnnotation(null);
     }, 500),
@@ -364,7 +349,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     };
 
     // Attach generic selection listeners for all formats, including PDF.
-    // For PDF we only guarantee Copy & Translate; highlight/annotate may be limited by CFI support.
+    // For PDF we only guarantee Copy; highlight/annotate may be limited by CFI support.
     //
     // The renderer `scroll` listener and the Android `native-touch` bridge are
     // NOT attached here: onLoad fires for every (pre)loaded section, but those
@@ -404,7 +389,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     detail.doc?.addEventListener('pointerup', handlePointerUp.bind(null, doc, index));
     detail.doc?.addEventListener('selectionchange', handleSelectionchange.bind(null, doc, index));
 
-    // For PDF selections, enable right-click context menu to directly open translator popup.
+    // For PDF selections, enable right-click context menu for annotation actions.
     if (bookData.isFixedLayout) {
       detail.doc?.addEventListener('contextmenu', (e: Event) => {
         try {
@@ -421,14 +406,13 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
                 cfi: view?.getCFI(index, range),
                 page: index + 1,
               });
-              // Show translation popup preferentially for PDF right-click
-              setShowAnnotPopup(false);
-              setShowDeepLPopup(true);
+              // Show annotation popup for PDF right-click
+              setShowAnnotPopup(true);
               setShowDictionaryPopup(false);
             }
           }
         } catch (err) {
-          console.warn('PDF context menu translation failed:', err);
+          console.warn('PDF context menu selection failed:', err);
         }
         // Prevent native menu to keep experience consistent
         e.preventDefault();
@@ -891,9 +875,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
         case 'dictionary':
           handleDictionary();
           break;
-        case 'translate':
-          handleTranslation();
-          break;
         case 'ask':
           handleAskAssistant();
           break;
@@ -945,13 +926,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
         dictPopupHeight,
         popupPadding,
       );
-      const transPopupPos = getPopupPosition(
-        triangPos,
-        rect,
-        transPopupWidth,
-        transPopupHeight,
-        popupPadding,
-      );
       const proofreadPopupPos = getPopupPosition(
         triangPos,
         rect,
@@ -962,7 +936,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
       if (triangPos.point.x == 0 || triangPos.point.y == 0) return;
       setAnnotPopupPosition(annotPopupPos);
       setDictPopupPosition(dictPopupPos);
-      setTranslatorPopupPosition(transPopupPos);
       setProofreadPopupPosition(proofreadPopupPos);
       setTrianglePosition(triangPos);
 
@@ -1047,7 +1020,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
       containerRef.current?.focus();
     }
     setShowAnnotPopup(true);
-    setShowDeepLPopup(false);
     setShowDictionaryPopup(false);
   };
 
@@ -1303,12 +1275,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     setShowDictionaryPopup(true);
   };
 
-  const handleTranslation = () => {
-    if (!selection || !selection.text) return;
-    setShowAnnotPopup(false);
-    setShowDeepLPopup(true);
-  };
-
   const handleAskAssistant = () => {
     if (!selection || !selection.text) return;
     const bookId = bookData.book?.hash;
@@ -1381,9 +1347,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
       },
       onCopySelection: () => {
         handleCopy(false);
-      },
-      onTranslateSelection: () => {
-        handleTranslation();
       },
       onDictionarySelection: () => {
         handleDictionary();
@@ -1692,8 +1655,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
         return { tooltipText: _(label), Icon, onClick: handleSearch };
       case 'dictionary':
         return { tooltipText: _(label), Icon, onClick: handleDictionary };
-      case 'translate':
-        return { tooltipText: _(label), Icon, onClick: handleTranslation };
       case 'ask':
         return { tooltipText: _(label), Icon, onClick: handleAskAssistant };
       case 'tts':
@@ -1757,16 +1718,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
             />
           );
         })()}
-      {showDeepLPopup && trianglePosition && translatorPopupPosition && (
-        <TranslatorPopup
-          text={selection?.text as string}
-          position={translatorPopupPosition}
-          trianglePosition={trianglePosition}
-          popupWidth={transPopupWidth}
-          popupHeight={transPopupHeight}
-          onDismiss={handleDismissPopupAndSelection}
-        />
-      )}
       {showAnnotPopup &&
         trianglePosition &&
         annotPopupPosition &&

@@ -5,13 +5,7 @@ vi.mock('@/utils/supabase', () => ({
   createSupabaseAdminClient: () => ({ rpc: mockRpc }),
 }));
 
-import { USAGE_TYPES, QUOTA_TYPES, UsageStatsManager } from '@/utils/usage';
-
-describe('USAGE_TYPES', () => {
-  test('has TRANSLATION_CHARS constant', () => {
-    expect(USAGE_TYPES.TRANSLATION_CHARS).toBe('translation_chars');
-  });
-});
+import { QUOTA_TYPES, UsageStatsManager } from '@/utils/usage';
 
 describe('QUOTA_TYPES', () => {
   test('has DAILY constant', () => {
@@ -43,14 +37,14 @@ describe('UsageStatsManager', () => {
     test('returns data from rpc on success', async () => {
       mockRpc.mockResolvedValue({ data: 42, error: null });
 
-      const result = await UsageStatsManager.trackUsage('user-1', 'translation_chars', 10, {
+      const result = await UsageStatsManager.trackUsage('user-1', 'some_usage', 10, {
         source: 'test',
       });
 
       expect(result).toBe(42);
       expect(mockRpc).toHaveBeenCalledWith('increment_daily_usage', {
         p_user_id: 'user-1',
-        p_usage_type: 'translation_chars',
+        p_usage_type: 'some_usage',
         p_usage_date: new Date().toISOString().split('T')[0],
         p_increment: 10,
         p_metadata: { source: 'test' },
@@ -60,11 +54,11 @@ describe('UsageStatsManager', () => {
     test('uses default increment of 1 and empty metadata', async () => {
       mockRpc.mockResolvedValue({ data: 1, error: null });
 
-      await UsageStatsManager.trackUsage('user-1', 'translation_chars');
+      await UsageStatsManager.trackUsage('user-1', 'some_usage');
 
       expect(mockRpc).toHaveBeenCalledWith('increment_daily_usage', {
         p_user_id: 'user-1',
-        p_usage_type: 'translation_chars',
+        p_usage_type: 'some_usage',
         p_usage_date: new Date().toISOString().split('T')[0],
         p_increment: 1,
         p_metadata: {},
@@ -74,7 +68,7 @@ describe('UsageStatsManager', () => {
     test('returns 0 when rpc returns an error', async () => {
       mockRpc.mockResolvedValue({ data: null, error: { message: 'db error' } });
 
-      const result = await UsageStatsManager.trackUsage('user-1', 'translation_chars');
+      const result = await UsageStatsManager.trackUsage('user-1', 'some_usage');
 
       expect(result).toBe(0);
       expect(consoleErrorSpy).toHaveBeenCalledWith('Usage tracking error:', {
@@ -85,7 +79,7 @@ describe('UsageStatsManager', () => {
     test('returns 0 when rpc throws an exception', async () => {
       mockRpc.mockRejectedValue(new Error('network failure'));
 
-      const result = await UsageStatsManager.trackUsage('user-1', 'translation_chars');
+      const result = await UsageStatsManager.trackUsage('user-1', 'some_usage');
 
       expect(result).toBe(0);
       expect(consoleErrorSpy).toHaveBeenCalledWith('Usage tracking failed:', expect.any(Error));
@@ -94,7 +88,7 @@ describe('UsageStatsManager', () => {
     test('returns 0 when data is null', async () => {
       mockRpc.mockResolvedValue({ data: null, error: null });
 
-      const result = await UsageStatsManager.trackUsage('user-1', 'translation_chars');
+      const result = await UsageStatsManager.trackUsage('user-1', 'some_usage');
 
       expect(result).toBe(0);
     });
@@ -104,16 +98,12 @@ describe('UsageStatsManager', () => {
     test('returns data from rpc on success', async () => {
       mockRpc.mockResolvedValue({ data: 100, error: null });
 
-      const result = await UsageStatsManager.getCurrentUsage(
-        'user-1',
-        'translation_chars',
-        'monthly',
-      );
+      const result = await UsageStatsManager.getCurrentUsage('user-1', 'some_usage', 'monthly');
 
       expect(result).toBe(100);
       expect(mockRpc).toHaveBeenCalledWith('get_current_usage', {
         p_user_id: 'user-1',
-        p_usage_type: 'translation_chars',
+        p_usage_type: 'some_usage',
         p_period: 'monthly',
       });
     });
@@ -121,11 +111,11 @@ describe('UsageStatsManager', () => {
     test('uses default period of daily', async () => {
       mockRpc.mockResolvedValue({ data: 5, error: null });
 
-      await UsageStatsManager.getCurrentUsage('user-1', 'translation_chars');
+      await UsageStatsManager.getCurrentUsage('user-1', 'some_usage');
 
       expect(mockRpc).toHaveBeenCalledWith('get_current_usage', {
         p_user_id: 'user-1',
-        p_usage_type: 'translation_chars',
+        p_usage_type: 'some_usage',
         p_period: 'daily',
       });
     });
@@ -133,7 +123,7 @@ describe('UsageStatsManager', () => {
     test('returns 0 when rpc returns an error', async () => {
       mockRpc.mockResolvedValue({ data: null, error: { message: 'db error' } });
 
-      const result = await UsageStatsManager.getCurrentUsage('user-1', 'translation_chars');
+      const result = await UsageStatsManager.getCurrentUsage('user-1', 'some_usage');
 
       expect(result).toBe(0);
       expect(consoleErrorSpy).toHaveBeenCalledWith('Get current usage error:', {
@@ -144,7 +134,7 @@ describe('UsageStatsManager', () => {
     test('returns 0 when rpc throws an exception', async () => {
       mockRpc.mockRejectedValue(new Error('network failure'));
 
-      const result = await UsageStatsManager.getCurrentUsage('user-1', 'translation_chars');
+      const result = await UsageStatsManager.getCurrentUsage('user-1', 'some_usage');
 
       expect(result).toBe(0);
       expect(consoleErrorSpy).toHaveBeenCalledWith('Get current usage failed:', expect.any(Error));
@@ -153,7 +143,7 @@ describe('UsageStatsManager', () => {
     test('returns 0 when data is null', async () => {
       mockRpc.mockResolvedValue({ data: null, error: null });
 
-      const result = await UsageStatsManager.getCurrentUsage('user-1', 'translation_chars');
+      const result = await UsageStatsManager.getCurrentUsage('user-1', 'some_usage');
 
       expect(result).toBe(0);
     });

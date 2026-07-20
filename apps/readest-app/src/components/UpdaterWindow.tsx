@@ -11,14 +11,12 @@ import { Command } from '@tauri-apps/plugin-shell';
 import { invoke } from '@tauri-apps/api/core';
 import { desktopDir } from '@tauri-apps/api/path';
 import { isTauriAppPlatform } from '@/services/environment';
-import { useTranslator } from '@/hooks/useTranslator';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSearchParams } from 'next/navigation';
 import { getAppVersion } from '@/utils/version';
 import { tauriDownload } from '@/utils/transfer';
 import { installPackage, verifyUpdateSignature, installNightlyUpdate } from '@/utils/bridge';
 import { join } from '@tauri-apps/api/path';
-import { getLocale } from '@/utils/misc';
 import { setLastShownReleaseNotesVersion } from '@/helpers/updater';
 import type { ResolvedNightlyUpdate } from '@/helpers/updater';
 import {
@@ -43,9 +41,6 @@ interface Changelog {
   version: string;
   date: string;
   notes: string[];
-  // Auto-translated notes, kept alongside the original English `notes` so the
-  // reader can flip back to the source text. Only set when translation ran.
-  translatedNotes?: string[];
 }
 
 type DownloadEvent =
@@ -92,12 +87,6 @@ export const UpdaterContent = ({
   nightlyUpdate?: ResolvedNightlyUpdate;
 }) => {
   const _ = useTranslation();
-  const [targetLang, setTargetLang] = useState('EN');
-  const { translate } = useTranslator({
-    provider: 'azure',
-    sourceLang: 'AUTO',
-    targetLang,
-  });
   const { appService } = useEnv();
   const searchParams = useSearchParams();
   const currentVersion = getAppVersion();
@@ -109,17 +98,12 @@ export const UpdaterContent = ({
   );
   const [update, setUpdate] = useState<GenericUpdate | Update | null>(null);
   const [changelogs, setChangelogs] = useState<Changelog[]>([]);
-  const [showOriginal, setShowOriginal] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [contentLength, setContentLength] = useState<number | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloaded, setDownloaded] = useState<number | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setTargetLang(getLocale());
-  }, []);
 
   useEffect(() => {
     const checkDesktopUpdate = async () => {
@@ -450,17 +434,6 @@ export const UpdaterContent = ({
           },
         ];
       }
-      if (!targetLang.toLowerCase().startsWith('en')) {
-        for (const entry of changelogs) {
-          try {
-            // Preserve the original English `notes`; store the translation
-            // separately so the "Show original" toggle can flip between them.
-            entry.translatedNotes = await translate(entry.notes, { useCache: true });
-          } catch (error) {
-            console.log('Failed to translate changelog:', error);
-          }
-        }
-      }
 
       setChangelogs(changelogs);
       setLastShownReleaseNotesVersion(newVersion);
@@ -630,14 +603,6 @@ export const UpdaterContent = ({
         <div className='text-base-content text-sm'>
           <div className='mb-2 flex items-center justify-between gap-2'>
             <h3 className='font-bold'>{_('Changelog')}</h3>
-            {changelogs.some((entry) => entry.translatedNotes?.length) && (
-              <button
-                className='btn btn-ghost btn-xs eink-bordered font-normal'
-                onClick={() => setShowOriginal((prev) => !prev)}
-              >
-                {showOriginal ? _('Show translation') : _('Show original')}
-              </button>
-            )}
           </div>
           <div className='not-eink:bg-base-200 not-eink:px-4 mb-4 rounded-lg pb-2 pt-4'>
             {changelogs.length > 0 ? (
@@ -647,11 +612,9 @@ export const UpdaterContent = ({
                     {entry.version} ({entry.date})
                   </h4>
                   <ul className='list-disc space-y-1 ps-6 text-sm'>
-                    {(showOriginal ? entry.notes : (entry.translatedNotes ?? entry.notes)).map(
-                      (note: string, i: number) => (
-                        <li key={i}>{note}</li>
-                      ),
-                    )}
+                    {entry.notes.map((note: string, i: number) => (
+                      <li key={i}>{note}</li>
+                    ))}
                   </ul>
                 </div>
               ))

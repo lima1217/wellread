@@ -51,14 +51,14 @@ describe('settingsAdapter', () => {
       patch: {
         globalReadSettings: { userHighlightColors: userColors },
         // not in whitelist:
-        telemetryEnabled: true,
+        alwaysOnTop: true,
         screenBrightness: 0.5,
         localBooksDir: '/should/not/sync',
       } as unknown as Partial<SystemSettings>,
     };
     const fields = settingsAdapter.pack(record);
     expect(fields['globalReadSettings.userHighlightColors']).toEqual(userColors);
-    expect(fields['telemetryEnabled']).toBeUndefined();
+    expect(fields['alwaysOnTop']).toBeUndefined();
     expect(fields['screenBrightness']).toBeUndefined();
     expect(fields['localBooksDir']).toBeUndefined();
   });

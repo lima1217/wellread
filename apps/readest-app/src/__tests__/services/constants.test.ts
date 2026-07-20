@@ -42,7 +42,6 @@ import {
   DEFAULT_EINK_VIEW_SETTINGS,
   DEFAULT_VIEW_CONFIG,
   DEFAULT_TTS_CONFIG,
-  DEFAULT_TRANSLATOR_CONFIG,
   DEFAULT_NOTE_EXPORT_CONFIG,
   DEFAULT_ANNOTATOR_CONFIG,
   DEFAULT_SCREEN_CONFIG,
@@ -80,7 +79,6 @@ import {
   ZOOM_STEP,
   SHOW_UNREAD_STATUS_BADGE,
   DEFAULT_STORAGE_QUOTA,
-  DEFAULT_DAILY_TRANSLATION_QUOTA,
   DOUBLE_CLICK_INTERVAL_THRESHOLD_MS,
   DISABLE_DOUBLE_CLICK_ON_MOBILE,
   LONG_HOLD_THRESHOLD,
@@ -89,7 +87,6 @@ import {
   CUSTOM_THEME_TEMPLATES,
   MIGHT_BE_RTL_LANGS,
   TRANSLATED_LANGS,
-  TRANSLATOR_LANGS,
   SUPPORTED_LANGS,
   SUPPORTED_LANGNAMES,
 } from '@/services/constants';
@@ -234,8 +231,6 @@ describe('services/constants', () => {
       expect(typeof DEFAULT_SYSTEM_SETTINGS.screenWakeLock).toBe('boolean');
       expect(typeof DEFAULT_SYSTEM_SETTINGS.openLastBooks).toBe('boolean');
       expect(typeof DEFAULT_SYSTEM_SETTINGS.autoImportBooksOnOpen).toBe('boolean');
-      expect(typeof DEFAULT_SYSTEM_SETTINGS.telemetryEnabled).toBe('boolean');
-      expect(typeof DEFAULT_SYSTEM_SETTINGS.discordRichPresenceEnabled).toBe('boolean');
     });
 
     it('has screen brightness in valid range', () => {
@@ -370,10 +365,8 @@ describe('services/constants', () => {
       expect(typeof DEFAULT_READSETTINGS.notebookActiveTab).toBe('string');
     });
 
-    it('has cursor and translation settings', () => {
+    it('has cursor settings', () => {
       expect(typeof DEFAULT_READSETTINGS.autohideCursor).toBe('boolean');
-      expect(typeof DEFAULT_READSETTINGS.translationProvider).toBe('string');
-      expect(typeof DEFAULT_READSETTINGS.translateTargetLang).toBe('string');
     });
 
     it('has highlight settings', () => {
@@ -659,20 +652,6 @@ describe('services/constants', () => {
       expect(typeof DEFAULT_TTS_CONFIG.ttsHighlightOptions).toBe('object');
       expect(typeof DEFAULT_TTS_CONFIG.ttsHighlightOptions.style).toBe('string');
       expect(typeof DEFAULT_TTS_CONFIG.ttsHighlightOptions.color).toBe('string');
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // Translator config
-  // ---------------------------------------------------------------------------
-  describe('DEFAULT_TRANSLATOR_CONFIG', () => {
-    it('has expected properties', () => {
-      expect(typeof DEFAULT_TRANSLATOR_CONFIG).toBe('object');
-      expect(typeof DEFAULT_TRANSLATOR_CONFIG.translationEnabled).toBe('boolean');
-      expect(typeof DEFAULT_TRANSLATOR_CONFIG.translationProvider).toBe('string');
-      expect(typeof DEFAULT_TRANSLATOR_CONFIG.translateTargetLang).toBe('string');
-      expect(typeof DEFAULT_TRANSLATOR_CONFIG.showTranslateSource).toBe('boolean');
-      expect(typeof DEFAULT_TRANSLATOR_CONFIG.ttsReadAloudText).toBe('string');
     });
   });
 
@@ -1003,24 +982,6 @@ describe('services/constants', () => {
       expect(DEFAULT_STORAGE_QUOTA.plus).toBeGreaterThan(DEFAULT_STORAGE_QUOTA.free);
       expect(DEFAULT_STORAGE_QUOTA.pro).toBeGreaterThan(DEFAULT_STORAGE_QUOTA.plus);
     });
-
-    it('DEFAULT_DAILY_TRANSLATION_QUOTA has all plan tiers', () => {
-      expect(typeof DEFAULT_DAILY_TRANSLATION_QUOTA).toBe('object');
-      expect(typeof DEFAULT_DAILY_TRANSLATION_QUOTA.free).toBe('number');
-      expect(typeof DEFAULT_DAILY_TRANSLATION_QUOTA.plus).toBe('number');
-      expect(typeof DEFAULT_DAILY_TRANSLATION_QUOTA.pro).toBe('number');
-      expect(typeof DEFAULT_DAILY_TRANSLATION_QUOTA.purchase).toBe('number');
-    });
-
-    it('DEFAULT_DAILY_TRANSLATION_QUOTA tiers are in ascending order (except purchase)', () => {
-      expect(DEFAULT_DAILY_TRANSLATION_QUOTA.free).toBeGreaterThan(0);
-      expect(DEFAULT_DAILY_TRANSLATION_QUOTA.plus).toBeGreaterThan(
-        DEFAULT_DAILY_TRANSLATION_QUOTA.free,
-      );
-      expect(DEFAULT_DAILY_TRANSLATION_QUOTA.pro).toBeGreaterThan(
-        DEFAULT_DAILY_TRANSLATION_QUOTA.plus,
-      );
-    });
   });
 
   // ---------------------------------------------------------------------------
@@ -1091,27 +1052,6 @@ describe('services/constants', () => {
     it('TRANSLATED_LANGS includes Chinese variants', () => {
       expect(TRANSLATED_LANGS['zh-CN']).toBeDefined();
       expect(TRANSLATED_LANGS['zh-TW']).toBeDefined();
-    });
-
-    it('TRANSLATOR_LANGS is a superset of TRANSLATED_LANGS', () => {
-      expect(typeof TRANSLATOR_LANGS).toBe('object');
-      for (const code of Object.keys(TRANSLATED_LANGS)) {
-        expect(code in TRANSLATOR_LANGS).toBe(true);
-      }
-      // TRANSLATOR_LANGS has extra languages
-      expect(Object.keys(TRANSLATOR_LANGS).length).toBeGreaterThanOrEqual(
-        Object.keys(TRANSLATED_LANGS).length,
-      );
-    });
-
-    it('TRANSLATOR_LANGS includes additional languages not in TRANSLATED_LANGS', () => {
-      expect(TRANSLATOR_LANGS['nb']).toBeDefined();
-      expect(TRANSLATOR_LANGS['sv']).toBeDefined();
-      expect(TRANSLATOR_LANGS['fi']).toBeDefined();
-    });
-
-    it('TRANSLATOR_LANGS includes Urdu', () => {
-      expect(TRANSLATOR_LANGS['ur']).toBe('اردو');
     });
 
     it('SUPPORTED_LANGS includes zh in addition to TRANSLATED_LANGS entries', () => {

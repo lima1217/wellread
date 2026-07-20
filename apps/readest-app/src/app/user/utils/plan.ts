@@ -31,7 +31,7 @@ export type PlanDetails = {
 };
 
 const getProductFeature = (productId: string): QuotaFeature | undefined => {
-  const features: QuotaFeature[] = ['storage', 'translation', 'tokens', 'customization'];
+  const features: QuotaFeature[] = ['storage', 'tokens', 'customization'];
   const lowerId = productId.toLowerCase();
   for (const feature of features) {
     if (lowerId.includes(feature)) {
@@ -91,7 +91,7 @@ export function getPlanDetails(
           {
             label: _('Unlock All Customization Options'),
             description: _(
-              'Unlock additional themes, fonts, layout options and read aloud, translators, cloud storage services.',
+              'Unlock additional themes, fonts, layout options and read aloud, cloud storage services.',
             ),
           },
         ],
@@ -129,12 +129,6 @@ export function getPlanDetails(
             ),
           },
           {
-            label: _('AI Translations'),
-            description: _(
-              'Translate any text instantly with the power of Google, Azure, or DeepL—understand content in any language.',
-            ),
-          },
-          {
             label: _('Community Support'),
             description: _(
               'Connect with fellow readers and get help fast in our friendly community channels.',
@@ -143,7 +137,6 @@ export function getPlanDetails(
         ],
         limits: {
           [_('Cloud Sync Storage')]: '500 MB',
-          [_('AI Translations (per day)')]: '10K',
         },
       };
     case 'plus':
@@ -168,18 +161,6 @@ export function getPlanDetails(
             ),
           },
           {
-            label: _('More AI Translations'),
-            description: _(
-              'Unlock enhanced translation capabilities with more daily usage and advanced options.',
-            ),
-          },
-          {
-            label: _('DeepL Pro Access'),
-            description: _(
-              'Translate up to 100,000 characters daily with the most accurate translation engine available.',
-            ),
-          },
-          {
             label: _('Cloud Sync Storage'),
             description: _(
               'Securely store and access your entire reading collection with up to 5 GB of cloud storage.',
@@ -194,7 +175,6 @@ export function getPlanDetails(
         ],
         limits: {
           [_('Cloud Sync Storage')]: '5 GB',
-          [_('AI Translations (per day)')]: '100K',
         },
       };
     case 'pro':
@@ -220,15 +200,7 @@ export function getPlanDetails(
           },
           {
             label: _('Advanced AI Tools'),
-            description: _(
-              'Harness powerful AI tools for smarter reading, translation, and content discovery.',
-            ),
-          },
-          {
-            label: _('DeepL Pro Access'),
-            description: _(
-              'Translate up to 500,000 characters daily with the most accurate translation engine available.',
-            ),
+            description: _('Harness powerful AI tools for smarter reading and content discovery.'),
           },
           {
             label: _('Cloud Sync Storage'),
@@ -239,7 +211,6 @@ export function getPlanDetails(
         ],
         limits: {
           [_('Cloud Sync Storage')]: '20 GB',
-          [_('AI Translations (per day)')]: '500K',
         },
       };
     default:

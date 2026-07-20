@@ -94,12 +94,11 @@ describe('getPlanDetails', () => {
       expect(labels).toContain('Priority Support');
     });
 
-    it('should include limits with storage and translation', () => {
+    it('should include limits with storage', () => {
       const result = getPlanDetails('plus', []);
       expect(result.limits).toBeDefined();
       const limitKeys = Object.keys(result.limits!);
       expect(limitKeys.some((k) => k.includes('Storage'))).toBe(true);
-      expect(limitKeys.some((k) => k.includes('Translation'))).toBe(true);
     });
 
     it('should match correct plan by interval', () => {
@@ -202,12 +201,6 @@ describe('getPlanDetails', () => {
         }),
         makePlan({
           plan: 'purchase',
-          productId: 'prod_translation_pack',
-          price: 500,
-          productName: 'Translation',
-        }),
-        makePlan({
-          plan: 'purchase',
           productId: 'prod_tokens_bundle',
           price: 2000,
           productName: 'Tokens',
@@ -220,10 +213,9 @@ describe('getPlanDetails', () => {
         }),
       ];
       const result = getPlanDetails('purchase', plans);
-      expect(result.products![0]!.feature).toBe('translation');
-      expect(result.products![1]!.feature).toBe('storage');
-      expect(result.products![2]!.feature).toBe('customization');
-      expect(result.products![3]!.feature).toBe('tokens');
+      expect(result.products![0]!.feature).toBe('storage');
+      expect(result.products![1]!.feature).toBe('customization');
+      expect(result.products![2]!.feature).toBe('tokens');
     });
 
     it('should use metadata.feature when present', () => {

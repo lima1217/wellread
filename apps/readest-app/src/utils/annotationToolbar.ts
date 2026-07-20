@@ -8,14 +8,13 @@ export const ALL_ANNOTATION_TOOL_TYPES: AnnotationToolType[] = [
   'annotate',
   'search',
   'dictionary',
-  'translate',
   'ask',
   'tts',
   'proofread',
   'share',
 ];
 
-// Default toolbar: the eight pre-existing tools in their original order,
+// Default toolbar: the seven pre-existing tools in their original order,
 // plus ask-about for Reading Assistant.
 // 'share' starts hidden in the Available tray per the #4014 design.
 export const DEFAULT_ANNOTATION_TOOLBAR_ITEMS: AnnotationToolType[] = [

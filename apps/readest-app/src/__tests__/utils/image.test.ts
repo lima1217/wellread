@@ -100,7 +100,7 @@ const mockFetchResponse = {
 vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockFetchResponse));
 
 // Import after mocks
-import { processDiscordCover, fetchImageAsBase64 } from '@/utils/image';
+import { fetchImageAsBase64 } from '@/utils/image';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -121,70 +121,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-});
-
-describe('processDiscordCover', () => {
-  test('fetches cover and icon images', async () => {
-    // Setup: toBlob calls the callback with a Blob
-    mockToBlob.mockImplementation((callback: (blob: Blob | null) => void) => {
-      callback(new Blob(['jpeg-data'], { type: 'image/jpeg' }));
-    });
-
-    const promise = processDiscordCover(
-      'https://example.com/cover.jpg',
-      'https://example.com/icon.png',
-    );
-
-    // Wait for images to load
-    await vi.dynamicImportSettled();
-    const result = await promise;
-
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(fetch).toHaveBeenCalledWith('https://example.com/cover.jpg');
-    expect(fetch).toHaveBeenCalledWith('https://example.com/icon.png');
-    expect(result).toBeInstanceOf(Blob);
-  });
-
-  test('draws cover image centered for portrait aspect ratio', async () => {
-    mockToBlob.mockImplementation((callback: (blob: Blob | null) => void) => {
-      callback(new Blob(['jpeg-data'], { type: 'image/jpeg' }));
-    });
-
-    // Create images with portrait dimensions (taller than wide)
-    const promise = processDiscordCover(
-      'https://example.com/cover.jpg',
-      'https://example.com/icon.png',
-    );
-
-    await vi.dynamicImportSettled();
-    await promise;
-
-    // Canvas context should have drawImage called (cover + icon)
-    expect(mockCtx.drawImage).toHaveBeenCalled();
-    expect(mockCtx.imageSmoothingEnabled).toBe(true);
-    expect(mockCtx.imageSmoothingQuality).toBe('high');
-  });
-
-  test('rejects when toBlob returns null', async () => {
-    mockToBlob.mockImplementation((callback: (blob: Blob | null) => void) => {
-      callback(null);
-    });
-
-    const promise = processDiscordCover(
-      'https://example.com/cover.jpg',
-      'https://example.com/icon.png',
-    );
-
-    await expect(promise).rejects.toThrow('Failed to create blob');
-  });
-
-  test('rejects on fetch failure', async () => {
-    (fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Network error'));
-
-    await expect(
-      processDiscordCover('https://example.com/cover.jpg', 'https://example.com/icon.png'),
-    ).rejects.toThrow('Network error');
-  });
 });
 
 describe('fetchImageAsBase64', () => {
