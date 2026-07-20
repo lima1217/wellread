@@ -83,68 +83,6 @@ jobs:
               prerelease: false
             })
 
-  build-koreader-plugin:
-    needs: get-release
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: create KOReader plugin zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          version=${{ needs.get-release.outputs.release_version }}
-          plugin_zip="Readest-${version}-1.koplugin.zip"
-          meta_file="apps/readest.koplugin/_meta.lua"
-          perl -i -pe "s/^}/    version = \"${version}\",\n}/" "${meta_file}"
-
-          # Exclude dev-only artifacts from the published plugin zip:
-          #   scripts/  — i18n + build helpers
-          #   docs/     — design notes
-          #   spec/     — busted test suite
-          #   .busted   — busted runner config
-          # Mirror these in apps/readest.koplugin/scripts/build-koplugin.mjs
-          # for local builds.
-          cd apps
-          zip -r ../${plugin_zip} readest.koplugin \
-            -x 'readest.koplugin/scripts/*' \
-               'readest.koplugin/docs/*' \
-               'readest.koplugin/spec/*' \
-               'readest.koplugin/.busted'
-          cd ..
-
-          echo "Uploading ${plugin_zip} to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} ${plugin_zip} --clobber
-
-  build-calibre-plugin:
-    needs: get-release
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: create calibre plugin zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          version=${{ needs.get-release.outputs.release_version }}
-
-          # Stamp PLUGIN_VERSION in __init__.py with the release version
-          # (from apps/readest-app/package.json, mirroring the koplugin's
-          # _meta.lua stamp above); the committed value is a dev placeholder.
-          version_tuple=$(echo "${version}" | awk -F. '{printf "(%d, %d, %d)", $1, $2, $3}')
-          perl -i -pe "s/^PLUGIN_VERSION = \(\d+, \d+, \d+\)/PLUGIN_VERSION = ${version_tuple}/" \
-            apps/readest-calibre-plugin/__init__.py
-
-          make -C apps/readest-calibre-plugin zip
-          plugin_zip="apps/readest-calibre-plugin/dist/Readest-${version}.calibre-plugin.zip"
-
-          echo "Uploading ${plugin_zip} to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} ${plugin_zip} --clobber
-
   build-browser-extension:
     needs: get-release
     permissions:
@@ -283,15 +221,9 @@ jobs:
 
       - name: create .env.local file for Next.js
         run: |
-          echo "NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}" >> .env.local
-          echo "NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}" >> .env.local
           echo "NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}" >> .env.local
           echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" >> .env.local
           echo "NEXT_PUBLIC_APP_PLATFORM=tauri" >> .env.local
-          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> .env.local
-          echo "SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}" >> .env.local
-          echo "SENTRY_ORG=readest" >> .env.local
-          echo "SENTRY_PROJECT=readest" >> .env.local
           cp .env.local apps/readest-app/.env.local
 
       - name: build and upload Android apks

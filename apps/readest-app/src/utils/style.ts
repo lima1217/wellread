@@ -720,25 +720,6 @@ export const getDictStyles = (bg: string, fg: string, isDarkMode: boolean) => {
   `;
 };
 
-const getTranslationStyles = (showSource: boolean) => `
-  .translation-source {
-  }
-  .translation-target {
-  }
-  .translation-target.hidden {
-    display: none !important;
-  }
-  .translation-target-block {
-    display: block !important;
-    ${showSource ? 'margin: 0.5em 0 !important;' : ''}
-  }
-  .translation-target-toc {
-    display: block !important;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-`;
-
 const getWarichuStyles = () => `
   /* Warichu (割注/夹注) — double-line inline annotation */
   .warichu-pending {
@@ -900,7 +881,6 @@ export const getStyles = (
     viewSettings.backgroundTextureId,
     viewSettings.isEink,
   );
-  const translationStyles = getTranslationStyles(viewSettings.showTranslateSource!);
   const warichuStyles = getWarichuStyles();
   const rubyStyles = getRubyStyles(viewSettings);
   const userStylesheet = viewSettings.userStylesheet!;
@@ -910,7 +890,7 @@ export const getStyles = (
   // the footnote aside's border show as a stray horizontal line (#4438). Keep it
   // ahead of the inlined custom `@font-face` rules.
   const epubNamespace = `@namespace epub "http://www.idpf.org/2007/ops";`;
-  return `${epubNamespace}\n${customFontFaces}\n${pageLayoutStyles}\n${paragraphLayoutStyles}\n${fontStyles}\n${colorStyles}\n${translationStyles}\n${warichuStyles}\n${rubyStyles}\n${userStylesheet}`;
+  return `${epubNamespace}\n${customFontFaces}\n${pageLayoutStyles}\n${paragraphLayoutStyles}\n${fontStyles}\n${colorStyles}\n${warichuStyles}\n${rubyStyles}\n${userStylesheet}`;
 };
 
 // Build a CSS chunk of `@font-face` rules for the given user custom
@@ -930,21 +910,6 @@ const getCustomFontFaces = (fonts: CustomFont[]): string =>
       }
     })
     .join('\n');
-
-export const applyTranslationStyle = (viewSettings: ViewSettings) => {
-  const styleId = 'translation-style';
-
-  const existingStyle = document.getElementById(styleId);
-  if (existingStyle) {
-    existingStyle.remove();
-  }
-
-  const styleElement = document.createElement('style');
-  styleElement.id = styleId;
-  styleElement.textContent = getTranslationStyles(viewSettings.showTranslateSource);
-
-  document.head.appendChild(styleElement);
-};
 
 export const transformStylesheet = (css: string, vw: number, vh: number, vertical: boolean) => {
   const isMobile = ['ios', 'android'].includes(getOSPlatform());

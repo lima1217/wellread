@@ -16,7 +16,6 @@ import {
   DEFAULT_CJK_VIEW_SETTINGS,
   DEFAULT_MOBILE_READSETTINGS,
   DEFAULT_SCREEN_CONFIG,
-  DEFAULT_TRANSLATOR_CONFIG,
   SETTINGS_FILENAME,
   DEFAULT_MOBILE_SYSTEM_SETTINGS,
   DEFAULT_ANNOTATOR_CONFIG,
@@ -25,7 +24,7 @@ import {
   DEFAULT_VIEW_SETTINGS_CONFIG,
 } from './constants';
 import { DEFAULT_AI_SETTINGS } from './ai/constants';
-import { getTargetLang, isCJKEnv } from '@/utils/misc';
+import { isCJKEnv } from '@/utils/misc';
 import { safeLoadJSON, safeSaveJSON } from './persistence';
 
 export interface Context {
@@ -50,7 +49,6 @@ export function getDefaultViewSettings(ctx: Context): ViewSettings {
     ...(ctx.isMobile ? DEFAULT_MOBILE_VIEW_SETTINGS : {}),
     ...(ctx.isEink ? DEFAULT_EINK_VIEW_SETTINGS : {}),
     ...(isCJKEnv() ? DEFAULT_CJK_VIEW_SETTINGS : {}),
-    ...{ ...DEFAULT_TRANSLATOR_CONFIG, translateTargetLang: getTargetLang() },
   };
 }
 

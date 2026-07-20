@@ -513,30 +513,6 @@ const languagePanelItems = [
     section: 'Language',
   },
   {
-    id: 'settings.language.translationEnabled',
-    labelKey: _('Enable Translation'),
-    keywords: ['translation', 'translate', 'enable', 'language'],
-    section: 'Translation',
-  },
-  {
-    id: 'settings.language.translationProvider',
-    labelKey: _('Translation Service'),
-    keywords: ['translation', 'provider', 'google', 'deepl', 'service'],
-    section: 'Translation',
-  },
-  {
-    id: 'settings.language.targetLanguage',
-    labelKey: _('Translate To'),
-    keywords: ['target', 'language', 'translation', 'destination'],
-    section: 'Translation',
-  },
-  {
-    id: 'settings.language.ttsTextTranslation',
-    labelKey: _('TTS Text'),
-    keywords: ['tts', 'text', 'translation', 'speech', 'read'],
-    section: 'Translation',
-  },
-  {
     id: 'settings.language.quotationMarks',
     labelKey: _('Replace Quotation Marks'),
     keywords: ['quotation', 'marks', 'quotes', 'punctuation', 'cjk'],
@@ -665,11 +641,6 @@ const actionItems = [
     labelKey: _('About Readest'),
     keywords: ['about', 'readest', 'version', 'info'],
   },
-  {
-    id: 'action.telemetry',
-    labelKey: _('Help improve Readest'),
-    keywords: ['telemetry', 'analytics', 'improve', 'statistics'],
-  },
 ];
 
 export interface CommandRegistryOptions {
@@ -683,7 +654,6 @@ export interface CommandRegistryOptions {
   reloadPage: () => void;
   toggleOpenLastBooks: () => void;
   showAbout: () => void;
-  toggleTelemetry: () => void;
   isDesktop: boolean;
   // TODO: add reader-specific actions when reader is open (tts, bookmark, etc.)
 }
@@ -831,13 +801,6 @@ export const buildCommandRegistry = (options: CommandRegistryOptions): CommandIt
     createActionItem({
       id: 'action.about',
       action: options.showAbout,
-    }),
-  );
-
-  items.push(
-    createActionItem({
-      id: 'action.telemetry',
-      action: options.toggleTelemetry,
     }),
   );
 

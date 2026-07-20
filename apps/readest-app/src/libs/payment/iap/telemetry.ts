@@ -1,8 +1,7 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 // Minimal local typing for the Analytics Engine binding (the project does not
-// depend on @cloudflare/workers-types). Mirrors the pattern in
-// `src/pages/api/deepl/translate.ts` for the KV binding.
+// depend on @cloudflare/workers-types).
 interface AnalyticsEngineDataset {
   writeDataPoint(event: {
     indexes?: string[];

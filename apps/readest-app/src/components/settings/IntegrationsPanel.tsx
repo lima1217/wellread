@@ -7,7 +7,6 @@ import {
   RiRssLine,
   RiBookReadLine,
   RiBook3Line,
-  RiDiscordLine,
   RiSendPlaneLine,
   RiCloudLine,
   RiCloudFill,
@@ -24,7 +23,6 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useCustomOPDSStore } from '@/store/customOPDSStore';
 import { useFileSyncStore } from '@/store/fileSyncStore';
 import { CatalogManager } from '@/app/opds/components/CatalogManager';
-import { saveSysSettings } from '@/helpers/settings';
 import { isCloudSyncAllowed } from '@/utils/access';
 import { isWebAppPlatform } from '@/services/environment';
 import { getGoogleWebClientId } from '@/services/sync/providers/gdrive/buildGoogleDriveProvider';
@@ -129,14 +127,6 @@ const IntegrationsPanel: React.FC = () => {
     enabled: subPage !== null,
     onCancel: () => setSubPage(null),
   });
-
-  const toggleDiscordPresence = () => {
-    const discordRichPresenceEnabled = !settings.discordRichPresenceEnabled;
-    saveSysSettings(envConfig, 'discordRichPresenceEnabled', discordRichPresenceEnabled);
-    if (discordRichPresenceEnabled && !user) {
-      navigateToLogin(router);
-    }
-  };
 
   // Deep-link consumption: when a caller (e.g. OPDS browser close handler)
   // sets `requestedSubPage` in the store before opening the dialog, drill
@@ -626,23 +616,6 @@ const IntegrationsPanel: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {appService?.isDesktopApp && (
-        <div className='w-full' data-setting-id='settings.integrations.discord'>
-          <SectionTitle className='mb-2'>{_('Discord')}</SectionTitle>
-          <div className='card eink-bordered border-base-200 bg-base-100 overflow-hidden border'>
-            <div className='divide-base-200 divide-y'>
-              <IntegrationToggleRow
-                icon={RiDiscordLine}
-                title={_('Show on Discord')}
-                description={_("Display what I'm reading on Discord")}
-                checked={settings.discordRichPresenceEnabled}
-                onChange={toggleDiscordPresence}
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -764,50 +737,6 @@ const CloudProviderRow: React.FC<CloudProviderRowProps> = ({
         <MdChevronRight className='h-5 w-5' />
       </button>
     </div>
-  );
-};
-
-interface IntegrationToggleRowProps {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  checked: boolean;
-  onChange: () => void;
-}
-
-/**
- * Sibling of IntegrationRow for settings that are a simple on/off toggle
- * (no sub-page). Keeps the same circular-badge chassis so toggle and
- * navigation rows read as one consistent list.
- */
-const IntegrationToggleRow: React.FC<IntegrationToggleRowProps> = ({
-  icon: Icon,
-  title,
-  description,
-  checked,
-  onChange,
-}) => {
-  return (
-    <label className='flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left'>
-      <span
-        className={clsx(
-          'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
-          'bg-base-200 text-base-content/70',
-        )}
-      >
-        <Icon className='h-5 w-5' />
-      </span>
-      <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
-        <SettingLabel>{title}</SettingLabel>
-        <span className='text-base-content/65 truncate text-[0.85em]'>{description}</span>
-      </div>
-      <input
-        type='checkbox'
-        className='toggle flex-shrink-0'
-        checked={checked}
-        onChange={onChange}
-      />
-    </label>
   );
 };
 

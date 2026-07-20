@@ -123,11 +123,6 @@ const DEFAULT_SHORTCUTS = {
     description: _('Copy Selection'),
     section: 'Selection',
   },
-  onTranslateSelection: {
-    keys: ['ctrl+t', 'cmd+t'],
-    description: _('Translate Selection'),
-    section: 'Selection',
-  },
   onDictionarySelection: {
     keys: ['ctrl+d', 'cmd+d'],
     description: _('Dictionary Lookup'),

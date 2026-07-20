@@ -25,7 +25,6 @@ import {
   ensureMainLibraryWindow,
   navigateToLibrary,
 } from '@/utils/nav';
-import { clearDiscordPresence } from '@/utils/discord';
 import { BOOK_IDS_SEPARATOR } from '@/services/constants';
 import { BookDetailModal } from '@/components/metadata';
 import ShareBookDialog from '@/app/library/components/ShareBookDialog';
@@ -176,11 +175,6 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
 
   const saveConfigAndCloseBook = async (bookKey: string, keepTTSAlive = false) => {
     console.log('Closing book', bookKey);
-
-    const viewState = getViewState(bookKey);
-    if (viewState?.isPrimary && appService?.isDesktopApp) {
-      await clearDiscordPresence(appService);
-    }
 
     try {
       getView(bookKey)?.close();

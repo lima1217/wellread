@@ -1,11 +1,4 @@
 import { describe, test, expect, vi, afterEach } from 'vitest';
-// MUST BE FIRST — before imports
-vi.mock('@/services/translators/cache', () => ({
-  initCache: vi.fn(),
-  getCachedTranslation: vi.fn(() => null),
-  saveToCache: vi.fn(),
-  pruneCache: vi.fn(),
-}));
 
 vi.mock('@/store/settingsStore', () => {
   const mockState = {

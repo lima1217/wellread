@@ -5,7 +5,6 @@ import { FiShare } from 'react-icons/fi';
 import { PiHighlighterFill } from 'react-icons/pi';
 import { LuBookA } from 'react-icons/lu';
 import { BsPencilSquare } from 'react-icons/bs';
-import { BsTranslate } from 'react-icons/bs';
 import { FaHeadphones } from 'react-icons/fa6';
 import { IoIosBuild } from 'react-icons/io';
 import { AnnotationToolType } from '@/types/annotator';
@@ -68,13 +67,6 @@ export const annotationToolButtons = createAnnotationToolButtons([
     label: _('Dictionary'),
     tooltip: _('Look up text in dictionary after selection'),
     Icon: LuBookA,
-    quickAction: true,
-  },
-  {
-    type: 'translate',
-    label: _('Translate'),
-    tooltip: _('Translate text after selection'),
-    Icon: BsTranslate,
     quickAction: true,
   },
   {

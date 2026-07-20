@@ -100,11 +100,6 @@ export const CommandPaletteProvider: React.FC<CommandPaletteProviderProps> = ({ 
     setAboutDialogVisible(true);
   }, []);
 
-  const toggleTelemetry = useCallback(() => {
-    const newValue = !settings.telemetryEnabled;
-    saveSysSettings(envConfig, 'telemetryEnabled', newValue);
-  }, [envConfig, settings.telemetryEnabled]);
-
   const openSettingsPanel = useCallback(
     (_panel: SettingsPanelType, itemId?: string) => {
       // panel is encoded in itemId (e.g., 'settings.font.defaultFontSize')
@@ -135,7 +130,6 @@ export const CommandPaletteProvider: React.FC<CommandPaletteProviderProps> = ({ 
         reloadPage,
         toggleOpenLastBooks,
         showAbout,
-        toggleTelemetry,
         isDesktop,
       });
       return readestStorageActive ? items : items.filter((i) => i.id !== 'action.autoUpload');
@@ -153,7 +147,6 @@ export const CommandPaletteProvider: React.FC<CommandPaletteProviderProps> = ({ 
       reloadPage,
       toggleOpenLastBooks,
       showAbout,
-      toggleTelemetry,
       isDesktop,
     ],
   );

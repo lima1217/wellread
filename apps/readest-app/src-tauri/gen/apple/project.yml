@@ -4,10 +4,6 @@ options:
   deploymentTarget:
     iOS: 15.0
 fileGroups: [../../src]
-packages:
-  Sentry:
-    url: https://github.com/getsentry/sentry-cocoa
-    from: 8.0.0
 configs:
   debug: debug
   release: release
@@ -49,7 +45,6 @@ targets:
     # than ship a malformed one. IAP works without it.
     sources:
       - path: Sources
-      - path: SentrySupport
       - path: Assets.xcassets
       # Only reference Externals as a file group (no compile/resource
       # phases) — the actual libapp.a lookup happens via the
@@ -98,8 +93,6 @@ targets:
         SWIFT_VERSION: "5.0"
       groups: [app]
     dependencies:
-      - package: Sentry
-        product: Sentry
       - framework: libapp.a
         embed: false
       - target: ShareExtension

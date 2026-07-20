@@ -325,14 +325,6 @@ export interface TTSConfig {
   ttsPlayerStyle: TTSPlayerStyle;
 }
 
-export interface TranslatorConfig {
-  translationEnabled: boolean;
-  translationProvider: string;
-  translateTargetLang: string;
-  showTranslateSource: boolean;
-  ttsReadAloudText: string;
-}
-
 export interface NoteExportConfig {
   includeTitle: boolean;
   includeAuthor: boolean;
@@ -418,7 +410,6 @@ export interface ViewSettings
     BookLanguage,
     ViewConfig,
     TTSConfig,
-    TranslatorConfig,
     ScreenConfig,
     ProofreadRulesConfig,
     AnnotatorConfig,

@@ -33,7 +33,6 @@ import {
   applyScrollbarStyle,
   applyScrollModeClass,
   applyThemeModeClass,
-  applyTranslationStyle,
   getStyles,
   getThemeCode,
   keepTextAlignment,
@@ -66,9 +65,7 @@ import { isTauriAppPlatform } from '@/services/environment';
 import { TransformContext } from '@/services/transformers/types';
 import { transformContent } from '@/services/transformService';
 import { lockScreenOrientation, setTextSelectionSuppressed } from '@/utils/bridge';
-import { useTextTranslation } from '../hooks/useTextTranslation';
 import { useBookCoverAutoSave } from '../hooks/useAutoSaveBookCover';
-import { useDiscordPresence } from '@/hooks/useDiscordPresence';
 import { manageSyntaxHighlighting } from '@/utils/highlightjs';
 import { getViewInsets } from '@/utils/insets';
 import { footerReservesBand } from '../utils/footerBand';
@@ -159,12 +156,6 @@ const FoliateViewer: React.FC<{
 
   useAutoFocus<HTMLDivElement>({ ref: containerRef });
 
-  useDiscordPresence(
-    bookData?.book || null,
-    !!viewState?.isPrimary,
-    settings.discordRichPresenceEnabled,
-  );
-
   useEffect(() => {
     const timer = setTimeout(() => setToastMessage(''), 2000);
     return () => clearTimeout(timer);
@@ -176,7 +167,6 @@ const FoliateViewer: React.FC<{
   useBookCoverAutoSave(bookKey);
   const { syncState, conflictDetails, resolveWithLocal, resolveWithRemote } = useKOSync(bookKey);
   useFileSync(bookKey);
-  useTextTranslation(bookKey, viewRef.current);
 
   // Coalesce setProgress writes within a single animation frame.
   //
@@ -734,7 +724,6 @@ const FoliateViewer: React.FC<{
       const height = viewHeight - insets.top - insets.bottom;
       book.transformTarget?.addEventListener('data', getDocTransformHandler({ width, height }));
       view.renderer.setStyles?.(getStyles(viewSettings, undefined, getLoadedFonts()));
-      applyTranslationStyle(viewSettings);
 
       doubleClickDisabled.current = viewSettings.disableDoubleClick!;
       const animated = viewSettings.animated!;

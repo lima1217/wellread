@@ -1,6 +1,5 @@
 'use client';
 
-import posthog from 'posthog-js';
 import { useEffect, useState } from 'react';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -22,7 +21,6 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
   }, [appService]);
 
   useEffect(() => {
-    posthog.captureException(error);
     handleGlobalError(error);
   }, [appService, error]);
 
@@ -49,9 +47,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
           <h1 className='text-base-content mb-4 text-5xl font-bold'>Oops!</h1>
 
           <p className='text-base-content/70 mb-8 text-lg'>
-            {_(
-              "Something went wrong. Don't worry, our team has been notified and we're working on a fix.",
-            )}
+            {_('Something went wrong. You can try again or go back to your library.')}
           </p>
 
           <div className='alert alert-error mb-8 overflow-hidden'>

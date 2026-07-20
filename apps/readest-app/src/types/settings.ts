@@ -54,8 +54,6 @@ export interface ReadSettings {
   isNotebookPinned: boolean;
   notebookActiveTab: NotebookTab;
   autohideCursor: boolean;
-  translationProvider: string;
-  translateTargetLang: string;
   /**
    * Global Word Lens toggle: auto-download a gloss pack on demand when the
    * pair isn't cached locally. When off, the reader never fetches packs
@@ -349,8 +347,6 @@ export interface SystemSettings {
   autoImportBooksOnOpen: boolean;
   savedBookCoverForLockScreen: string;
   savedBookCoverForLockScreenPath: string;
-  telemetryEnabled: boolean;
-  discordRichPresenceEnabled: boolean;
   libraryViewMode: LibraryViewModeType;
   librarySortBy: LibrarySortByType;
   librarySortAscending: boolean;

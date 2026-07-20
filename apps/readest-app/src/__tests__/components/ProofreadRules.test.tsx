@@ -37,11 +37,6 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/hooks/useTranslation', () => ({
   useTranslation: () => (key: string) => key,
 }));
-vi.mock('@/services/translators/cache', () => ({
-  initCache: vi.fn(),
-  loadCacheFromDB: vi.fn(),
-  pruneCache: vi.fn(),
-}));
 
 // ------------------------------
 // ENV PROVIDER WRAPPER

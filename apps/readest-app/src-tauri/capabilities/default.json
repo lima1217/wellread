@@ -87,22 +87,10 @@
           "url": "https://github.com/readest/*"
         },
         {
-          "url": "https://*.deepl.com"
-        },
-        {
           "url": "https://*.cloudflarestorage.com"
         },
         {
           "url": "https://edge.microsoft.com"
-        },
-        {
-          "url": "https://translate.toil.cc"
-        },
-        {
-          "url": "https://*.microsofttranslator.com"
-        },
-        {
-          "url": "https://translate.googleapis.com"
         },
         {
           "url": "http://*:*"
@@ -205,13 +193,11 @@
     "turso:default",
     "native-tts:default",
     "native-bridge:default",
-    "sentry:default",
     "allow-start-server",
     "allow-download-file",
     "allow-upload-file",
     "allow-get-environment-variable",
     "allow-get-executable-dir",
-    "allow-set-webview-info",
     "allow-is-updater-disabled",
     "allow-allow-paths-in-scopes",
     "allow-read-dir",
@@ -224,8 +210,6 @@
     "allow-start-apple-sign-in",
     "allow-set-traffic-lights",
     "allow-show-lookup-popover",
-    "allow-update-book-presence",
-    "allow-clear-book-presence",
     "allow-clip-url",
     "allow-spawn-fresh-browser",
     "allow-verify-update-signature",

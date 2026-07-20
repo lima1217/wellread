@@ -1,9 +1,5 @@
 import { createSupabaseAdminClient } from '@/utils/supabase';
 
-export const USAGE_TYPES = {
-  TRANSLATION_CHARS: 'translation_chars',
-} as const;
-
 export const QUOTA_TYPES = {
   DAILY: 'daily',
   MONTHLY: 'monthly',

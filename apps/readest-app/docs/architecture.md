@@ -103,7 +103,7 @@ flowchart TB
     end
 
     subgraph Native["Tauri native host (Rust)"]
-        TauriCore["src-tauri/src/lib.rs<br/>(commands, dir_scanner, transfer_file, clip_url, discord_rpc)"]
+        TauriCore["src-tauri/src/lib.rs<br/>(commands, dir_scanner, transfer_file, clip_url)"]
         Plugins["Tauri plugins<br/>(fs, dialog, http, oauth, deep-link, opener, updater,<br/>native-bridge, native-tts, turso, webview-upgrade)"]
     end
 
@@ -358,7 +358,7 @@ the user's inbox so that the in-app `Send` page can pick them up via the
 
 `src/app/runtime-config.js/route.ts` is a server route that builds a small JSON
 object — `supabaseUrl`, `supabaseAnonKey`, `apiBaseUrl`, `objectStorageType`,
-`storageFixedQuota`, `translationFixedQuota` — from `process.env` at request
+`storageFixedQuota` — from `process.env` at request
 time and serializes it as a JS payload. The client reads it through
 `getRuntimeConfig()` in `src/services/runtimeConfig.ts` (browser) or
 `getServerRuntimeConfig()` (server). This is the mechanism that makes the same
@@ -488,7 +488,6 @@ main.rs             -> entrypoint
 clip_url.rs         -> clipboard URL extraction
 dir_scanner.rs      -> recursive directory scan (used by library import)
 transfer_file.rs    -> chunked upload/download for big files
-discord_rpc.rs      -> Discord Rich Presence (desktop only)
 android/, macos/,
 windows/            -> per-platform glue
 ```

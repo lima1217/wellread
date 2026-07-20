@@ -15,14 +15,13 @@ describe('annotationToolbar helpers', () => {
     expect(ALL_ANNOTATION_TOOL_TYPES).toEqual(annotationToolButtons.map((b) => b.type));
   });
 
-  test('default toolbar is the eight non-share tools in canonical order', () => {
+  test('default toolbar is the seven non-share tools in canonical order', () => {
     expect(DEFAULT_ANNOTATION_TOOLBAR_ITEMS).toEqual([
       'copy',
       'highlight',
       'annotate',
       'search',
       'dictionary',
-      'translate',
       'tts',
       'proofread',
     ]);
@@ -49,7 +48,6 @@ describe('annotationToolbar helpers', () => {
       'annotate',
       'search',
       'dictionary',
-      'translate',
       'tts',
       'proofread',
       'share',

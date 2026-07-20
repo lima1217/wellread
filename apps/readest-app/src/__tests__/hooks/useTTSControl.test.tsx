@@ -58,8 +58,6 @@ const mockViewSettings = {
   ttsHighlightOptions: { style: 'highlight', color: '#ffff00' },
   isEink: false,
   ttsMediaMetadata: 'sentence',
-  translationEnabled: false,
-  ttsReadAloudText: 'source',
 };
 
 const mockBookData = {

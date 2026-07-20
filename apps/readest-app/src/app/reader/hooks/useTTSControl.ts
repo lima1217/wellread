@@ -538,29 +538,6 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
     return estimateTTSTime(progress, rate);
   }, [progress, viewSettings?.ttsRate]);
 
-  const getTTSTargetLang = useCallback((): string | null => {
-    const vs = getViewSettings(bookKey);
-    const ttsReadAloudText = vs?.ttsReadAloudText;
-    if (vs?.translationEnabled && ttsReadAloudText === 'translated') {
-      return vs?.translateTargetLang || getLocale();
-    } else if (vs?.translationEnabled && ttsReadAloudText === 'source') {
-      return bookData?.book?.primaryLanguage || '';
-    }
-    return null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    bookKey,
-    getBookData,
-    getViewSettings,
-    viewSettings?.translationEnabled,
-    viewSettings?.ttsReadAloudText,
-    viewSettings?.translateTargetLang,
-  ]);
-
-  useEffect(() => {
-    ttsControllerRef.current?.setTargetLang(getTTSTargetLang() || '');
-  }, [getTTSTargetLang]);
-
   // SSML preprocessing
   const transformCtx: TransformContext = useMemo(
     () => ({
@@ -807,7 +784,6 @@ export const useTTSControl = ({ bookKey, onRequestHidePanel }: UseTTSControlProp
           ttsController.setSentenceGap(viewSettings.ttsSentenceGap ?? DEFAULT_SENTENCE_GAP_SEC);
           ttsController.setParagraphGap(viewSettings.ttsParagraphGap ?? DEFAULT_PARAGRAPH_GAP_SEC);
           ttsController.speak(ssml, oneTime, () => handleStop(bookKey));
-          ttsController.setTargetLang(getTTSTargetLang() || '');
         } else {
           // Nothing to speak: roll back the optimistic playing state.
           setIsPlaying(false);
