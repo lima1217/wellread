@@ -20,9 +20,12 @@ import { saveSysSettings } from '@/helpers/settings';
 import useShortcuts from '@/hooks/useShortcuts';
 import AIAssistant from './AIAssistant';
 import NotebookHeader from './Header';
+import ChatHistoryView from '../sidebar/ChatHistoryView';
 
 const MIN_NOTEBOOK_WIDTH = 0.15;
 const MAX_NOTEBOOK_WIDTH = 0.45;
+
+type AssistantPane = 'chat' | 'history';
 
 const Notebook: React.FC = ({}) => {
   const _ = useTranslation();
@@ -41,6 +44,11 @@ const Notebook: React.FC = ({}) => {
 
   const isMobile = window.innerWidth < 640;
   const [isFullHeightInMobile, setIsFullHeightInMobile] = useState(isMobile);
+  const [pane, setPane] = useState<AssistantPane>('chat');
+
+  useEffect(() => {
+    setPane('chat');
+  }, [sideBarBookKey, isNotebookVisible]);
 
   const {
     panelRef: notebookRef,
@@ -214,12 +222,19 @@ const Notebook: React.FC = ({}) => {
           )}
           <NotebookHeader
             isPinned={isNotebookPinned}
+            pane={pane}
             handleClose={() => setNotebookVisible(false)}
             handleTogglePin={handleTogglePin}
+            onOpenHistory={() => setPane('history')}
+            onBackToChat={() => setPane('chat')}
           />
         </div>
         <div className='flex min-h-0 flex-1 flex-col'>
-          <AIAssistant key={activeSessionId ?? 'new'} bookKey={sideBarBookKey} />
+          {pane === 'history' ? (
+            <ChatHistoryView bookKey={sideBarBookKey} onSessionOpen={() => setPane('chat')} />
+          ) : (
+            <AIAssistant key={activeSessionId ?? 'new'} bookKey={sideBarBookKey} />
+          )}
         </div>
         <div
           className='flex-shrink-0'

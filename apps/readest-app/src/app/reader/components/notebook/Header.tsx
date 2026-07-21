@@ -1,23 +1,36 @@
 import clsx from 'clsx';
 import React from 'react';
 
+import { LuHistory } from 'react-icons/lu';
 import { MdArrowBackIosNew, MdOutlinePushPin, MdPushPin } from 'react-icons/md';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 
 const NotebookHeader: React.FC<{
   isPinned: boolean;
+  pane: 'chat' | 'history';
   handleClose: () => void;
   handleTogglePin: () => void;
-}> = ({ isPinned, handleClose, handleTogglePin }) => {
+  onOpenHistory: () => void;
+  onBackToChat: () => void;
+}> = ({ isPinned, pane, handleClose, handleTogglePin, onOpenHistory, onBackToChat }) => {
   const _ = useTranslation();
   const iconSize15 = useResponsiveSize(15);
+  const isHistory = pane === 'history';
+
   return (
     <div className='notebook-header relative flex h-11 items-center px-3' dir='ltr'>
       <div className='absolute inset-0 z-[-1] flex items-center justify-center'>
-        <div className='notebook-title text-sm font-medium'>{_('Reading Assistant')}</div>
+        <div
+          className={clsx(
+            'notebook-title text-sm font-medium',
+            isHistory && 'text-base-content/60',
+          )}
+        >
+          {isHistory ? _('Chat History') : _('Reading Assistant')}
+        </div>
       </div>
-      <div className='flex w-full items-center gap-x-4'>
+      <div className='flex w-full items-center gap-x-2'>
         <button
           title={isPinned ? _('Unpin Notebook') : _('Pin Notebook')}
           onClick={handleTogglePin}
@@ -35,6 +48,28 @@ const NotebookHeader: React.FC<{
         >
           <MdArrowBackIosNew />
         </button>
+        {isHistory ? (
+          <button
+            type='button'
+            title={_('Back to chat')}
+            aria-label={_('Back to chat')}
+            onClick={onBackToChat}
+            className='btn btn-ghost btn-sm h-7 min-h-7 gap-1 rounded-full px-2 text-xs'
+          >
+            ← {_('Chat')}
+          </button>
+        ) : (
+          <button
+            type='button'
+            title={_('Chat History')}
+            aria-label={_('Chat History')}
+            onClick={onOpenHistory}
+            className='btn btn-ghost btn-circle h-6 min-h-6 w-6'
+          >
+            <LuHistory size={iconSize15} />
+          </button>
+        )}
+        <div className='flex-1' />
       </div>
     </div>
   );

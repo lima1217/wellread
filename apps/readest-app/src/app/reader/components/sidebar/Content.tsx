@@ -5,14 +5,17 @@ import { BookDoc } from '@/libs/document';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { useBookDataStore } from '@/store/bookDataStore';
-import { useSettingsStore } from '@/store/settingsStore';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import 'overlayscrollbars/overlayscrollbars.css';
 
 import TOCView from './TOCView';
 import BooknoteView from './BooknoteView';
 import TabNavigation from './TabNavigation';
-import ChatHistoryView from './ChatHistoryView';
+
+const SIDEBAR_TABS = new Set(['toc', 'annotations', 'bookmarks']);
+
+const normalizeSideBarTab = (tab: string | undefined): string =>
+  tab && SIDEBAR_TABS.has(tab) ? tab : 'toc';
 
 const SidebarContent: React.FC<{
   bookDoc: BookDoc;
@@ -21,28 +24,26 @@ const SidebarContent: React.FC<{
   const { setHoveredBookKey } = useReaderStore();
   const { setSideBarVisible } = useSidebarStore();
   const { getConfig, setConfig } = useBookDataStore();
-  const { settings } = useSettingsStore();
   const config = getConfig(sideBarBookKey);
-  const [activeTab, setActiveTab] = useState(config?.viewSettings?.sideBarTab || 'toc');
+  const initialTab = normalizeSideBarTab(config?.viewSettings?.sideBarTab);
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [fade, setFade] = useState(false);
-  const [targetTab, setTargetTab] = useState(activeTab);
+  const [targetTab, setTargetTab] = useState(initialTab);
   const isMobile = window.innerWidth < 640 || window.innerHeight < 640;
-  const aiEnabled = settings?.modelConfig?.enabled ?? false;
 
   useEffect(() => {
     if (!sideBarBookKey) return;
     const config = getConfig(sideBarBookKey!)!;
-    setActiveTab(config.viewSettings!.sideBarTab!);
+    const tab = normalizeSideBarTab(config.viewSettings!.sideBarTab);
+    setActiveTab(tab);
+    setTargetTab(tab);
+    // Migrate persisted 'history' (removed; chat history lives in the right shell).
+    if (config.viewSettings!.sideBarTab !== tab) {
+      config.viewSettings!.sideBarTab = tab;
+      setConfig(sideBarBookKey, config);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sideBarBookKey]);
-
-  // reset to toc if history tab was active but AI is now disabled
-  useEffect(() => {
-    if ((activeTab === 'history' || targetTab === 'history') && !aiEnabled) {
-      setActiveTab('toc');
-      setTargetTab('toc');
-    }
-  }, [aiEnabled, activeTab, targetTab]);
 
   const handleTabChange = (tab: string) => {
     if (activeTab === tab) {
@@ -74,38 +75,31 @@ const SidebarContent: React.FC<{
           'font-sans text-base font-normal sm:text-sm',
         )}
       >
-        {targetTab === 'history' ? (
-          <ChatHistoryView bookKey={sideBarBookKey} />
-        ) : (
-          <OverlayScrollbarsComponent
-            className='min-h-0 flex-1'
-            options={{
-              scrollbars: { autoHide: 'scroll', clickScroll: true },
-              showNativeOverlaidScrollbars: false,
-            }}
-            defer
+        <OverlayScrollbarsComponent
+          className='min-h-0 flex-1'
+          options={{
+            scrollbars: { autoHide: 'scroll', clickScroll: true },
+            showNativeOverlaidScrollbars: false,
+          }}
+          defer
+        >
+          <div
+            className={clsx('scroll-container h-full transition-opacity duration-300 ease-in-out', {
+              'opacity-0': fade,
+              'opacity-100': !fade,
+            })}
           >
-            <div
-              className={clsx(
-                'scroll-container h-full transition-opacity duration-300 ease-in-out',
-                {
-                  'opacity-0': fade,
-                  'opacity-100': !fade,
-                },
-              )}
-            >
-              {targetTab === 'toc' && bookDoc.toc && (
-                <TOCView toc={bookDoc.toc} bookKey={sideBarBookKey} />
-              )}
-              {targetTab === 'annotations' && (
-                <BooknoteView type='annotation' toc={bookDoc.toc ?? []} bookKey={sideBarBookKey} />
-              )}
-              {targetTab === 'bookmarks' && (
-                <BooknoteView type='bookmark' toc={bookDoc.toc ?? []} bookKey={sideBarBookKey} />
-              )}
-            </div>
-          </OverlayScrollbarsComponent>
-        )}
+            {targetTab === 'toc' && bookDoc.toc && (
+              <TOCView toc={bookDoc.toc} bookKey={sideBarBookKey} />
+            )}
+            {targetTab === 'annotations' && (
+              <BooknoteView type='annotation' toc={bookDoc.toc ?? []} bookKey={sideBarBookKey} />
+            )}
+            {targetTab === 'bookmarks' && (
+              <BooknoteView type='bookmark' toc={bookDoc.toc ?? []} bookKey={sideBarBookKey} />
+            )}
+          </div>
+        </OverlayScrollbarsComponent>
       </div>
       <div
         className='flex-shrink-0'

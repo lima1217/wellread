@@ -7,7 +7,6 @@ import { LuMessageSquare, LuTrash2, LuPlus } from 'react-icons/lu';
 
 import { useTranslation } from '@/hooks/useTranslation';
 import { useBookDataStore } from '@/store/bookDataStore';
-import { useNotebookStore } from '@/store/notebookStore';
 import { useEnv } from '@/context/EnvContext';
 import {
   createEveSession,
@@ -20,13 +19,14 @@ import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
 
 interface ChatHistoryViewProps {
   bookKey: string;
+  /** Called after selecting or creating a session (return to chat pane). */
+  onSessionOpen: () => void;
 }
 
-const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({ bookKey }) => {
+const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({ bookKey, onSessionOpen }) => {
   const _ = useTranslation();
   const { appService } = useEnv();
   const { getBookData } = useBookDataStore();
-  const { setNotebookVisible, setNotebookActiveTab } = useNotebookStore();
   const setActiveSession = useReadingAssistantStore((s) => s.setActiveSession);
   const activeSessionId = useReadingAssistantStore((s) => s.activeSessionId);
   const ready = useEveConnectionStore((s) => s.ready);
@@ -66,10 +66,9 @@ const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({ bookKey }) => {
   const handleSelect = useCallback(
     (session: EveSessionMeta) => {
       setActiveSession(session.id, bookId);
-      setNotebookVisible(true);
-      setNotebookActiveTab('ai');
+      onSessionOpen();
     },
-    [bookId, setActiveSession, setNotebookVisible, setNotebookActiveTab],
+    [bookId, setActiveSession, onSessionOpen],
   );
 
   const handleNew = useCallback(async () => {
@@ -80,10 +79,9 @@ const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({ bookKey }) => {
       title: `Chat about ${bookTitle}`,
     });
     setActiveSession(session.id, bookId);
-    setNotebookVisible(true);
-    setNotebookActiveTab('ai');
+    onSessionOpen();
     await reload();
-  }, [bookId, bookTitle, reload, setActiveSession, setNotebookVisible, setNotebookActiveTab]);
+  }, [bookId, bookTitle, reload, setActiveSession, onSessionOpen]);
 
   const handleDelete = useCallback(
     async (e: React.MouseEvent, id: string) => {
