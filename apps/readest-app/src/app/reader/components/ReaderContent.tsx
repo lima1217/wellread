@@ -113,8 +113,11 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
     }
 
     let unlistenOnCloseWindow: Promise<UnlistenFn>;
-    if (isTauriAppPlatform()) {
-      unlistenOnCloseWindow = tauriHandleOnCloseWindow(handleCloseBooks);
+    if (appService?.hasWindow) {
+      unlistenOnCloseWindow = tauriHandleOnCloseWindow(handleCloseBooks).catch((error) => {
+        console.info('Failed to register close-window listener:', error);
+        return () => {};
+      });
     }
     window.addEventListener('beforeunload', handleCloseBooks);
     eventDispatcher.on('beforereload', handleCloseBooks);
@@ -128,7 +131,7 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
       unlistenOnCloseWindow?.then((fn) => fn());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookKeys]);
+  }, [bookKeys, appService?.hasWindow]);
 
   const saveBookConfig = async (bookKey: string) => {
     const config = getConfig(bookKey);
@@ -213,7 +216,9 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
       const openWithFiles = (await parseOpenWithFiles(appService)) || [];
       if (appService?.hasWindow) {
         if (openWithFiles.length > 0) {
-          tauriHandleOnCloseWindow(handleCloseBooks);
+          void tauriHandleOnCloseWindow(handleCloseBooks).catch((error) => {
+            console.info('Failed to register close-window listener:', error);
+          });
           return await tauriHandleClose();
         }
         const currentWindow = getCurrentWindow();
