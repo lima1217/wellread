@@ -110,10 +110,10 @@ export function extractSourcesFromChunkMarkdown(markdown: string, path?: string)
 
 export type ToolTraceEntry = { name: string };
 
-/** One-line collapsed summary for tool traces. */
+/** Always-visible T3 summary line for tool traces (expand shows params). */
 export function summarizeToolTrace(tools: ToolTraceEntry[]): string {
   const n = tools.length;
   if (n === 0) return '';
   // English key-as-content; UI may pass through useTranslation.
-  return `Searched ${n} places`;
+  return `Searched extract · ${n} ${n === 1 ? 'step' : 'steps'}`;
 }

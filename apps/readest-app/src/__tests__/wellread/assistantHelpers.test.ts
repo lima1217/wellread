@@ -119,9 +119,17 @@ Body text here.
 });
 
 describe('summarizeToolTrace', () => {
-  it('summarizes search-like tool calls', () => {
-    expect(summarizeToolTrace([{ name: 'grep' }, { name: 'grep' }, { name: 'read_file' }])).toMatch(
-      /3/,
+  it('returns an always-visible T3 summary line with step count', () => {
+    expect(summarizeToolTrace([{ name: 'grep' }, { name: 'grep' }, { name: 'read_file' }])).toBe(
+      'Searched extract · 3 steps',
     );
+  });
+
+  it('returns empty when there are no tools', () => {
+    expect(summarizeToolTrace([])).toBe('');
+  });
+
+  it('uses singular step for one tool call', () => {
+    expect(summarizeToolTrace([{ name: 'grep' }])).toBe('Searched extract · 1 step');
   });
 });
