@@ -55,7 +55,6 @@ const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterRes
   const [annotationQuickAction, setAnnotationQuickAction] = useState(
     viewSettings.annotationQuickAction,
   );
-  const [copyToNotebook, setCopyToNotebook] = useState(viewSettings.copyToNotebook);
   const [showToolbarCustomizer, setShowToolbarCustomizer] = useState(false);
   const [animated, setAnimated] = useState(viewSettings.animated);
   const [pageTurnStyle, setPageTurnStyle] = useState(viewSettings.pageTurnStyle || 'push');
@@ -103,7 +102,6 @@ const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterRes
       fullscreenClickArea: setFullscreenClickArea,
       disableDoubleClick: setIsDisableDoubleClick,
       enableAnnotationQuickActions: setEnableAnnotationQuickActions,
-      copyToNotebook: setCopyToNotebook,
     });
     saveViewSettings(
       envConfig,
@@ -276,11 +274,6 @@ const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterRes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enableAnnotationQuickActions]);
 
-  useEffect(() => {
-    saveViewSettings(envConfig, bookKey, 'copyToNotebook', copyToNotebook, false, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [copyToNotebook]);
-
   const toggleAutoCheckUpdates = () => {
     const newValue = !isAutoCheckUpdates;
     saveSysSettings(envConfig, 'autoCheckUpdates', newValue);
@@ -423,12 +416,6 @@ const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterRes
             disabled={!enableAnnotationQuickActions}
           />
         </SettingsRow>
-        <SettingsSwitchRow
-          label={_('Copy to Notebook')}
-          checked={copyToNotebook}
-          onChange={() => setCopyToNotebook(!copyToNotebook)}
-          data-setting-id='settings.control.copyToNotebook'
-        />
         <NavigationRow
           title={_('Customize Toolbar')}
           onClick={() => setShowToolbarCustomizer(true)}

@@ -8,7 +8,7 @@ beforeEach(() => {
     notebookWidth: '',
     isNotebookVisible: false,
     isNotebookPinned: false,
-    notebookActiveTab: 'notes',
+    notebookActiveTab: 'ai',
     notebookNewAnnotation: null,
     notebookNewHighlightId: null,
     notebookEditAnnotation: null,
@@ -92,20 +92,22 @@ describe('notebookStore', () => {
   });
 
   // ── Active tab ─────────────────────────────────────────────────
+  // Persisted for migration; UI is single-pane Reading Assistant (always AI).
   describe('setNotebookActiveTab', () => {
     test('sets active tab to ai', () => {
+      useNotebookStore.getState().setNotebookActiveTab('notes');
       useNotebookStore.getState().setNotebookActiveTab('ai');
       expect(useNotebookStore.getState().notebookActiveTab).toBe('ai');
     });
 
-    test('sets active tab to notes', () => {
+    test('sets active tab to notes (persisted value only; UI no longer exposes notes)', () => {
       useNotebookStore.getState().setNotebookActiveTab('ai');
       useNotebookStore.getState().setNotebookActiveTab('notes');
       expect(useNotebookStore.getState().notebookActiveTab).toBe('notes');
     });
 
-    test('defaults to notes', () => {
-      expect(useNotebookStore.getState().notebookActiveTab).toBe('notes');
+    test('defaults to ai (Reading Assistant single pane)', () => {
+      expect(useNotebookStore.getState().notebookActiveTab).toBe('ai');
     });
   });
 
@@ -229,7 +231,7 @@ describe('notebookStore', () => {
       expect(state.notebookWidth).toBe('');
       expect(state.isNotebookVisible).toBe(false);
       expect(state.isNotebookPinned).toBe(false);
-      expect(state.notebookActiveTab).toBe('notes');
+      expect(state.notebookActiveTab).toBe('ai');
       expect(state.notebookNewAnnotation).toBeNull();
       expect(state.notebookNewHighlightId).toBeNull();
       expect(state.notebookEditAnnotation).toBeNull();

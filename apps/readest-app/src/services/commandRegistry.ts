@@ -4,7 +4,7 @@ import { RiFontSize, RiDashboardLine, RiTranslate, RiShareLine } from 'react-ico
 import { VscSymbolColor } from 'react-icons/vsc';
 import { LiaHandPointerSolid } from 'react-icons/lia';
 import { IoAccessibilityOutline } from 'react-icons/io5';
-import { PiRobot, PiSpeakerHigh, PiSun, PiMoon } from 'react-icons/pi';
+import { PiRobot, PiSun, PiMoon } from 'react-icons/pi';
 import { TbSunMoon } from 'react-icons/tb';
 import { MdRefresh } from 'react-icons/md';
 import { IconType } from 'react-icons';
@@ -151,7 +151,6 @@ const panelIcons: Record<SettingsPanelType, IconType> = {
   Layout: RiDashboardLine,
   Theme: VscSymbolColor,
   Control: LiaHandPointerSolid,
-  TTS: PiSpeakerHigh,
   Language: RiTranslate,
   AI: PiRobot,
   Integrations: RiShareLine,
@@ -373,24 +372,6 @@ const colorPanelItems = [
     section: 'Highlight',
   },
   {
-    id: 'settings.tts.ttsHighlightStyle',
-    labelKey: _('TTS Highlighting'),
-    keywords: ['tts', 'highlight', 'style', 'speech', 'read', 'aloud'],
-    section: 'Highlight',
-  },
-  {
-    id: 'settings.tts.mediaMetadata',
-    labelKey: _('TTS Media Info Update Frequency'),
-    keywords: ['tts', 'media', 'metadata', 'bluetooth', 'notification', 'chapter', 'paragraph'],
-    section: 'TTS',
-  },
-  {
-    id: 'settings.tts.playerStyle',
-    labelKey: _('TTS Player Style'),
-    keywords: ['tts', 'player', 'mini', 'style', 'cover', 'full', 'minimal'],
-    section: 'TTS',
-  },
-  {
     id: 'settings.color.readingRuler',
     labelKey: _('Reading Ruler'),
     keywords: ['reading', 'ruler', 'line', 'guide', 'focus'],
@@ -467,12 +448,6 @@ const controlPanelItems = [
     section: 'Annotation Tools',
   },
   {
-    id: 'settings.control.copyToNotebook',
-    labelKey: _('Copy to Notebook'),
-    keywords: ['copy', 'notebook', 'annotation', 'excerpt'],
-    section: 'Annotation Tools',
-  },
-  {
     id: 'settings.control.pagingAnimation',
     labelKey: _('Paging Animation'),
     keywords: ['paging', 'animation', 'transition', 'effect'],
@@ -526,11 +501,11 @@ const languagePanelItems = [
   },
 ];
 
-// ai panel items (Reading Assistant / ModelConfig)
+// ai panel items (ModelConfig)
 const aiPanelItems = [
   {
     id: 'settings.ai.enableAssistant',
-    labelKey: _('Enable Reading Assistant'),
+    labelKey: _('Enable AI'),
     keywords: ['ai', 'assistant', 'enable', 'reading', 'llm', 'model'],
     section: 'AI',
   },
@@ -550,6 +525,12 @@ const aiPanelItems = [
     id: 'settings.ai.baseURL',
     labelKey: _('Base URL'),
     keywords: ['base', 'url', 'endpoint', 'openai', 'compatible'],
+    section: 'AI',
+  },
+  {
+    id: 'settings.ai.apiMode',
+    labelKey: _('API Mode'),
+    keywords: ['api', 'mode', 'chat', 'completions', 'responses', 'openai'],
     section: 'AI',
   },
 ];
@@ -608,7 +589,7 @@ const actionItems = [
   },
   {
     id: 'action.about',
-    labelKey: _('About Readest'),
+    labelKey: _('About Wellread'),
     keywords: ['about', 'readest', 'version', 'info'],
   },
 ];
@@ -625,7 +606,7 @@ export interface CommandRegistryOptions {
   toggleOpenLastBooks: () => void;
   showAbout: () => void;
   isDesktop: boolean;
-  // TODO: add reader-specific actions when reader is open (tts, bookmark, etc.)
+  // TODO: add reader-specific actions when reader is open (bookmark, etc.)
 }
 
 export const buildCommandRegistry = (options: CommandRegistryOptions): CommandItem[] => {

@@ -10,7 +10,6 @@ import {
   ParagraphModeConfig,
   ReadingRulerColor,
   ScreenConfig,
-  TTSConfig,
   ViewConfig,
   ViewSettings,
   ViewSettingsConfig,
@@ -35,11 +34,6 @@ type UserQuota = {
   pro: number;
   purchase: number;
 };
-
-// Keep in sync with BufferedTTSClient / TTSController defaults — imported
-// inline here so constants.ts does not pull in the TTS module graph at load time.
-const DEFAULT_SENTENCE_GAP_SEC = 0.15;
-const DEFAULT_PARAGRAPH_GAP_SEC = 0.3;
 
 export const DATA_SUBDIR = 'Readest';
 export const LOCAL_BOOKS_SUBDIR = `${DATA_SUBDIR}/Books`;
@@ -171,7 +165,7 @@ export const DEFAULT_READSETTINGS: ReadSettings = {
   isSideBarPinned: true,
   notebookWidth: '25%',
   isNotebookPinned: false,
-  notebookActiveTab: 'notes',
+  notebookActiveTab: 'ai',
   autohideCursor: true,
   wordLensAutoDownload: true,
 
@@ -185,7 +179,6 @@ export const DEFAULT_READSETTINGS: ReadSettings = {
   customHighlightColors: HIGHLIGHT_COLOR_HEX,
   userHighlightColors: [],
   defaultHighlightLabels: {},
-  customTtsHighlightColors: [],
 };
 
 export const DEFAULT_MOBILE_READSETTINGS: Partial<ReadSettings> = {
@@ -335,18 +328,6 @@ export const DEFAULT_VIEW_CONFIG: ViewConfig = {
   readingRulerPosition: 33,
   readingRulerOpacity: 0.5,
   readingRulerColor: 'transparent',
-};
-
-export const DEFAULT_TTS_CONFIG: TTSConfig = {
-  ttsRate: 1.3,
-  ttsSentenceGap: DEFAULT_SENTENCE_GAP_SEC,
-  ttsParagraphGap: DEFAULT_PARAGRAPH_GAP_SEC,
-  ttsVoice: '',
-  ttsLocation: '',
-  ttsHighlightOptions: { style: 'highlight', color: '#808080' },
-  ttsHighlightGranularity: 'word',
-  ttsMediaMetadata: 'sentence',
-  ttsPlayerStyle: 'full',
 };
 
 export const DEFAULT_NOTE_EXPORT_CONFIG: NoteExportConfig = {

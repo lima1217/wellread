@@ -39,7 +39,6 @@ import {
   DEFAULT_FIXED_LAYOUT_VIEW_SETTINGS,
   DEFAULT_EINK_VIEW_SETTINGS,
   DEFAULT_VIEW_CONFIG,
-  DEFAULT_TTS_CONFIG,
   DEFAULT_NOTE_EXPORT_CONFIG,
   DEFAULT_ANNOTATOR_CONFIG,
   DEFAULT_SCREEN_CONFIG,
@@ -318,7 +317,7 @@ describe('services/constants', () => {
       expect(typeof DEFAULT_READSETTINGS.isSideBarPinned).toBe('boolean');
       expect(typeof DEFAULT_READSETTINGS.notebookWidth).toBe('string');
       expect(typeof DEFAULT_READSETTINGS.isNotebookPinned).toBe('boolean');
-      expect(typeof DEFAULT_READSETTINGS.notebookActiveTab).toBe('string');
+      expect(DEFAULT_READSETTINGS.notebookActiveTab).toBe('ai');
     });
 
     it('has cursor settings', () => {
@@ -330,7 +329,6 @@ describe('services/constants', () => {
       expect(typeof DEFAULT_READSETTINGS.highlightStyles).toBe('object');
       expect(typeof DEFAULT_READSETTINGS.customHighlightColors).toBe('object');
       expect(Array.isArray(DEFAULT_READSETTINGS.userHighlightColors)).toBe(true);
-      expect(Array.isArray(DEFAULT_READSETTINGS.customTtsHighlightColors)).toBe(true);
     });
 
     it('has custom themes as an array', () => {
@@ -590,28 +588,6 @@ describe('services/constants', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // TTS config
-  // ---------------------------------------------------------------------------
-  describe('DEFAULT_TTS_CONFIG', () => {
-    it('has expected properties', () => {
-      expect(typeof DEFAULT_TTS_CONFIG).toBe('object');
-      expect(typeof DEFAULT_TTS_CONFIG.ttsRate).toBe('number');
-      expect(DEFAULT_TTS_CONFIG.ttsRate).toBeGreaterThan(0);
-      expect(typeof DEFAULT_TTS_CONFIG.ttsSentenceGap).toBe('number');
-      expect(DEFAULT_TTS_CONFIG.ttsSentenceGap).toBeGreaterThan(0);
-      expect(typeof DEFAULT_TTS_CONFIG.ttsVoice).toBe('string');
-      expect(typeof DEFAULT_TTS_CONFIG.ttsLocation).toBe('string');
-      expect(typeof DEFAULT_TTS_CONFIG.ttsMediaMetadata).toBe('string');
-    });
-
-    it('has ttsHighlightOptions with style and color', () => {
-      expect(typeof DEFAULT_TTS_CONFIG.ttsHighlightOptions).toBe('object');
-      expect(typeof DEFAULT_TTS_CONFIG.ttsHighlightOptions.style).toBe('string');
-      expect(typeof DEFAULT_TTS_CONFIG.ttsHighlightOptions.color).toBe('string');
-    });
-  });
-
-  // ---------------------------------------------------------------------------
   // Note export config
   // ---------------------------------------------------------------------------
   describe('DEFAULT_NOTE_EXPORT_CONFIG', () => {
@@ -648,7 +624,7 @@ describe('services/constants', () => {
       expect(DEFAULT_ANNOTATOR_CONFIG.noteExportConfig).toBe(DEFAULT_NOTE_EXPORT_CONFIG);
     });
 
-    it('annotationToolbarItems defaults to the eight non-share tools', () => {
+    it('annotationToolbarItems defaults to the seven non-share tools', () => {
       expect(DEFAULT_ANNOTATOR_CONFIG.annotationToolbarItems).toEqual(
         DEFAULT_ANNOTATION_TOOLBAR_ITEMS,
       );

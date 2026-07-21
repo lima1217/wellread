@@ -59,13 +59,8 @@ export function useOpenAIInNotebook() {
     [setNotebookVisible, setNotebookActiveTab, setActiveSession, setDraft],
   );
 
-  const closeAIInNotebook = useCallback(() => {
-    setNotebookActiveTab('notes');
-  }, [setNotebookActiveTab]);
-
   return {
     openAIInNotebook,
-    closeAIInNotebook,
   };
 }
 

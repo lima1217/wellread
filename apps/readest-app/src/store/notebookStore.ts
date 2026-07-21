@@ -35,7 +35,7 @@ export const useNotebookStore = create<NotebookState>((set, get) => ({
   notebookWidth: '',
   isNotebookVisible: false,
   isNotebookPinned: false,
-  notebookActiveTab: 'notes',
+  notebookActiveTab: 'ai',
   notebookNewAnnotation: null,
   notebookNewHighlightId: null,
   notebookEditAnnotation: null,

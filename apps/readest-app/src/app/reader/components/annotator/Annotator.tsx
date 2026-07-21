@@ -10,10 +10,9 @@ import { NativeTouchEventType } from '@/types/system';
 import { getLocale, getOSPlatform, makeSafeFilename, uniqueId } from '@/utils/misc';
 import { useThemeStore } from '@/store/themeStore';
 import { useBookDataStore } from '@/store/bookDataStore';
-import { getBookProgress, useBookProgress } from '@/store/readerProgressStore';
+import { useBookProgress } from '@/store/readerProgressStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useReaderStore } from '@/store/readerStore';
-import { useNotebookStore } from '@/store/notebookStore';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { useCustomDictionaryStore } from '@/store/customDictionaryStore';
 import { isSystemDictionaryEnabled } from '@/services/dictionaries/registry';
@@ -56,7 +55,6 @@ import { AnnotationToolType } from '@/types/annotator';
 import { TransformContext } from '@/services/transformers/types';
 import { transformContent } from '@/services/transformService';
 import {
-  buildTTSSentenceHighlight,
   decideAnnotationDraw,
   getHighlightColorHex,
   mergeRestyledAnnotation,
@@ -108,8 +106,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
   const getView = useReaderStore((s) => s.getView);
   const getViewsById = useReaderStore((s) => s.getViewsById);
   const getViewSettings = useReaderStore((s) => s.getViewSettings);
-  const { setNotebookVisible, setNotebookNewAnnotation, setNotebookNewHighlightId } =
-    useNotebookStore();
   const { clearBooknotesNav } = useSidebarStore();
   const { loadCustomDictionaries } = useCustomDictionaryStore();
   const { listenToNativeTouchEvents } = useDeviceControlStore();
@@ -692,12 +688,10 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     eventDispatcher.on('export-annotations', handleExportMarkdown);
     eventDispatcher.on('clear-annotations', handleClearAnnotations);
     eventDispatcher.on('import-annotations', handleImportAnnotations);
-    eventDispatcher.on('create-tts-highlight', handleCreateTTSHighlight);
     return () => {
       eventDispatcher.off('export-annotations', handleExportMarkdown);
       eventDispatcher.off('clear-annotations', handleClearAnnotations);
       eventDispatcher.off('import-annotations', handleImportAnnotations);
-      eventDispatcher.off('create-tts-highlight', handleCreateTTSHighlight);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -876,9 +870,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
         case 'ask':
           handleAskAssistant();
           break;
-        case 'tts':
-          handleSpeakText(true);
-          break;
         case 'share':
           handleShare();
           break;
@@ -1031,46 +1022,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     if (dismissPopup) {
       handleDismissPopupAndSelection();
     }
-
-    if (!viewSettings?.copyToNotebook) return;
-
-    eventDispatcher.dispatch('toast', {
-      type: 'info',
-      message: _('Copied to notebook'),
-      className: 'whitespace-nowrap',
-      timeout: 2000,
-    });
-
-    const { booknotes: annotations = [] } = config;
-    const cfi = view?.getCFI(selection.index, selection.range);
-    if (!cfi) return;
-    const annotation: BookNote = {
-      id: uniqueId(),
-      type: 'excerpt',
-      cfi,
-      note: '',
-      text: selection.text,
-      page: selection.page,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    const existingIndex = annotations.findIndex(
-      (annotation) =>
-        annotation.cfi === cfi && annotation.type === 'excerpt' && !annotation.deletedAt,
-    );
-    if (existingIndex !== -1) {
-      annotations[existingIndex] = annotation;
-    } else {
-      annotations.push(annotation);
-    }
-    const updatedConfig = updateBooknotes(bookKey, annotations);
-    if (updatedConfig) {
-      saveConfig(envConfig, bookKey, updatedConfig, settings);
-    }
-    if (!appService?.isMobile) {
-      setNotebookVisible(true);
-    }
   };
 
   const handleShare = () => {
@@ -1160,29 +1111,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     return created;
   };
 
-  const handleCreateTTSHighlight = (event: CustomEvent) => {
-    const detail = event.detail as { bookKey: string; cfi: string; text: string } | undefined;
-    if (!detail || detail.bookKey !== bookKey) return;
-    const { settings } = useSettingsStore.getState();
-    const style = settings.globalReadSettings.highlightStyle;
-    const color = settings.globalReadSettings.highlightStyles[style];
-    const { booknotes: annotations = [] } = getConfig(bookKey)!;
-    const page = getBookProgress(bookKey)?.page;
-    const annotation = buildTTSSentenceHighlight(
-      annotations,
-      { cfi: detail.cfi, text: detail.text, style, color, page },
-      Date.now(),
-    );
-    if (!annotation) return;
-    annotations.push(annotation);
-    const updatedConfig = updateBooknotes(bookKey, annotations);
-    if (updatedConfig) {
-      saveConfig(envConfig, bookKey, updatedConfig, settings);
-    }
-    const views = getViewsById(bookKey.split('-')[0]!);
-    views.forEach((view) => view?.addAnnotation(annotation));
-  };
-
   /**
    * Toggle the `global` flag on the annotation currently anchored at
    * `selection.cfi`. When enabling, fan out overlays for every other
@@ -1222,15 +1150,10 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
 
   const handleAnnotate = () => {
     if (!selection || !selection.text) return;
-    const { sectionHref: href } = progress;
-    selection.href = href;
-    const created = handleHighlight(true);
-    setNotebookVisible(true);
-    setNotebookNewAnnotation(selection);
-    // Remember the eagerly-created highlight so the notebook can remove it if the
-    // note is never saved. A restyle of an existing highlight returns null — that
-    // record predates this flow and must survive a cancel (#4791).
-    setNotebookNewHighlightId(created?.id ?? null);
+    // Create/update the highlight only. The right-hand Reading Assistant pane
+    // no longer hosts a notes editor (SPEC AC5.3); note text stays editable
+    // from the left annotations list.
+    handleHighlight(true);
     handleDismissPopup();
   };
 
@@ -1287,23 +1210,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     handleDismissPopupAndSelection();
   };
 
-  const handleSpeakText = async (oneTime = false) => {
-    if (!selection || !selection.text) return;
-    setShowAnnotPopup(false);
-    setEditingAnnotation(null);
-    eventDispatcher.dispatch('tts-speak', {
-      bookKey,
-      oneTime,
-      // Clone so clearing the live selection below can't disturb the range
-      // TTS uses to choose where to start.
-      range: selection.range.cloneRange(),
-      index: selection.index,
-    });
-    // The word was only selected to pick where to start reading; drop the
-    // selection so its highlight isn't left behind once TTS begins.
-    view?.deselect();
-  };
-
   const handleProofread = () => {
     // With no active selection the shortcut (Ctrl/Cmd+P) has nothing to turn
     // into a rule, so reuse it to open the replacement-rules manager instead.
@@ -1348,9 +1254,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
       },
       onDictionarySelection: () => {
         handleDictionary();
-      },
-      onReadAloudSelection: () => {
-        handleSpeakText();
       },
       onProofreadSelection: () => {
         handleProofread();
@@ -1655,8 +1558,6 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
         return { tooltipText: _(label), Icon, onClick: handleDictionary };
       case 'ask':
         return { tooltipText: _(label), Icon, onClick: handleAskAssistant };
-      case 'tts':
-        return { tooltipText: _(label), Icon, onClick: handleSpeakText };
       case 'proofread':
         return {
           tooltipText: _(label),
