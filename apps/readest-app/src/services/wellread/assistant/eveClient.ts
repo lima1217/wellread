@@ -161,18 +161,23 @@ export async function* streamEveTurn(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let nl = buffer.indexOf('\n');
-    while (nl >= 0) {
-      const line = buffer.slice(0, nl).trim();
-      buffer = buffer.slice(nl + 1);
-      if (line) yield JSON.parse(line) as EveStreamEvent;
-      nl = buffer.indexOf('\n');
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let nl = buffer.indexOf('\n');
+      while (nl >= 0) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (line) yield JSON.parse(line) as EveStreamEvent;
+        nl = buffer.indexOf('\n');
+      }
     }
+    const tail = buffer.trim();
+    if (tail) yield JSON.parse(tail) as EveStreamEvent;
+  } finally {
+    // Consumer may break/throw on error events before the stream ends.
+    await reader.cancel().catch(() => {});
   }
-  const tail = buffer.trim();
-  if (tail) yield JSON.parse(tail) as EveStreamEvent;
 }

@@ -542,11 +542,12 @@ const ReadingAssistantChat = ({ bookId, bookTitle }: { bookId: string; bookTitle
             )}
             value={agent.composer}
             onChange={(e) => agent.setComposer(e.target.value)}
-            disabled={busy}
             rows={2}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
+                // Busy: keep typing (soft keyboard stays open); only block submit.
+                if (busy) return;
                 handleSend();
               }
             }}
@@ -685,6 +686,8 @@ const AIAssistant = ({ bookKey }: AIAssistantProps) => {
   const { getBookData } = useBookDataStore();
   const bookData = getBookData(bookKey);
   const ready = useEveConnectionStore((s) => s.ready);
+  // Saving a key reloads the sidecar and refreshes this store; re-check keychain then.
+  const info = useEveConnectionStore((s) => s.info);
   const [hasKey, setHasKey] = useState(false);
 
   const modelConfig = settings?.modelConfig;
@@ -704,7 +707,7 @@ const AIAssistant = ({ bookKey }: AIAssistantProps) => {
     return () => {
       cancelled = true;
     };
-  }, [appService, activeProfileId]);
+  }, [appService, activeProfileId, ready, info]);
 
   const available = isReadingAssistantAvailable({
     modelEnabled: modelConfig?.enabled ?? false,
