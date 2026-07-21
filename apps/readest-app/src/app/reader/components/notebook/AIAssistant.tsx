@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronDownIcon, ChevronRightIcon, Loader2Icon } from 'lucide-react';
+import { ChevronDownIcon, ChevronRightIcon, Loader2Icon, XIcon } from 'lucide-react';
 
 import { useTranslation } from '@/hooks/useTranslation';
 import { useBookDataStore } from '@/store/bookDataStore';
@@ -16,8 +16,15 @@ import {
   summarizeToolTrace,
 } from '@/services/wellread/assistant/helpers';
 import { useEveAgent } from '@/services/wellread/assistant/useEveAgent';
-import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
-import type { EveSource, EveToolTrace } from '@/services/wellread/assistant/eveClient';
+import {
+  useReadingAssistantStore,
+  type PendingQuote,
+} from '@/services/wellread/assistant/readingAssistantStore';
+import type {
+  EveMessageQuote,
+  EveSource,
+  EveToolTrace,
+} from '@/services/wellread/assistant/eveClient';
 
 interface AIAssistantProps {
   bookKey: string;
@@ -90,6 +97,71 @@ function SourcesList({
   );
 }
 
+function QuoteStack({ quotes }: { quotes: EveMessageQuote[] }) {
+  if (!quotes.length) return null;
+  return (
+    <div className='border-base-300/60 mb-1.5 space-y-1 border-b pb-1.5'>
+      {quotes.map((q, i) => (
+        <div
+          key={`${q.text}-${i}`}
+          className='border-base-content/30 text-base-content/60 line-clamp-2 border-s-2 ps-1.5 text-[11px]'
+        >
+          {q.text}
+          {q.chapterTitle?.trim() ? (
+            <span className='text-base-content/40'> — 《{q.chapterTitle.trim()}》</span>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PendingQuoteBar({
+  quotes,
+  onRemove,
+  onClear,
+}: {
+  quotes: PendingQuote[];
+  onRemove: (id: string) => void;
+  onClear: () => void;
+}) {
+  const _ = useTranslation();
+  if (!quotes.length) return null;
+  return (
+    <div className='bg-base-200/70 border-base-300/50 eink-bordered flex shrink-0 flex-col gap-1.5 border-b px-2.5 py-2'>
+      <div className='text-base-content/50 flex items-center justify-between text-[11px]'>
+        <span>
+          {_('Pending quotes')} ({quotes.length})
+        </span>
+        <button type='button' className='hover:text-base-content underline' onClick={onClear}>
+          {_('Clear all')}
+        </button>
+      </div>
+      {quotes.map((q) => (
+        <div key={q.id} className='flex items-start gap-2 text-xs leading-snug'>
+          <span className='text-base-content/40 shrink-0' aria-hidden>
+            ❝
+          </span>
+          <span className='line-clamp-2 min-w-0 flex-1'>
+            {q.text}
+            {q.chapterTitle ? (
+              <span className='text-base-content/40'> — 《{q.chapterTitle}》</span>
+            ) : null}
+          </span>
+          <button
+            type='button'
+            className='text-base-content/40 hover:text-base-content shrink-0 p-0.5'
+            aria-label={_('Remove quote')}
+            onClick={() => onRemove(q.id)}
+          >
+            <XIcon size={14} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const ReadingAssistantChat = ({
   bookKey,
   bookId,
@@ -103,9 +175,11 @@ const ReadingAssistantChat = ({
   const { getView } = useReaderStore();
   const activeSessionId = useReadingAssistantStore((s) => s.activeSessionId);
   const activeBookId = useReadingAssistantStore((s) => s.activeBookId);
-  const draft = useReadingAssistantStore((s) => s.draft);
+  const pendingQuotes = useReadingAssistantStore((s) => s.pendingQuotes);
   const setActiveSession = useReadingAssistantStore((s) => s.setActiveSession);
-  const clearDraft = useReadingAssistantStore((s) => s.clearDraft);
+  const removePendingQuote = useReadingAssistantStore((s) => s.removePendingQuote);
+  const clearPendingQuotes = useReadingAssistantStore((s) => s.clearPendingQuotes);
+  const restorePendingQuotes = useReadingAssistantStore((s) => s.restorePendingQuotes);
 
   const sessionId = activeBookId === bookId ? activeSessionId : null;
 
@@ -113,8 +187,6 @@ const ReadingAssistantChat = ({
     bookId,
     bookTitle,
     sessionId,
-    draft,
-    onDraftConsumed: clearDraft,
   });
 
   useEffect(() => {
@@ -122,6 +194,14 @@ const ReadingAssistantChat = ({
       setActiveSession(agent.sessionId, bookId);
     }
   }, [agent.sessionId, activeSessionId, activeBookId, bookId, setActiveSession]);
+
+  // Book switch while quotes remain from another book (panel may keep store alive).
+  useEffect(() => {
+    const state = useReadingAssistantStore.getState();
+    if (state.pendingQuotes.length > 0 && state.activeBookId && state.activeBookId !== bookId) {
+      state.clearPendingQuotes();
+    }
+  }, [bookId]);
 
   const onSourceClick = useCallback(
     (source: EveSource) => {
@@ -131,9 +211,25 @@ const ReadingAssistantChat = ({
   );
 
   const busy = agent.status === 'submitted' || agent.status === 'streaming';
+  const canSend = Boolean(agent.composer.trim()) && !busy;
+
+  const handleSend = useCallback(() => {
+    if (!agent.composer.trim() || busy) return;
+    const quotes = useReadingAssistantStore.getState().pendingQuotes;
+    clearPendingQuotes();
+    void agent.send({
+      quotes,
+      onSendFailed: restorePendingQuotes,
+    });
+  }, [agent, busy, clearPendingQuotes, restorePendingQuotes]);
 
   return (
     <div className='flex h-full min-h-0 flex-col'>
+      <PendingQuoteBar
+        quotes={pendingQuotes}
+        onRemove={removePendingQuote}
+        onClear={clearPendingQuotes}
+      />
       <div className='min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3'>
         {agent.messages.length === 0 ? (
           <p className='text-base-content/60 text-sm'>
@@ -151,6 +247,7 @@ const ReadingAssistantChat = ({
                 : 'mr-2 rounded-lg px-3 py-2 text-sm whitespace-pre-wrap'
             }
           >
+            {msg.role === 'user' && msg.quotes?.length ? <QuoteStack quotes={msg.quotes} /> : null}
             <div>{msg.content}</div>
             {msg.role === 'assistant' && msg.tools?.length ? <ToolTrace tools={msg.tools} /> : null}
             {msg.role === 'assistant' && msg.sources?.length ? (
@@ -164,7 +261,7 @@ const ReadingAssistantChat = ({
         className='border-base-300/50 flex shrink-0 gap-2 border-t p-2'
         onSubmit={(e) => {
           e.preventDefault();
-          void agent.send();
+          handleSend();
         }}
       >
         <textarea
@@ -176,7 +273,7 @@ const ReadingAssistantChat = ({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
-              void agent.send();
+              handleSend();
             }
           }}
         />
@@ -186,11 +283,7 @@ const ReadingAssistantChat = ({
               {_('Stop')}
             </button>
           ) : (
-            <button
-              type='submit'
-              className='btn btn-contrast btn-sm'
-              disabled={!agent.composer.trim()}
-            >
+            <button type='submit' className='btn btn-contrast btn-sm' disabled={!canSend}>
               {_('Send')}
             </button>
           )}

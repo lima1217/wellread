@@ -87,4 +87,73 @@ describe('useEveAgent', () => {
     expect(createEveSession).toHaveBeenCalledTimes(1);
     expect(result.current.sessionId).toBe('ses_new');
   });
+
+  it('wires Pending Quotes into the turn text and skips restore after user commit', async () => {
+    getEveSession.mockResolvedValue({
+      id: 'ses_existing',
+      bookId: 'book-1',
+      title: 'Chat',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [],
+    });
+    streamEveTurn.mockImplementation(async function* () {
+      yield {
+        type: 'message.user' as const,
+        id: 'u1',
+        content: '> quoted\n\nWhy?',
+      };
+      yield { type: 'error' as const, message: 'boom' };
+    });
+    const onSendFailed = vi.fn();
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.sessionId).toBe('ses_existing');
+    });
+
+    await act(async () => {
+      result.current.setComposer('Why?');
+    });
+    await act(async () => {
+      await result.current.send({
+        quotes: [{ id: 'q1', text: 'quoted', chapterTitle: null }],
+        onSendFailed,
+      });
+    });
+
+    expect(streamEveTurn).toHaveBeenCalledWith(
+      'ses_existing',
+      '> quoted\n\nWhy?',
+      expect.any(AbortSignal),
+    );
+    expect(result.current.messages[0]).toMatchObject({
+      role: 'user',
+      content: 'Why?',
+      quotes: [{ text: 'quoted', chapterTitle: null }],
+    });
+    expect(onSendFailed).not.toHaveBeenCalled();
+  });
+
+  it('restores Pending Quotes when session create fails before commit', async () => {
+    createEveSession.mockRejectedValue(new Error('offline'));
+    const onSendFailed = vi.fn();
+    const quotes = [{ id: 'q1', text: 'quoted', chapterTitle: null }];
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: null }),
+    );
+
+    await act(async () => {
+      result.current.setComposer('Why?');
+    });
+    await act(async () => {
+      await result.current.send({ quotes, onSendFailed });
+    });
+
+    expect(onSendFailed).toHaveBeenCalledWith(quotes);
+    expect(streamEveTurn).not.toHaveBeenCalled();
+  });
 });

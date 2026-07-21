@@ -40,10 +40,14 @@ export { syncEveSidecarApiKey } from './syncEveSidecarApiKey';
 export { useEveConnectionStore } from './eveConnectionStore';
 export {
   isReadingAssistantAvailable,
-  formatAskAboutDraft,
+  formatPendingQuotesForTurn,
   buildReadingAssistantSystemPrompt,
   extractSourcesFromChunkMarkdown,
   summarizeToolTrace,
 } from './assistant/helpers';
-export { useReadingAssistantStore } from './assistant/readingAssistantStore';
+export {
+  useReadingAssistantStore,
+  type PendingQuote,
+  type PendingQuoteInput,
+} from './assistant/readingAssistantStore';
 export { useEveAgent } from './assistant/useEveAgent';

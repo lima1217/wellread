@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildReadingAssistantSystemPrompt,
   extractSourcesFromChunkMarkdown,
-  formatAskAboutDraft,
+  formatPendingQuotesForTurn,
   isReadingAssistantAvailable,
   summarizeToolTrace,
 } from '@/services/wellread/assistant/helpers';
@@ -52,22 +52,23 @@ describe('isReadingAssistantAvailable', () => {
   });
 });
 
-describe('formatAskAboutDraft', () => {
-  it('prefill visible quote block plus empty follow-up prompt', () => {
-    const draft = formatAskAboutDraft({
-      text: ' selected line ',
-      chapterTitle: 'Chapter 1',
-    });
-    expect(draft).toContain('> selected line');
-    expect(draft).toContain('Chapter 1');
-    expect(draft).toMatch(/Please answer based on the selection above:\s*$/);
-    expect(draft).not.toMatch(/为什么|解释|总结/);
+describe('formatPendingQuotesForTurn', () => {
+  it('joins quote blockquotes with the user question for the model wire', () => {
+    const wire = formatPendingQuotesForTurn(
+      [{ text: ' selected line ', chapterTitle: 'Chapter 1' }, { text: 'second' }],
+      ' What does this mean? ',
+    );
+    expect(wire).toBe(
+      ['> selected line', '> — 《Chapter 1》', '', '> second', '', 'What does this mean?'].join(
+        '\n',
+      ),
+    );
   });
 
-  it('omits chapter line when title missing', () => {
-    const draft = formatAskAboutDraft({ text: 'hello' });
-    expect(draft).toContain('> hello');
-    expect(draft).not.toContain('·');
+  it('omits chapter line and empty quotes', () => {
+    expect(formatPendingQuotesForTurn([{ text: 'hello' }, { text: '  ' }], 'ask')).toBe(
+      ['> hello', '', 'ask'].join('\n'),
+    );
   });
 });
 

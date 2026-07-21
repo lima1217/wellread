@@ -28,6 +28,7 @@ const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({ bookKey, onSessionOpe
   const { appService } = useEnv();
   const { getBookData } = useBookDataStore();
   const setActiveSession = useReadingAssistantStore((s) => s.setActiveSession);
+  const clearPendingQuotes = useReadingAssistantStore((s) => s.clearPendingQuotes);
   const activeSessionId = useReadingAssistantStore((s) => s.activeSessionId);
   const ready = useEveConnectionStore((s) => s.ready);
   const refresh = useEveConnectionStore((s) => s.refresh);
@@ -73,6 +74,7 @@ const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({ bookKey, onSessionOpe
 
   const handleNew = useCallback(async () => {
     if (!bookId) return;
+    clearPendingQuotes();
     const session = await createEveSession({
       bookId,
       bookTitle,
@@ -81,7 +83,7 @@ const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({ bookKey, onSessionOpe
     setActiveSession(session.id, bookId);
     onSessionOpen();
     await reload();
-  }, [bookId, bookTitle, reload, setActiveSession, onSessionOpen]);
+  }, [bookId, bookTitle, reload, setActiveSession, clearPendingQuotes, onSessionOpen]);
 
   const handleDelete = useCallback(
     async (e: React.MouseEvent, id: string) => {

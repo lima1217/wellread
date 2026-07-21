@@ -1,30 +1,69 @@
 /**
- * Zustand store for Reading Assistant UI state (active session + ask-about draft).
+ * Zustand store for Reading Assistant UI state (active session + Pending Quotes).
  * Session persistence lives in the eve sidecar under EVE_DATA_DIR.
  */
 
 import { create } from 'zustand';
+import { uniqueId } from '@/utils/misc';
+
+export type PendingQuote = {
+  id: string;
+  text: string;
+  chapterTitle: string | null;
+};
+
+export type PendingQuoteInput = {
+  text: string;
+  chapterTitle?: string | null;
+};
 
 type ReadingAssistantState = {
   activeSessionId: string | null;
   /** bookId that activeSessionId belongs to */
   activeBookId: string | null;
-  /** Prefill for composer (ask-about); not auto-sent. */
-  draft: string;
+  /** Snapshots queued for the next send (Ask about this). Not mirrored from live selection. */
+  pendingQuotes: PendingQuote[];
   setActiveSession: (sessionId: string | null, bookId?: string | null) => void;
-  setDraft: (draft: string) => void;
-  clearDraft: () => void;
+  appendPendingQuote: (input: PendingQuoteInput) => void;
+  removePendingQuote: (id: string) => void;
+  clearPendingQuotes: () => void;
+  /** Put quotes back on the live bar (e.g. after a failed send). */
+  restorePendingQuotes: (quotes: PendingQuote[]) => void;
 };
 
 export const useReadingAssistantStore = create<ReadingAssistantState>((set) => ({
   activeSessionId: null,
   activeBookId: null,
-  draft: '',
+  pendingQuotes: [],
   setActiveSession: (sessionId, bookId = null) =>
-    set({
-      activeSessionId: sessionId,
-      activeBookId: bookId ?? null,
+    set((state) => {
+      const nextBookId = bookId ?? null;
+      const bookChanged =
+        nextBookId !== null && state.activeBookId !== null && nextBookId !== state.activeBookId;
+      return {
+        activeSessionId: sessionId,
+        activeBookId: nextBookId,
+        ...(bookChanged ? { pendingQuotes: [] } : {}),
+      };
     }),
-  setDraft: (draft) => set({ draft }),
-  clearDraft: () => set({ draft: '' }),
+  appendPendingQuote: (input) => {
+    const text = input.text.trim();
+    if (!text) return;
+    set((state) => ({
+      pendingQuotes: [
+        ...state.pendingQuotes,
+        {
+          id: uniqueId(),
+          text,
+          chapterTitle: input.chapterTitle?.trim() || null,
+        },
+      ],
+    }));
+  },
+  removePendingQuote: (id) =>
+    set((state) => ({
+      pendingQuotes: state.pendingQuotes.filter((q) => q.id !== id),
+    })),
+  clearPendingQuotes: () => set({ pendingQuotes: [] }),
+  restorePendingQuotes: (quotes) => set({ pendingQuotes: quotes }),
 }));

@@ -8,6 +8,8 @@ import {
   type EveMessage,
   type EveToolTrace,
 } from './eveClient';
+import { formatPendingQuotesForTurn } from './helpers';
+import type { PendingQuote } from './readingAssistantStore';
 
 export type UseEveAgentStatus = 'ready' | 'submitted' | 'streaming' | 'error';
 
@@ -15,9 +17,14 @@ export type UseEveAgentOptions = {
   bookId: string;
   bookTitle?: string;
   sessionId?: string | null;
-  /** Composer draft set by ask-about; cleared by caller after send if desired. */
-  draft?: string;
-  onDraftConsumed?: () => void;
+};
+
+export type SendTurnInput = {
+  message?: string;
+  /** Pending Quotes to attach to this user turn (cleared by caller before/on send). */
+  quotes?: PendingQuote[];
+  /** Restore quotes if the turn fails before/during stream. */
+  onSendFailed?: (quotes: PendingQuote[]) => void;
 };
 
 /**
@@ -29,14 +36,8 @@ export function useEveAgent(options: UseEveAgentOptions) {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionId ?? null);
   const [status, setStatus] = useState<UseEveAgentStatus>('ready');
   const [error, setError] = useState<Error | null>(null);
-  const [composer, setComposer] = useState(options.draft ?? '');
+  const [composer, setComposer] = useState('');
   const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    if (options.draft !== undefined) {
-      setComposer(options.draft);
-    }
-  }, [options.draft]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,10 +73,14 @@ export function useEveAgent(options: UseEveAgentOptions) {
   }, []);
 
   const send = useCallback(
-    async (input?: { message?: string }) => {
+    async (input?: SendTurnInput) => {
       const text = (input?.message ?? composer).trim();
       if (!text) return;
       if (status === 'submitted' || status === 'streaming') return;
+
+      const quotes = input?.quotes ?? [];
+      const wireText = formatPendingQuotesForTurn(quotes, text);
+      const displayContent = text;
 
       let sessionIdForTurn = activeSessionId;
       if (!sessionIdForTurn) {
@@ -92,6 +97,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
         } catch (err) {
           setError(err instanceof Error ? err : new Error(String(err)));
           setStatus('error');
+          input?.onSendFailed?.(quotes);
           return;
         }
       }
@@ -99,24 +105,33 @@ export function useEveAgent(options: UseEveAgentOptions) {
       setError(null);
       setStatus('submitted');
       setComposer('');
-      options.onDraftConsumed?.();
 
       const controller = new AbortController();
       abortRef.current = controller;
 
       let assistantId: string | null = null;
       let tools: EveToolTrace[] = [];
+      let userCommitted = false;
 
       try {
-        for await (const event of streamEveTurn(sessionIdForTurn, text, controller.signal)) {
+        for await (const event of streamEveTurn(sessionIdForTurn, wireText, controller.signal)) {
           if (event.type === 'message.user') {
+            userCommitted = true;
             setMessages((prev) => [
               ...prev,
               {
                 id: event.id,
                 role: 'user',
-                content: event.content,
+                content: displayContent,
                 createdAt: Date.now(),
+                ...(quotes.length
+                  ? {
+                      quotes: quotes.map((q) => ({
+                        text: q.text,
+                        chapterTitle: q.chapterTitle,
+                      })),
+                    }
+                  : {}),
               },
             ]);
             setStatus('streaming');
@@ -171,16 +186,21 @@ export function useEveAgent(options: UseEveAgentOptions) {
         if (assistantId === null) setStatus('ready');
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
+          // Stop streaming: do not roll back the submitted user turn / quotes.
           setStatus('ready');
           return;
         }
         setError(err instanceof Error ? err : new Error(String(err)));
         setStatus('error');
+        // Only restore the live bar if the user turn never landed (AC1.5).
+        if (!userCommitted) {
+          input?.onSendFailed?.(quotes);
+        }
       } finally {
         abortRef.current = null;
       }
     },
-    [activeSessionId, bookId, bookTitle, composer, options, status],
+    [activeSessionId, bookId, bookTitle, composer, status],
   );
 
   const reset = useCallback(() => {

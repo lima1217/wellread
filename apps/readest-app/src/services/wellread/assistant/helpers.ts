@@ -2,8 +2,6 @@
  * Pure helpers for Reading Assistant v1 (issue #7 / assets 08).
  */
 
-import { stubTranslation as _ } from '@/utils/misc';
-
 export type ReadingAssistantGate = {
   modelEnabled: boolean;
   sidecarReady: boolean;
@@ -18,21 +16,33 @@ export function isReadingAssistantAvailable(gate: ReadingAssistantGate): boolean
   return gate.modelEnabled && gate.sidecarReady && gate.hasActiveProfile && gate.hasApiKey;
 }
 
-export type AskAboutDraftInput = {
+export type PendingQuoteForTurn = {
   text: string;
   chapterTitle?: string | null;
 };
 
-/** Prefill composer: visible quote + empty follow-up. Does not send. */
-export function formatAskAboutDraft(input: AskAboutDraftInput): string {
-  const quote = input.text.trim();
-  const lines = [`> ${quote}`];
-  const chapter = input.chapterTitle?.trim();
-  if (chapter) {
-    lines.push(`> — 《${chapter}》`);
-  }
-  lines.push('', _('Please answer based on the selection above:'), '');
-  return lines.join('\n');
+/**
+ * Wire content for an eve turn: Pending Quote blockquotes + user question.
+ * Composer stays quote-free; this is only what the model receives.
+ */
+export function formatPendingQuotesForTurn(
+  quotes: PendingQuoteForTurn[],
+  userText: string,
+): string {
+  const question = userText.trim();
+  const blocks = quotes
+    .map((q) => {
+      const text = q.text.trim();
+      if (!text) return '';
+      const lines = [`> ${text}`];
+      const chapter = q.chapterTitle?.trim();
+      if (chapter) {
+        lines.push(`> — 《${chapter}》`);
+      }
+      return lines.join('\n');
+    })
+    .filter(Boolean);
+  return [...blocks, question].filter(Boolean).join('\n\n');
 }
 
 export type SystemPromptInput = {

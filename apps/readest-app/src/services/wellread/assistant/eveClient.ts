@@ -18,11 +18,18 @@ export type EveToolTrace = {
   result?: unknown;
 };
 
+export type EveMessageQuote = {
+  text: string;
+  chapterTitle?: string | null;
+};
+
 export type EveMessage = {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt: number;
+  /** Client-side Pending Quotes attached to this user turn (not always persisted). */
+  quotes?: EveMessageQuote[];
   sources?: EveSource[];
   tools?: EveToolTrace[];
 };
