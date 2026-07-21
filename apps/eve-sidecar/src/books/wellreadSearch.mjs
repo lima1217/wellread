@@ -2,7 +2,7 @@
  * Node-side glob/grep over Books/.wellread/ only (no spawn / no rg child).
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   WORKSPACE_ROOT,
@@ -70,6 +70,10 @@ function globToRegExp(pattern) {
   return new RegExp(out);
 }
 
+/**
+ * Walk files under `dir` without following symlinks (lstat). A link under
+ * `.wellread/` must not pull in Books-root or host paths outside the sandbox.
+ */
 function walkFiles(dir, files = []) {
   let entries;
   try {
@@ -81,10 +85,12 @@ function walkFiles(dir, files = []) {
     const full = join(dir, name);
     let st;
     try {
-      st = statSync(full);
+      st = lstatSync(full);
     } catch {
       continue;
     }
+    // Skip symlinks entirely — do not recurse or read through them.
+    if (st.isSymbolicLink()) continue;
     if (st.isDirectory()) walkFiles(full, files);
     else if (st.isFile()) files.push(full);
   }

@@ -190,12 +190,22 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (req.method === 'DELETE') {
-        if (!sessions.remove(id)) {
-          sendJson(res, 404, { error: 'not_found' }, req);
+        // Same mutex as POST /turns: deleting mid-turn would race with
+        // sessions.save and resurrect the file after remove.
+        if (!turnGate.tryAcquire(id)) {
+          sendJson(res, 409, TURN_IN_FLIGHT_BODY, req);
           return;
         }
-        res.writeHead(204, corsHeaders(req));
-        res.end();
+        try {
+          if (!sessions.remove(id)) {
+            sendJson(res, 404, { error: 'not_found' }, req);
+            return;
+          }
+          res.writeHead(204, corsHeaders(req));
+          res.end();
+        } finally {
+          turnGate.release(id);
+        }
         return;
       }
     }
