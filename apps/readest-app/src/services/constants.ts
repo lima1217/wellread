@@ -130,6 +130,7 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   readwise: DEFAULT_READWISE_SETTINGS,
   hardcover: DEFAULT_HARDCOVER_SETTINGS,
   modelConfig: DEFAULT_MODEL_CONFIG,
+  thinkingMode: 'fast',
 
   lastSyncedAtBooks: 0,
   lastSyncedAtConfigs: 0,

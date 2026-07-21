@@ -1,7 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { CheckIcon, CopyIcon, Loader2Icon, XIcon } from 'lucide-react';
+import {
+  ArrowUpIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  CopyIcon,
+  Loader2Icon,
+  SquareIcon,
+  XIcon,
+} from 'lucide-react';
+import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -10,8 +19,16 @@ import { useBookDataStore } from '@/store/bookDataStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useEnv } from '@/context/EnvContext';
 import { writeTextToClipboard } from '@/utils/clipboard';
+import { saveSysSettings } from '@/helpers/settings';
 import { getModelApiKey } from '@/services/wellread/modelApiKey';
-import { getActiveProfile, mergeModelConfig } from '@/services/wellread/modelConfig';
+import {
+  getActiveProfile,
+  mergeModelConfig,
+  setActiveProfile,
+  shouldHotReloadEve,
+  toSidecarModelPayload,
+} from '@/services/wellread/modelConfig';
+import { reloadEveSidecar } from '@/services/wellread/eveSidecar';
 import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
 import {
   isReadingAssistantAvailable,
@@ -159,6 +176,8 @@ function PendingQuoteBar({
 
 const ReadingAssistantChat = ({ bookId, bookTitle }: { bookId: string; bookTitle: string }) => {
   const _ = useTranslation();
+  const { envConfig } = useEnv();
+  const { settings, setSettings, saveSettings } = useSettingsStore();
   const activeSessionId = useReadingAssistantStore((s) => s.activeSessionId);
   const activeBookId = useReadingAssistantStore((s) => s.activeBookId);
   const pendingQuotes = useReadingAssistantStore((s) => s.pendingQuotes);
@@ -174,6 +193,10 @@ const ReadingAssistantChat = ({ bookId, bookTitle }: { bookId: string; bookTitle
     bookTitle,
     sessionId,
   });
+
+  const modelConfig = mergeModelConfig(settings.modelConfig);
+  const activeProfile = getActiveProfile(modelConfig);
+  const thinkingMode = settings.thinkingMode === 'think' ? 'think' : 'fast';
 
   useEffect(() => {
     if (agent.sessionId && (agent.sessionId !== activeSessionId || activeBookId !== bookId)) {
@@ -201,6 +224,45 @@ const ReadingAssistantChat = ({ bookId, bookTitle }: { bookId: string; bookTitle
       onSendFailed: restorePendingQuotes,
     });
   }, [agent, busy, clearPendingQuotes, restorePendingQuotes]);
+
+  const handleToggleThinkingMode = useCallback(() => {
+    const next = thinkingMode === 'fast' ? 'think' : 'fast';
+    void saveSysSettings(envConfig, 'thinkingMode', next);
+  }, [envConfig, thinkingMode]);
+
+  const handleSelectProfile = useCallback(
+    async (profileId: string) => {
+      if (busy) return;
+      const previousActiveId = modelConfig.activeProfileId;
+      const next = setActiveProfile(modelConfig, profileId);
+      if (next === modelConfig) return;
+
+      const updated = { ...settings, modelConfig: next };
+      setSettings(updated);
+      await saveSettings(envConfig, updated);
+
+      if (
+        shouldHotReloadEve({
+          previousActiveId,
+          nextActiveId: next.activeProfileId,
+          editedProfileId: null,
+        })
+      ) {
+        const active = getActiveProfile(next);
+        if (active) {
+          const apiKey = await getModelApiKey(active.id);
+          const payload = toSidecarModelPayload(next);
+          if (payload) {
+            await reloadEveSidecar({ ...payload, apiKey });
+          }
+        } else {
+          await reloadEveSidecar({ enabled: next.enabled });
+        }
+      }
+      await useEveConnectionStore.getState().refresh();
+    },
+    [busy, envConfig, modelConfig, saveSettings, setSettings, settings],
+  );
 
   return (
     <div className='flex h-full min-h-0 flex-col'>
@@ -243,35 +305,102 @@ const ReadingAssistantChat = ({ bookId, bookTitle }: { bookId: string; bookTitle
         {agent.error ? <p className='text-error text-sm'>{agent.error.message}</p> : null}
       </div>
       <form
-        className='border-base-300/50 flex shrink-0 gap-2 border-t p-2'
+        className='border-base-300/50 shrink-0 border-t p-2.5'
         onSubmit={(e) => {
           e.preventDefault();
           handleSend();
         }}
       >
-        <textarea
-          className='textarea textarea-bordered eink-bordered min-h-[72px] flex-1 text-sm'
-          value={agent.composer}
-          onChange={(e) => agent.setComposer(e.target.value)}
-          placeholder={_('Ask about this book…')}
-          disabled={busy}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-        />
-        <div className='flex flex-col gap-1'>
-          {busy ? (
-            <button type='button' className='btn btn-ghost btn-sm' onClick={agent.stop}>
-              {_('Stop')}
+        <div className='border-base-300/60 bg-base-200/40 eink-bordered focus-within:ring-base-content/15 flex flex-col rounded-lg border focus-within:ring-2'>
+          <textarea
+            className='min-h-[56px] w-full resize-none bg-transparent px-2.5 py-2 text-sm outline-none'
+            value={agent.composer}
+            onChange={(e) => agent.setComposer(e.target.value)}
+            placeholder={_('Ask about this book…')}
+            disabled={busy}
+            rows={3}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+          />
+          <div className='border-base-300/50 flex items-center gap-1.5 border-t px-2 py-1.5'>
+            <div
+              className={clsx('dropdown dropdown-top', busy && 'pointer-events-none opacity-50')}
+            >
+              <button
+                type='button'
+                tabIndex={0}
+                className='border-base-300/60 bg-base-100 eink-bordered flex h-7 max-w-[110px] items-center gap-0.5 rounded-full border px-2.5 text-xs'
+                disabled={busy}
+                aria-label={_('Model')}
+                onClick={(e) => e.currentTarget.focus()}
+              >
+                <span className='truncate'>{activeProfile?.name ?? _('Model')}</span>
+                <ChevronDownIcon size={12} className='shrink-0 opacity-60' />
+              </button>
+              <ul
+                tabIndex={0}
+                className='dropdown-content menu bg-base-100 border-base-300 eink-bordered z-20 mb-1 max-h-48 min-w-[10rem] overflow-y-auto rounded-lg border p-1'
+              >
+                {modelConfig.profiles.map((profile) => {
+                  const isActive = profile.id === modelConfig.activeProfileId;
+                  return (
+                    <li key={profile.id}>
+                      <button
+                        type='button'
+                        className='flex items-center gap-2 text-sm'
+                        onClick={() => {
+                          void handleSelectProfile(profile.id);
+                          (document.activeElement as HTMLElement | null)?.blur();
+                        }}
+                      >
+                        <span className='flex w-4 shrink-0 justify-center'>
+                          {isActive ? <CheckIcon size={14} /> : null}
+                        </span>
+                        <span className='truncate'>{profile.name}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+            <button
+              type='button'
+              className={clsx(
+                'eink-bordered flex h-7 items-center rounded-full border px-2.5 text-xs',
+                thinkingMode === 'think'
+                  ? 'border-base-content bg-base-content text-base-100'
+                  : 'border-base-300/60 text-base-content/60 bg-base-100',
+              )}
+              aria-pressed={thinkingMode === 'think'}
+              aria-label={thinkingMode === 'think' ? _('Think') : _('Fast')}
+              onClick={handleToggleThinkingMode}
+            >
+              {thinkingMode === 'think' ? _('Think') : _('Fast')}
             </button>
-          ) : (
-            <button type='submit' className='btn btn-contrast btn-sm' disabled={!canSend}>
-              {_('Send')}
-            </button>
-          )}
+            {busy ? (
+              <button
+                type='button'
+                className='btn btn-contrast btn-circle btn-sm ms-auto h-7 min-h-7 w-7 p-0'
+                aria-label={_('Stop')}
+                onClick={agent.stop}
+              >
+                <SquareIcon size={11} fill='currentColor' />
+              </button>
+            ) : (
+              <button
+                type='submit'
+                className='btn btn-contrast btn-circle btn-sm ms-auto h-7 min-h-7 w-7 p-0'
+                aria-label={_('Send')}
+                disabled={!canSend}
+              >
+                <ArrowUpIcon size={14} strokeWidth={2.5} />
+              </button>
+            )}
+          </div>
         </div>
       </form>
     </div>

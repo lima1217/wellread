@@ -234,6 +234,10 @@ describe('services/constants', () => {
       expect(DEFAULT_SYSTEM_SETTINGS.modelConfig).toBeDefined();
     });
 
+    it('defaults Thinking Mode to Fast', () => {
+      expect(DEFAULT_SYSTEM_SETTINGS.thinkingMode).toBe('fast');
+    });
+
     it('has sync timestamps', () => {
       expect(typeof DEFAULT_SYSTEM_SETTINGS.lastSyncedAtBooks).toBe('number');
       expect(typeof DEFAULT_SYSTEM_SETTINGS.lastSyncedAtConfigs).toBe('number');

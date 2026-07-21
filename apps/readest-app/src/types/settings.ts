@@ -223,6 +223,11 @@ export interface SystemSettings {
    */
   modelConfig: ModelConfig;
   /**
+   * Composer Thinking Mode: Think = on, Fast = off. Global user setting;
+   * default Fast. Does not bind vendor API fields (map mist).
+   */
+  thinkingMode: 'think' | 'fast';
+  /**
    * Per-device id used as the deviceId portion of every HLC this device
    * mints. Lazy-generated on first sync init via uuidv4. Independent from
    * third-party sync services — distinct identifier semantics and rotation

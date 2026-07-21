@@ -156,4 +156,24 @@ describe('useEveAgent', () => {
     expect(onSendFailed).toHaveBeenCalledWith(quotes);
     expect(streamEveTurn).not.toHaveBeenCalled();
   });
+
+  it('does not send when composer text is empty even if Pending Quotes exist', async () => {
+    const onSendFailed = vi.fn();
+    const quotes = [{ id: 'q1', text: 'quoted', chapterTitle: null }];
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: null }),
+    );
+
+    await act(async () => {
+      result.current.setComposer('   ');
+    });
+    await act(async () => {
+      await result.current.send({ quotes, onSendFailed });
+    });
+
+    expect(createEveSession).not.toHaveBeenCalled();
+    expect(streamEveTurn).not.toHaveBeenCalled();
+    expect(onSendFailed).not.toHaveBeenCalled();
+  });
 });
