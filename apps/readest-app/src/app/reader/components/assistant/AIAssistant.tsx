@@ -70,21 +70,21 @@ const composerPrimaryBtnIdle = 'bg-base-200/70 text-base-content/30';
 /** Book excerpt in assistant prose — editorial pull-quote, not a chat bubble. */
 function MarkdownBlockquote({ children }: { children?: ReactNode }) {
   return (
-    <blockquote className='border-base-content/20 text-base-content/65 my-[0.65em] border-s-2 ps-3 text-[0.92em] leading-snug not-italic'>
+    <blockquote className='border-base-content/20 text-base-content/65 my-[0.9em] border-s-2 ps-3.5 text-[0.92em] leading-[1.7] not-italic'>
       <div
-        className='text-base-content/30 mb-0.5 select-none font-sans text-[0.8em] leading-none tracking-wide'
+        className='text-base-content/30 mb-1 select-none font-sans text-[0.8em] leading-none tracking-wide'
         aria-hidden='true'
       >
         ❝
       </div>
-      <div className='[&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0'>{children}</div>
+      <div className='[&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0'>{children}</div>
     </blockquote>
   );
 }
 
 /** Models often wrap citations with `---` → `<hr>`; keep the break, drop the white line. */
 function MarkdownRule() {
-  return <div className='my-[0.65em]' aria-hidden='true' />;
+  return <div className='my-[0.9em]' aria-hidden='true' />;
 }
 
 const assistantMarkdownComponents: Components = {
@@ -92,18 +92,18 @@ const assistantMarkdownComponents: Components = {
   hr: () => <MarkdownRule />,
 };
 
-/** Chat body uses app UI type, not the reader's book face. */
-const messageTypeClass = 'font-sans text-base leading-relaxed sm:text-sm';
+/** Chat body uses app UI type, not the reader's book face. Keep 16px + 1.75 for CJK air. */
+const messageTypeClass = 'font-sans text-base leading-[1.75]';
 const markdownBodyClass = clsx(
   'break-words [&_a]:break-all',
   '[&_code]:font-mono [&_code]:text-[0.9em]',
-  '[&_h1]:mb-[0.4em] [&_h1]:text-balance [&_h1]:text-[1.15em] [&_h1]:leading-[1.25] [&_h1]:font-semibold',
-  '[&_h2]:mb-[0.4em] [&_h2]:text-balance [&_h2]:text-[1.08em] [&_h2]:leading-[1.3] [&_h2]:font-semibold',
-  '[&_h3]:mb-[0.35em] [&_h3]:text-balance [&_h3]:font-semibold [&_h3]:leading-[1.35]',
-  '[&_li]:my-[0.35em]',
-  '[&_ol]:my-[0.65em] [&_ul]:my-[0.65em]',
-  '[&_p]:my-[0.65em] [&_p:first-child]:mt-0 [&_p:last-child]:mb-0',
-  '[&_pre]:bg-base-100/80 [&_pre]:my-[0.65em] [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:p-3',
+  '[&_h1]:mb-[0.55em] [&_h1]:text-balance [&_h1]:text-[1.15em] [&_h1]:leading-[1.3] [&_h1]:font-semibold',
+  '[&_h2]:mb-[0.5em] [&_h2]:text-balance [&_h2]:text-[1.08em] [&_h2]:leading-[1.35] [&_h2]:font-semibold',
+  '[&_h3]:mb-[0.45em] [&_h3]:text-balance [&_h3]:font-semibold [&_h3]:leading-[1.4]',
+  '[&_li]:my-[0.5em]',
+  '[&_ol]:my-[0.9em] [&_ul]:my-[0.9em]',
+  '[&_p]:my-[0.9em] [&_p:first-child]:mt-0 [&_p:last-child]:mb-0',
+  '[&_pre]:bg-base-100/80 [&_pre]:my-[0.9em] [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:p-3.5',
   '[&_pre_code]:font-mono',
 );
 
@@ -201,7 +201,7 @@ function ReasoningBlock({ reasoning }: { reasoning: string }) {
   if (!reasoning.trim()) return null;
   return (
     <details
-      className='group border-base-content/10 mb-2.5 border-s ps-2.5'
+      className='group border-base-content/10 mb-3.5 border-s ps-3'
       open={open}
       onToggle={(e) => setOpen(e.currentTarget.open)}
     >
@@ -217,8 +217,8 @@ function ReasoningBlock({ reasoning }: { reasoning: string }) {
       </summary>
       <pre
         className={clsx(
-          'text-base-content/55 mt-2 max-h-48 overflow-y-auto overscroll-contain',
-          'whitespace-pre-wrap font-sans text-[0.85em] leading-snug',
+          'text-base-content/55 mt-2.5 max-h-56 overflow-y-auto overscroll-contain',
+          'whitespace-pre-wrap font-sans text-[0.9em] leading-[1.7]',
         )}
       >
         {reasoning}
@@ -468,7 +468,7 @@ const ReadingAssistantChat = ({ bookId, bookTitle }: { bookId: string; bookTitle
         onClear={clearPendingQuotes}
       />
       <div
-        className='min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3.5 py-4 touch-pan-y'
+        className='min-h-0 flex-1 space-y-8 overflow-y-auto overscroll-contain px-4 py-5 touch-pan-y'
         aria-live='polite'
         aria-relevant='additions'
       >
@@ -485,7 +485,7 @@ const ReadingAssistantChat = ({ bookId, bookTitle }: { bookId: string; bookTitle
               className={clsx(
                 messageTypeClass,
                 msg.role === 'user'
-                  ? 'bg-base-100/70 ms-5 select-text rounded-xl px-3.5 py-2.5 break-words whitespace-pre-wrap'
+                  ? 'bg-base-100/70 ms-5 select-text rounded-xl px-3.5 py-3 break-words whitespace-pre-wrap'
                   : 'me-1 select-text px-0.5 py-0.5',
               )}
             >

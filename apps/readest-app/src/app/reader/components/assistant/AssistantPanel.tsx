@@ -175,7 +175,7 @@ const AssistantPanel: React.FC = ({}) => {
         ref={assistantPanelRef}
         className={clsx(
           'assistant-panel-container right-0 flex min-w-60 select-none flex-col overscroll-contain',
-          'full-height font-sans text-base font-normal transition-[padding-top] duration-300 sm:text-sm',
+          'full-height font-sans text-base font-normal transition-[padding-top] duration-300',
           'motion-reduce:transition-none',
           viewSettings?.isEink ? 'bg-base-100' : 'bg-base-200',
           appService?.hasRoundedWindow && 'rounded-window-top-right rounded-window-bottom-right',
