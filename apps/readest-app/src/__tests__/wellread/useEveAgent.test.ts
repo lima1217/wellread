@@ -267,14 +267,23 @@ describe('useEveAgent', () => {
   });
 
   it('wires Pending Quotes into the turn text and skips restore after user commit', async () => {
-    getEveSession.mockResolvedValue({
-      id: 'ses_existing',
-      bookId: 'book-1',
-      title: 'Chat',
-      createdAt: 1,
-      updatedAt: 1,
-      messages: [],
-    });
+    getEveSession
+      .mockResolvedValueOnce({
+        id: 'ses_existing',
+        bookId: 'book-1',
+        title: 'Chat',
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [],
+      })
+      .mockResolvedValueOnce({
+        id: 'ses_existing',
+        bookId: 'book-1',
+        title: 'Chat',
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [],
+      });
     streamEveTurn.mockImplementation(async function* () {
       yield {
         type: 'message.user' as const,
@@ -308,11 +317,8 @@ describe('useEveAgent', () => {
       expect.any(AbortSignal),
       { thinkingMode: 'fast' },
     );
-    expect(result.current.messages[0]).toMatchObject({
-      role: 'user',
-      content: 'Why?',
-      quotes: [{ text: 'quoted', chapterTitle: null }],
-    });
+    // Disk rolled back the failed turn; UI reconciles to match.
+    expect(result.current.messages).toEqual([]);
     expect(onSendFailed).not.toHaveBeenCalled();
   });
 
@@ -596,5 +602,148 @@ describe('useEveAgent', () => {
       }),
       expect.objectContaining({ id: 'u1', role: 'user', content: 'new question' }),
     ]);
+  });
+
+  it('drops the in-flight turn locally after an AbortError', async () => {
+    getEveSession.mockResolvedValue({
+      id: 'ses_existing',
+      bookId: 'book-1',
+      title: 'Chat',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [{ id: 'kept', role: 'user', content: 'prior', createdAt: 1 }],
+    });
+
+    streamEveTurn.mockImplementation(async function* (_sid, _msg, _signal: AbortSignal) {
+      yield { type: 'message.user' as const, id: 'u1', content: 'stop me' };
+      yield {
+        type: 'message.assistant.delta' as const,
+        id: 'a1',
+        delta: 'partial ',
+      };
+      const err = new Error('aborted');
+      err.name = 'AbortError';
+      throw err;
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1);
+    });
+
+    await act(async () => {
+      result.current.setComposer('stop me');
+    });
+    await act(async () => {
+      await result.current.send();
+    });
+
+    // Mount load only — AbortError must not refetch (stale disk race).
+    expect(getEveSession).toHaveBeenCalledTimes(1);
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({ id: 'kept', content: 'prior' }),
+    ]);
+    expect(result.current.status).toBe('ready');
+  });
+
+  it('reconciles messages from disk after a stream error', async () => {
+    getEveSession
+      .mockResolvedValueOnce({
+        id: 'ses_existing',
+        bookId: 'book-1',
+        title: 'Chat',
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [],
+      })
+      .mockResolvedValueOnce({
+        id: 'ses_existing',
+        bookId: 'book-1',
+        title: 'Chat',
+        createdAt: 1,
+        updatedAt: 1,
+        // Empty reply / model error: server dropped the in-flight user.
+        messages: [],
+      });
+
+    streamEveTurn.mockImplementation(async function* () {
+      yield { type: 'message.user' as const, id: 'u1', content: 'Why?' };
+      yield { type: 'error' as const, message: 'Model returned an empty reply' };
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.sessionId).toBe('ses_existing');
+    });
+
+    await act(async () => {
+      result.current.setComposer('Why?');
+    });
+    await act(async () => {
+      await result.current.send();
+    });
+
+    await waitFor(() => {
+      expect(getEveSession).toHaveBeenCalledTimes(2);
+    });
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.status).toBe('error');
+    expect(result.current.error?.message).toMatch(/empty reply/i);
+  });
+
+  it('reconciles messages from disk when done is aborted', async () => {
+    getEveSession
+      .mockResolvedValueOnce({
+        id: 'ses_existing',
+        bookId: 'book-1',
+        title: 'Chat',
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [{ id: 'kept', role: 'assistant', content: 'hello', createdAt: 1 }],
+      })
+      .mockResolvedValueOnce({
+        id: 'ses_existing',
+        bookId: 'book-1',
+        title: 'Chat',
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [{ id: 'kept', role: 'assistant', content: 'hello', createdAt: 1 }],
+      });
+
+    streamEveTurn.mockImplementation(async function* () {
+      yield { type: 'message.user' as const, id: 'u1', content: 'interrupted' };
+      yield {
+        type: 'message.assistant.delta' as const,
+        id: 'a1',
+        delta: 'partial',
+      };
+      yield { type: 'done' as const, aborted: true };
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1);
+    });
+
+    await act(async () => {
+      result.current.setComposer('interrupted');
+    });
+    await act(async () => {
+      await result.current.send();
+    });
+
+    await waitFor(() => {
+      expect(getEveSession).toHaveBeenCalledTimes(2);
+    });
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({ id: 'kept', content: 'hello' }),
+    ]);
+    expect(result.current.status).toBe('ready');
   });
 });

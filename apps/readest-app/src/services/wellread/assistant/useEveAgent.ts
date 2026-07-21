@@ -106,6 +106,15 @@ export function useEveAgent(options: UseEveAgentOptions) {
     setStatus('ready');
   }, []);
 
+  const reconcileFromDisk = useCallback(async (id: string) => {
+    try {
+      const session = await getEveSession(id);
+      setMessages(session.messages);
+    } catch {
+      // Keep local messages if refetch fails; disk remains source of truth on reopen.
+    }
+  }, []);
+
   const send = useCallback(
     async (input?: SendTurnInput) => {
       const text = (input?.message ?? composer).trim();
@@ -166,6 +175,8 @@ export function useEveAgent(options: UseEveAgentOptions) {
       let assistantId: string | null = null;
       let tools: EveToolTrace[] = [];
       let userCommitted = false;
+      let committedUserId: string | null = null;
+      let needsReconcile = false;
 
       try {
         for await (const event of streamEveTurn(sessionIdForTurn, wireText, controller.signal, {
@@ -173,6 +184,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
         })) {
           if (event.type === 'message.user') {
             userCommitted = true;
+            committedUserId = event.id;
             setMessages((prev) => {
               const withoutOptimistic = prev.filter((m) => m.id !== optimisticUserId);
               if (withoutOptimistic.some((m) => m.id === event.id)) return withoutOptimistic;
@@ -274,16 +286,28 @@ export function useEveAgent(options: UseEveAgentOptions) {
           } else if (event.type === 'done') {
             setInFlightTools([]);
             setStatus('ready');
+            if (event.aborted) {
+              needsReconcile = true;
+            }
           }
         }
         if (assistantId === null) {
           setInFlightTools([]);
           setStatus('ready');
         }
+        if (needsReconcile) {
+          await reconcileFromDisk(sessionIdForTurn);
+        }
       } catch (err) {
         setInFlightTools([]);
         if ((err as Error).name === 'AbortError') {
-          // Stop streaming: do not roll back the submitted user turn / quotes.
+          // Mirror server rollback locally. Do not refetch here: Stop aborts the
+          // fetch before the server may have re-persisted after dropInFlightUser,
+          // and a stale getEveSession would resurrect the unanswered user.
+          const dropIds = new Set(
+            [optimisticUserId, committedUserId, assistantId].filter(Boolean) as string[],
+          );
+          setMessages((prev) => prev.filter((m) => !dropIds.has(m.id)));
           setStatus('ready');
           return;
         }
@@ -293,6 +317,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
         if (!userCommitted) {
           input?.onSendFailed?.(quotes);
         }
+        await reconcileFromDisk(sessionIdForTurn);
       } finally {
         abortRef.current = null;
         // Allow later prop-driven reloads of this session (e.g. bookTitle change).
@@ -301,7 +326,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
         }
       }
     },
-    [activeSessionId, bookId, bookTitle, composer, status, thinkingMode],
+    [activeSessionId, bookId, bookTitle, composer, reconcileFromDisk, status, thinkingMode],
   );
 
   const reset = useCallback(() => {

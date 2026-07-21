@@ -112,4 +112,110 @@ describe('runTurn abort', () => {
     assert.equal(events.at(-1)?.aborted, true);
     assert.equal(events.some((e) => e.type === 'message.assistant'), false);
   });
+
+  it('rolls back the user message when the model returns an empty reply', async () => {
+    const session = emptySession();
+    const events = [];
+
+    const result = await runTurn({
+      model: /** @type {any} */ ({
+        specificationVersion: 'v2',
+        provider: 'test',
+        modelId: 'empty-test',
+        supportedUrls: {},
+        doGenerate: async () => {
+          throw new Error('doGenerate unused');
+        },
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 't1' });
+              controller.enqueue({ type: 'text-end', id: 't1' });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 0, totalTokens: 1 },
+              });
+              controller.close();
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      }),
+      session,
+      userMessage: 'say something',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      onEvent: (event) => events.push(event),
+    });
+
+    assert.equal(result, null);
+    assert.equal(session.messages.length, 0);
+    assert.equal(
+      events.some((e) => e.type === 'error' && /empty reply/i.test(String(e.message))),
+      true,
+    );
+    assert.deepEqual(
+      events.filter((e) => e.type === 'done'),
+      [{ type: 'done' }],
+    );
+  });
+
+  it('persists the session after compress even when the turn later fails', async () => {
+    const messages = [];
+    for (let i = 0; i < 20; i++) {
+      messages.push({
+        id: `m_${i}`,
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: 'x'.repeat(200),
+        createdAt: i,
+      });
+    }
+    const session = {
+      ...emptySession(),
+      messages,
+    };
+    const events = [];
+    /** @type {import('./sessionStore.mjs').Session[]} */
+    const persisted = [];
+
+    const result = await runTurn({
+      model: /** @type {any} */ ({
+        specificationVersion: 'v2',
+        provider: 'test',
+        modelId: 'fail-after-compress',
+        supportedUrls: {},
+        doGenerate: async () => {
+          throw new Error('doGenerate unused');
+        },
+        doStream: async () => {
+          throw new Error('stream boom');
+        },
+      }),
+      session,
+      userMessage: 'after compress',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      onEvent: (event) => events.push(event),
+      contextWindowTokens: 1000,
+      generateTextFn: async () => ({ text: 'Compacted prior turns.' }),
+      persistSession: (s) => {
+        persisted.push({
+          ...s,
+          messages: s.messages.map((m) => ({ ...m })),
+        });
+      },
+    });
+
+    assert.equal(result, null);
+    assert.equal(events.some((e) => e.type === 'context.compressed'), true);
+    assert.equal(events.some((e) => e.type === 'error'), true);
+    assert.ok(persisted.length >= 1);
+    assert.equal(persisted[0].messages[0]?.compacted, true);
+    // Final persist after rollback must not keep the unanswered user.
+    const lastPersist = persisted[persisted.length - 1];
+    assert.equal(lastPersist.messages.some((m) => m.content === 'after compress'), false);
+    // Failed turn must not leave an unanswered user message.
+    assert.equal(session.messages.some((m) => m.content === 'after compress'), false);
+    assert.equal(session.messages[0]?.compacted, true);
+  });
 });

@@ -254,6 +254,7 @@ const server = http.createServer(async (req, res) => {
             abortSignal,
             contextWindowTokens: modelContextWindowTokens,
             thinkingMode,
+            persistSession: (s) => sessions.save(s),
           });
           sessions.save(session);
         } catch (error) {
@@ -261,6 +262,8 @@ const server = http.createServer(async (req, res) => {
             type: 'error',
             message: error instanceof Error ? error.message : String(error),
           });
+          // Persist rollbacks (e.g. compress-then-fail dropped the in-flight user).
+          sessions.save(session);
         } finally {
           settleAbort();
         }

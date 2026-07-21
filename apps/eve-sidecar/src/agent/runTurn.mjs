@@ -26,10 +26,12 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   contextWindowTokens?: number,
  *   thinkingMode?: 'think' | 'fast',
  *   generateTextFn?: import('ai').generateText,
+ *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
  * }} input
  */
 export async function runTurn(input) {
   const { model, session, userMessage, getBooksRoot, onEvent, abortSignal } = input;
+  const persistSession = input.persistSession;
   const thinkingMode = normalizeThinkingMode(input.thinkingMode);
   const userId = `msg_${randomBytes(6).toString('hex')}`;
   const userMsg = {
@@ -42,7 +44,7 @@ export async function runTurn(input) {
   onEvent({ type: 'message.user', id: userId, content: userMessage });
 
   if (abortSignal?.aborted) {
-    return finishAborted(session, userId, onEvent);
+    return finishAborted(session, userId, onEvent, persistSession);
   }
 
   const system = buildSystemPrompt({
@@ -56,7 +58,7 @@ export async function runTurn(input) {
       : DEFAULT_CONTEXT_WINDOW_TOKENS;
 
   try {
-    await maybeCompressSession({
+    const compressed = await maybeCompressSession({
       model,
       session,
       systemPrompt: system,
@@ -65,15 +67,19 @@ export async function runTurn(input) {
       abortSignal,
       generateTextFn: input.generateTextFn,
     });
+    if (compressed) {
+      persistSession?.(session);
+    }
   } catch (error) {
     if (isAbortError(error) || abortSignal?.aborted) {
-      return finishAborted(session, userId, onEvent);
+      return finishAborted(session, userId, onEvent, persistSession);
     }
+    dropInFlightUser(session, userId, persistSession);
     throw error;
   }
 
   if (abortSignal?.aborted) {
-    return finishAborted(session, userId, onEvent);
+    return finishAborted(session, userId, onEvent, persistSession);
   }
 
   const tools = createReadingTools({ getBooksRoot });
@@ -146,7 +152,7 @@ export async function runTurn(input) {
         let content = '';
         for await (const delta of result.textStream) {
           if (abortSignal?.aborted) {
-            return finishAborted(session, userId, onEvent);
+            return finishAborted(session, userId, onEvent, persistSession);
           }
           content += delta;
           onEvent({ type: 'message.assistant.delta', id: assistantId, delta });
@@ -164,7 +170,7 @@ export async function runTurn(input) {
             }
           } catch (error) {
             if (isAbortError(error) || abortSignal?.aborted) {
-              return finishAborted(session, userId, onEvent);
+              return finishAborted(session, userId, onEvent, persistSession);
             }
             if (error instanceof Error && error.message) {
               emptyDetail = ` (${error.message})`;
@@ -173,10 +179,11 @@ export async function runTurn(input) {
         }
 
         if (abortSignal?.aborted) {
-          return finishAborted(session, userId, onEvent);
+          return finishAborted(session, userId, onEvent, persistSession);
         }
 
         if (!content.trim()) {
+          dropInFlightUser(session, userId, persistSession);
           onEvent({
             type: 'error',
             message: `Model returned an empty reply. Check API key/model.${emptyDetail}`,
@@ -211,10 +218,27 @@ export async function runTurn(input) {
     );
   } catch (error) {
     if (isAbortError(error) || abortSignal?.aborted) {
-      return finishAborted(session, userId, onEvent);
+      return finishAborted(session, userId, onEvent, persistSession);
     }
+    dropInFlightUser(session, userId, persistSession);
     throw error;
   }
+}
+
+/**
+ * Drop the in-flight user turn so failed/cancelled asks do not pollute history.
+ * @param {import('./sessionStore.mjs').Session} session
+ * @param {string} userId
+ * @param {(session: import('./sessionStore.mjs').Session) => void} [persistSession]
+ */
+function dropInFlightUser(session, userId, persistSession) {
+  const last = session.messages[session.messages.length - 1];
+  if (last && last.id === userId && last.role === 'user') {
+    session.messages.pop();
+  }
+  // Re-persist after rollback so clients reconciling mid-turn (e.g. after
+  // compress-then-fail) never observe the unanswered user on disk.
+  persistSession?.(session);
 }
 
 /**
@@ -222,12 +246,10 @@ export async function runTurn(input) {
  * @param {import('./sessionStore.mjs').Session} session
  * @param {string} userId
  * @param {(event: Record<string, unknown>) => void} onEvent
+ * @param {(session: import('./sessionStore.mjs').Session) => void} [persistSession]
  */
-function finishAborted(session, userId, onEvent) {
-  const last = session.messages[session.messages.length - 1];
-  if (last && last.id === userId && last.role === 'user') {
-    session.messages.pop();
-  }
+function finishAborted(session, userId, onEvent, persistSession) {
+  dropInFlightUser(session, userId, persistSession);
   onEvent({ type: 'done', aborted: true });
   return null;
 }
