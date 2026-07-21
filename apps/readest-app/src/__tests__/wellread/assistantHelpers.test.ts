@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  extractSourcesFromChunkMarkdown,
   formatPendingQuotesForTurn,
   formatWorkDuration,
   isReadingAssistantAvailable,
@@ -73,48 +72,28 @@ describe('formatPendingQuotesForTurn', () => {
   });
 });
 
-describe('extractSourcesFromChunkMarkdown', () => {
-  it('reads cfi/endCfi/title from YAML frontmatter', () => {
-    const md = `---
-bookId: "abc"
-sectionIndex: 2
-title: "Chapter Two"
-cfi: "epubcfi(/6/4!/4/2/1:0)"
-endCfi: "epubcfi(/6/4!/4/2/1:40)"
-chunkIndex: 0
----
-
-Body text here.
-`;
-    expect(
-      extractSourcesFromChunkMarkdown(md, '/workspace/.wellread/extract/abc/chunks/00001.md'),
-    ).toEqual([
-      {
-        cfi: 'epubcfi(/6/4!/4/2/1:0)',
-        endCfi: 'epubcfi(/6/4!/4/2/1:40)',
-        title: 'Chapter Two',
-        path: '/workspace/.wellread/extract/abc/chunks/00001.md',
-      },
-    ]);
-  });
-
-  it('returns empty when frontmatter has no cfi', () => {
-    expect(extractSourcesFromChunkMarkdown('no frontmatter', '/x')).toEqual([]);
-  });
-});
-
 describe('summarizeToolTrace', () => {
-  it('returns an always-visible T3 summary line with step count', () => {
+  it('summarizes search tools as Searched extract', () => {
     expect(summarizeToolTrace([{ name: 'grep' }, { name: 'grep' }, { name: 'read_file' }])).toBe(
       'Searched extract · 3 steps',
     );
+  });
+
+  it('summarizes write_file tools as Saved notes', () => {
+    expect(summarizeToolTrace([{ name: 'write_file' }, { name: 'write_file' }])).toBe(
+      'Saved notes · 2 steps',
+    );
+  });
+
+  it('uses Saved notes when the only tools are writes', () => {
+    expect(summarizeToolTrace([{ name: 'write_file' }])).toBe('Saved notes · 1 step');
   });
 
   it('returns empty when there are no tools', () => {
     expect(summarizeToolTrace([])).toBe('');
   });
 
-  it('uses singular step for one tool call', () => {
+  it('uses singular step for one search tool call', () => {
     expect(summarizeToolTrace([{ name: 'grep' }])).toBe('Searched extract · 1 step');
   });
 });

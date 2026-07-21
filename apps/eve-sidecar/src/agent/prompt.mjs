@@ -35,12 +35,10 @@ export function extractSourcesFromChunkMarkdown(markdown, path) {
     const m = block.match(new RegExp(`^${key}:\\s*(.*)$`, 'm'));
     if (!m) return undefined;
     const raw = m[1].trim();
-    if (
-      (raw.startsWith('"') && raw.endsWith('"')) ||
-      (raw.startsWith("'") && raw.endsWith("'"))
-    ) {
+    // Values are written with JSON.stringify (see formatChunkMarkdown).
+    if (raw.startsWith('"') || raw.startsWith("'")) {
       try {
-        return JSON.parse(`"${raw.slice(1, -1).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
+        return JSON.parse(raw);
       } catch {
         return raw.slice(1, -1);
       }

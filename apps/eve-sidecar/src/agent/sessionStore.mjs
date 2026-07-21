@@ -31,6 +31,47 @@ import { randomBytes } from 'node:crypto';
  * @typedef {SessionMeta & { messages: SessionMessage[] }} Session
  */
 
+/** Default title stamped at create time (History distinguishes after first turn). */
+export function defaultSessionTitle(bookTitle, bookId) {
+  return `Chat about ${bookTitle || bookId}`;
+}
+
+/**
+ * On the first successful turn, replace the default title with a user-message prefix
+ * so History can tell same-book sessions apart.
+ * @param {{ bookId: string, bookTitle?: string, title: string }} session
+ * @param {string} userMessage
+ * @param {number} [maxLen]
+ * @returns {boolean} true when title was updated
+ */
+export function maybeApplyFirstTurnTitle(session, userMessage, maxLen = 40) {
+  if (session.title !== defaultSessionTitle(session.bookTitle, session.bookId)) {
+    return false;
+  }
+  // Wire text may prepend Pending Quote blockquotes; prefer the trailing question.
+  const forTitle = userQuestionForTitle(userMessage);
+  const compact = forTitle.replace(/\s+/g, ' ').trim();
+  if (!compact) return false;
+  session.title =
+    compact.length <= maxLen ? compact : `${compact.slice(0, maxLen - 1)}…`;
+  return true;
+}
+
+/**
+ * @param {string} userMessage
+ */
+function userQuestionForTitle(userMessage) {
+  const parts = userMessage.trim().split(/\n\n+/);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const block = parts[i].trim();
+    if (!block) continue;
+    const lines = block.split('\n');
+    if (lines.every((line) => line.startsWith('>'))) continue;
+    return block;
+  }
+  return userMessage.trim();
+}
+
 /**
  * @param {string} dataDir
  */
@@ -66,7 +107,7 @@ export function createSessionStore(dataDir) {
         id,
         bookId: input.bookId,
         bookTitle: input.bookTitle,
-        title: input.title?.trim() || `Chat about ${input.bookTitle || input.bookId}`,
+        title: input.title?.trim() || defaultSessionTitle(input.bookTitle, input.bookId),
         createdAt: now,
         updatedAt: now,
         messages: [],

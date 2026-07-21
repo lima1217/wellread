@@ -45,55 +45,16 @@ export function formatPendingQuotesForTurn(
   return [...blocks, question].filter(Boolean).join('\n\n');
 }
 
-export type SourceItem = {
-  cfi: string;
-  endCfi?: string;
-  title?: string;
-  path?: string;
-};
-
-/** Parse 09-style chunk markdown frontmatter into source items. */
-export function extractSourcesFromChunkMarkdown(markdown: string, path?: string): SourceItem[] {
-  const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) return [];
-  const block = match[1]!;
-  const get = (key: string): string | undefined => {
-    const m = block.match(new RegExp(`^${key}:\\s*(.*)$`, 'm'));
-    if (!m) return undefined;
-    const raw = m[1]!.trim();
-    if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
-      try {
-        return JSON.parse(
-          `"${raw.slice(1, -1).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`,
-        ) as string;
-      } catch {
-        return raw.slice(1, -1);
-      }
-    }
-    return raw || undefined;
-  };
-  const cfi = get('cfi');
-  if (!cfi) return [];
-  const endCfi = get('endCfi');
-  const title = get('title');
-  return [
-    {
-      cfi,
-      ...(endCfi ? { endCfi } : {}),
-      ...(title ? { title } : {}),
-      ...(path ? { path } : {}),
-    },
-  ];
-}
-
 export type ToolTraceEntry = { name: string };
 
 /** Always-visible T3 summary line for tool traces (expand shows params). */
 export function summarizeToolTrace(tools: ToolTraceEntry[]): string {
   const n = tools.length;
   if (n === 0) return '';
+  const onlyWrites = tools.every((t) => t.name === 'write_file');
+  const label = onlyWrites ? 'Saved notes' : 'Searched extract';
   // English key-as-content; UI may pass through useTranslation.
-  return `Searched extract · ${n} ${n === 1 ? 'step' : 'steps'}`;
+  return `${label} · ${n} ${n === 1 ? 'step' : 'steps'}`;
 }
 
 /**

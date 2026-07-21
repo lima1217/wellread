@@ -8,6 +8,7 @@ import { normalizeThinkingMode, turnFetchContext } from '../createModel.mjs';
 import { maybeCompressSession } from './contextCompress.mjs';
 import { isAbortError } from './httpAbort.mjs';
 import { buildSystemPrompt, collectSourcesFromTools } from './prompt.mjs';
+import { maybeApplyFirstTurnTitle } from './sessionStore.mjs';
 import { createReadingTools } from './tools.mjs';
 import { prepareToolExhaustionStep, resolveMaxToolRounds } from './toolRounds.mjs';
 
@@ -27,6 +28,7 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   thinkingMode?: 'think' | 'fast',
  *   generateTextFn?: import('ai').generateText,
  *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
+ *   tools?: import('ai').ToolSet,
  * }} input
  */
 export async function runTurn(input) {
@@ -82,7 +84,7 @@ export async function runTurn(input) {
     return finishAborted(session, userId, onEvent, persistSession);
   }
 
-  const tools = createReadingTools({ getBooksRoot });
+  const tools = input.tools ?? createReadingTools({ getBooksRoot });
   /** @type {Array<{ id: string, name: string, args?: unknown, result?: unknown }>} */
   const toolTrace = [];
 
@@ -129,33 +131,60 @@ export async function runTurn(input) {
           stopWhen: stepCountIs(maxToolRounds + 1),
           prepareStep: ({ stepNumber }) =>
             prepareToolExhaustionStep({ stepNumber, maxToolRounds, system }),
-          onStepFinish: async ({ toolCalls, toolResults }) => {
-            if (abortSignal?.aborted) return;
-            if (!toolCalls) return;
-            for (let i = 0; i < toolCalls.length; i++) {
-              const call = toolCalls[i];
-              const toolResult = toolResults?.[i];
-              const id = call.toolCallId || `tool_${randomBytes(4).toString('hex')}`;
-              const entry = {
-                id,
-                name: call.toolName,
-                args: call.input,
-                result: toolResult?.output,
-              };
-              toolTrace.push(entry);
-              onEvent({ type: 'tool.start', id, name: entry.name, args: entry.args });
-              onEvent({ type: 'tool.end', id, name: entry.name, result: entry.result });
-            }
-          },
         });
 
         let content = '';
-        for await (const delta of result.textStream) {
+        for await (const part of result.fullStream) {
           if (abortSignal?.aborted) {
             return finishAborted(session, userId, onEvent, persistSession);
           }
-          content += delta;
-          onEvent({ type: 'message.assistant.delta', id: assistantId, delta });
+          if (part.type === 'text-delta') {
+            const delta = part.text;
+            content += delta;
+            onEvent({ type: 'message.assistant.delta', id: assistantId, delta });
+            continue;
+          }
+          if (part.type === 'tool-call') {
+            const id = part.toolCallId || `tool_${randomBytes(4).toString('hex')}`;
+            const entry = {
+              id,
+              name: part.toolName,
+              args: part.input,
+            };
+            toolTrace.push(entry);
+            onEvent({ type: 'tool.start', id, name: entry.name, args: entry.args });
+            continue;
+          }
+          if (part.type === 'tool-result') {
+            const id = part.toolCallId;
+            const existing = toolTrace.find((t) => t.id === id);
+            if (existing) {
+              existing.result = part.output;
+            }
+            onEvent({
+              type: 'tool.end',
+              id,
+              name: part.toolName,
+              result: part.output,
+            });
+            continue;
+          }
+          if (part.type === 'tool-error') {
+            const id = part.toolCallId;
+            const existing = toolTrace.find((t) => t.id === id);
+            const errResult = {
+              error: part.error instanceof Error ? part.error.message : String(part.error),
+            };
+            if (existing) {
+              existing.result = errResult;
+            }
+            onEvent({
+              type: 'tool.end',
+              id,
+              name: part.toolName,
+              result: errResult,
+            });
+          }
         }
 
         // Residual text only — never promote reasoning into the answer body.
@@ -204,6 +233,7 @@ export async function runTurn(input) {
           ...(toolTrace.length ? { tools: toolTrace } : {}),
         };
         session.messages.push(assistantMsg);
+        maybeApplyFirstTurnTitle(session, userMessage);
         onEvent({
           type: 'message.assistant',
           id: assistantId,
