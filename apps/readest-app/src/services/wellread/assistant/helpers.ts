@@ -84,3 +84,23 @@ export function formatWorkDuration(ms: number): string {
   const seconds = totalSec % 60;
   return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
 }
+
+/**
+ * Whether to write agent.sessionId into the reading-assistant store.
+ *
+ * Only push when the agent itself acquired a new id (lazy create on first send).
+ * New chat clears the store first while agent state is still stale for one paint —
+ * pushing that stale id would restore the session we just left.
+ */
+export function shouldPushAgentSessionToStore(input: {
+  agentSessionId: string | null;
+  previousAgentSessionId: string | null | undefined;
+  storeSessionId: string | null;
+  storeBookId: string | null;
+  bookId: string;
+}): boolean {
+  const { agentSessionId, previousAgentSessionId, storeSessionId, storeBookId, bookId } = input;
+  if (!agentSessionId) return false;
+  if (previousAgentSessionId === agentSessionId) return false;
+  return agentSessionId !== storeSessionId || storeBookId !== bookId;
+}

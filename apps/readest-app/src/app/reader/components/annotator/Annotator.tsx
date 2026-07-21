@@ -1201,9 +1201,8 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     const bookId = bookData.book?.hash;
     if (!bookId) return;
     const chapterTitle = progress?.sectionLabel || null;
-    void openReadingAssistant({
+    openReadingAssistant({
       bookId,
-      bookTitle: bookData.book?.title,
       selectionText: selection.text,
       chapterTitle,
     });

@@ -113,17 +113,23 @@ vi.mock('@/store/assistantPanelStore', () => ({
   ),
 }));
 
+const { setActiveSession, clearPendingQuotes, createEveSession } = vi.hoisted(() => ({
+  setActiveSession: vi.fn(),
+  clearPendingQuotes: vi.fn(),
+  createEveSession: vi.fn(),
+}));
+
 vi.mock('@/services/wellread/assistant/readingAssistantStore', () => ({
   useReadingAssistantStore: (sel: (s: Record<string, unknown>) => unknown) =>
     sel({
       activeSessionId: 'ses_1',
-      setActiveSession: vi.fn(),
-      clearPendingQuotes: vi.fn(),
+      setActiveSession,
+      clearPendingQuotes,
     }),
 }));
 
 vi.mock('@/services/wellread/assistant/eveClient', () => ({
-  createEveSession: vi.fn(),
+  createEveSession: (...args: unknown[]) => createEveSession(...args),
 }));
 
 vi.mock('@/app/reader/components/assistant/AIAssistant', () => ({
@@ -150,6 +156,9 @@ describe('AssistantPanel chat↔history pane', () => {
   beforeEach(() => {
     chatLifecycle.mounts = 0;
     chatLifecycle.unmounts = 0;
+    setActiveSession.mockReset();
+    clearPendingQuotes.mockReset();
+    createEveSession.mockReset();
   });
 
   afterEach(() => cleanup());
@@ -167,5 +176,19 @@ describe('AssistantPanel chat↔history pane', () => {
     expect(screen.getByTestId('ai-assistant')).toBeTruthy();
     expect(chatLifecycle.unmounts).toBe(0);
     expect(chatLifecycle.mounts).toBe(1);
+  });
+
+  it('New chat clears the active session without creating an empty sidecar row', async () => {
+    render(<AssistantPanel />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'New chat' }));
+    fireEvent.click(screen.getByRole('button', { name: 'New chat' }));
+
+    await Promise.resolve();
+
+    expect(createEveSession).not.toHaveBeenCalled();
+    expect(clearPendingQuotes).toHaveBeenCalled();
+    expect(setActiveSession).toHaveBeenCalledWith(null, 'book-1');
+    expect(setActiveSession).toHaveBeenCalledTimes(2);
   });
 });

@@ -43,6 +43,8 @@ export function useEveAgent(options: UseEveAgentOptions) {
   const [composer, setComposer] = useState('');
   const [inFlightTools, setInFlightTools] = useState<EveToolTrace[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  /** Mirrors activeSessionId for async reconcile — ignore stale disk loads after switch. */
+  const activeSessionIdRef = useRef<string | null>(sessionId ?? null);
   /** Session this hook instance created during send — skip disk reload for that id. */
   const createdSessionIdRef = useRef<string | null>(null);
   const loadedSessionIdRef = useRef<string | null | undefined>(undefined);
@@ -51,6 +53,11 @@ export function useEveAgent(options: UseEveAgentOptions) {
     let cancelled = false;
     const sessionChanged = loadedSessionIdRef.current !== sessionId;
     loadedSessionIdRef.current = sessionId;
+    // Sync before any await so in-flight reconcileFromDisk cannot win a race
+    // against New chat / History (sessionId → null or another id).
+    if (sessionChanged) {
+      activeSessionIdRef.current = sessionId ?? null;
+    }
 
     (async () => {
       // Stay session-less until the user sends (or an id is provided).
@@ -86,6 +93,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
       try {
         const session = await getEveSession(sessionId);
         if (cancelled) return;
+        activeSessionIdRef.current = session.id;
         setActiveSessionId(session.id);
         setMessages(session.messages);
       } catch (err) {
@@ -109,6 +117,8 @@ export function useEveAgent(options: UseEveAgentOptions) {
   const reconcileFromDisk = useCallback(async (id: string) => {
     try {
       const session = await getEveSession(id);
+      // History / New chat may have moved on while this fetch was in flight.
+      if (activeSessionIdRef.current !== id) return;
       setMessages(session.messages);
     } catch {
       // Keep local messages if refetch fails; disk remains source of truth on reopen.
@@ -135,6 +145,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
           });
           sessionIdForTurn = session.id;
           createdSessionIdRef.current = session.id;
+          activeSessionIdRef.current = session.id;
           setActiveSessionId(session.id);
           setMessages(session.messages);
           setStatus('ready');
@@ -300,7 +311,13 @@ export function useEveAgent(options: UseEveAgentOptions) {
         }
       } catch (err) {
         setInFlightTools([]);
-        if ((err as Error).name === 'AbortError') {
+        // Tauri plugin-http aborts as Error('Request cancelled'), not AbortError.
+        // Prefer the controller we own so Stop never falls into reconcileFromDisk.
+        const aborted =
+          controller.signal.aborted ||
+          (err as Error).name === 'AbortError' ||
+          (err instanceof Error && err.message === 'Request cancelled');
+        if (aborted) {
           // Mirror server rollback locally. Do not refetch here: Stop aborts the
           // fetch before the server may have re-persisted after dropInFlightUser,
           // and a stale getEveSession would resurrect the unanswered user.
@@ -332,6 +349,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
   const reset = useCallback(() => {
     stop();
     createdSessionIdRef.current = null;
+    activeSessionIdRef.current = null;
     setMessages([]);
     setActiveSessionId(null);
     setStatus('ready');

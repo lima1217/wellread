@@ -648,6 +648,145 @@ describe('useEveAgent', () => {
     expect(result.current.status).toBe('ready');
   });
 
+  it('drops the in-flight turn after Tauri Request cancelled (Stop)', async () => {
+    getEveSession.mockResolvedValue({
+      id: 'ses_existing',
+      bookId: 'book-1',
+      title: 'Chat',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [{ id: 'kept', role: 'user', content: 'prior', createdAt: 1 }],
+    });
+
+    streamEveTurn.mockImplementation(async function* (_sid, _msg, signal: AbortSignal) {
+      yield { type: 'message.user' as const, id: 'u1', content: 'stop me' };
+      yield {
+        type: 'message.assistant.delta' as const,
+        id: 'a1',
+        delta: 'partial ',
+      };
+      // plugin-http shape: Error('Request cancelled'), name !== 'AbortError'.
+      await new Promise<never>((_resolve, reject) => {
+        const fail = () => reject(new Error('Request cancelled'));
+        if (signal.aborted) fail();
+        else signal.addEventListener('abort', fail, { once: true });
+      });
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1);
+    });
+
+    await act(async () => {
+      result.current.setComposer('stop me');
+    });
+
+    let sendPromise!: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.send();
+    });
+    await act(async () => {
+      result.current.stop();
+    });
+    await act(async () => {
+      await sendPromise;
+    });
+
+    expect(getEveSession).toHaveBeenCalledTimes(1);
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({ id: 'kept', content: 'prior' }),
+    ]);
+    expect(result.current.status).toBe('ready');
+    expect(result.current.error).toBeNull();
+  });
+
+  it('ignores reconcileFromDisk after switching to another session', async () => {
+    let resolveStale: (value: unknown) => void;
+    const staleLoad = new Promise((resolve) => {
+      resolveStale = resolve;
+    });
+
+    getEveSession.mockImplementation((id: string) => {
+      if (id === 'ses_a') {
+        // First call: mount load for A. Later: delayed error reconcile for A.
+        if (getEveSession.mock.calls.filter((c) => c[0] === 'ses_a').length === 1) {
+          return Promise.resolve({
+            id: 'ses_a',
+            bookId: 'book-1',
+            title: 'A',
+            createdAt: 1,
+            updatedAt: 1,
+            messages: [{ id: 'a0', role: 'user', content: 'on A', createdAt: 1 }],
+          });
+        }
+        return staleLoad;
+      }
+      return Promise.resolve({
+        id: 'ses_b',
+        bookId: 'book-1',
+        title: 'B',
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [{ id: 'b0', role: 'user', content: 'on B', createdAt: 1 }],
+      });
+    });
+
+    streamEveTurn.mockImplementation(async function* () {
+      yield { type: 'message.user' as const, id: 'u1', content: 'boom' };
+      yield { type: 'error' as const, message: 'model failed' };
+    });
+
+    const { result, rerender } = renderHook(
+      ({ sessionId }: { sessionId: string }) =>
+        useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId }),
+      { initialProps: { sessionId: 'ses_a' } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.messages).toEqual([
+        expect.objectContaining({ id: 'a0', content: 'on A' }),
+      ]);
+    });
+
+    await act(async () => {
+      result.current.setComposer('boom');
+    });
+
+    let sendPromise!: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.send();
+    });
+
+    // Switch to B while A's reconcile is still pending.
+    await act(async () => {
+      rerender({ sessionId: 'ses_b' });
+    });
+    await waitFor(() => {
+      expect(result.current.messages).toEqual([
+        expect.objectContaining({ id: 'b0', content: 'on B' }),
+      ]);
+    });
+
+    await act(async () => {
+      resolveStale!({
+        id: 'ses_a',
+        bookId: 'book-1',
+        title: 'A',
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [{ id: 'stale', role: 'user', content: 'should not appear', createdAt: 9 }],
+      });
+      await sendPromise;
+    });
+
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({ id: 'b0', content: 'on B' }),
+    ]);
+  });
+
   it('reconciles messages from disk after a stream error', async () => {
     getEveSession
       .mockResolvedValueOnce({

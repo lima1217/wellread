@@ -3,6 +3,7 @@ import {
   formatPendingQuotesForTurn,
   formatWorkDuration,
   isReadingAssistantAvailable,
+  shouldPushAgentSessionToStore,
   shouldShowPendingReply,
   summarizeToolTrace,
 } from '@/services/wellread/assistant/helpers';
@@ -144,5 +145,44 @@ describe('formatWorkDuration', () => {
   it('formats minute spans without trailing zero seconds', () => {
     expect(formatWorkDuration(60_000)).toBe('1m');
     expect(formatWorkDuration(125_000)).toBe('2m 5s');
+  });
+});
+
+describe('shouldPushAgentSessionToStore', () => {
+  it('does not restore a stale agent id after New chat clears the store', () => {
+    // Store → null first; agent still holds the previous id for one paint.
+    expect(
+      shouldPushAgentSessionToStore({
+        agentSessionId: 'ses_old',
+        previousAgentSessionId: 'ses_old',
+        storeSessionId: null,
+        storeBookId: 'book-1',
+        bookId: 'book-1',
+      }),
+    ).toBe(false);
+  });
+
+  it('pushes when the agent mints a session on first send (lazy create)', () => {
+    expect(
+      shouldPushAgentSessionToStore({
+        agentSessionId: 'ses_new',
+        previousAgentSessionId: null,
+        storeSessionId: null,
+        storeBookId: 'book-1',
+        bookId: 'book-1',
+      }),
+    ).toBe(true);
+  });
+
+  it('is a no-op when store already matches the agent', () => {
+    expect(
+      shouldPushAgentSessionToStore({
+        agentSessionId: 'ses_1',
+        previousAgentSessionId: null,
+        storeSessionId: 'ses_1',
+        storeBookId: 'book-1',
+        bookId: 'book-1',
+      }),
+    ).toBe(false);
   });
 });

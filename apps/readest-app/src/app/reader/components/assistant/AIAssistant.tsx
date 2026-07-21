@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUpIcon, CheckIcon, ChevronUpIcon, CopyIcon, Loader2Icon, XIcon } from 'lucide-react';
 import clsx from 'clsx';
 import ReactMarkdown, { type Components } from 'react-markdown';
@@ -26,6 +26,7 @@ import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
 import {
   formatWorkDuration,
   isReadingAssistantAvailable,
+  shouldPushAgentSessionToStore,
   shouldShowPendingReply,
   summarizeToolTrace,
 } from '@/services/wellread/assistant/helpers';
@@ -389,8 +390,19 @@ const ReadingAssistantChat = ({ bookId, bookTitle }: { bookId: string; bookTitle
     thinkingMode,
   });
 
+  const prevAgentSessionIdRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (agent.sessionId && (agent.sessionId !== activeSessionId || activeBookId !== bookId)) {
+    const previousAgentSessionId = prevAgentSessionIdRef.current;
+    prevAgentSessionIdRef.current = agent.sessionId;
+    if (
+      shouldPushAgentSessionToStore({
+        agentSessionId: agent.sessionId,
+        previousAgentSessionId,
+        storeSessionId: activeSessionId,
+        storeBookId: activeBookId,
+        bookId,
+      })
+    ) {
       setActiveSession(agent.sessionId, bookId);
     }
   }, [agent.sessionId, activeSessionId, activeBookId, bookId, setActiveSession]);

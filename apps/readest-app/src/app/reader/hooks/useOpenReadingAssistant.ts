@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { useAssistantPanelStore } from '@/store/assistantPanelStore';
 import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
-import { createEveSession } from '@/services/wellread/assistant/eveClient';
 
 /**
  * Open the Reading Assistant panel.
@@ -13,11 +12,9 @@ export function useOpenReadingAssistant() {
   const appendPendingQuote = useReadingAssistantStore((s) => s.appendPendingQuote);
 
   const openReadingAssistant = useCallback(
-    async (options?: {
+    (options?: {
       sessionId?: string;
       bookId?: string;
-      bookTitle?: string;
-      newConversationTitle?: string;
       /** Selection text → append as Pending Quote */
       selectionText?: string;
       chapterTitle?: string | null;
@@ -28,16 +25,12 @@ export function useOpenReadingAssistant() {
         setActiveSession(options.sessionId, options.bookId ?? null);
       } else if (options?.bookId) {
         // Reuse the active session for this book when ask-about fires.
+        // Otherwise stay session-less — first send creates lazily (same as New chat).
         const state = useReadingAssistantStore.getState();
         if (state.activeSessionId && state.activeBookId === options.bookId) {
           setActiveSession(state.activeSessionId, options.bookId);
         } else {
-          const session = await createEveSession({
-            bookId: options.bookId,
-            bookTitle: options.bookTitle,
-            title: options.newConversationTitle,
-          });
-          setActiveSession(session.id, options.bookId);
+          setActiveSession(null, options.bookId);
         }
       }
 

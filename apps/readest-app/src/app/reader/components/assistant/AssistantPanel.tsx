@@ -7,7 +7,6 @@ import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { useAssistantPanelStore } from '@/store/assistantPanelStore';
 import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
-import { createEveSession } from '@/services/wellread/assistant/eveClient';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useThemeStore } from '@/store/themeStore';
 import { useEnv } from '@/context/EnvContext';
@@ -123,19 +122,15 @@ const AssistantPanel: React.FC = ({}) => {
     saveSysSettings(envConfig, 'globalReadSettings', newGlobalReadSettings);
   };
 
-  const handleNewSession = useCallback(async () => {
+  const handleNewSession = useCallback(() => {
     if (!sideBarBookKey) return;
     const data = getBookData(sideBarBookKey);
     const bookId = data?.book?.hash || sideBarBookKey.split('-')[0] || '';
     if (!bookId) return;
-    const bookTitle = data?.book?.title || 'Unknown';
+    // Do not POST an empty session here — retries/double-clicks orphan identical
+    // "Chat about …" rows in History. First send creates lazily via useEveAgent.
     clearPendingQuotes();
-    const session = await createEveSession({
-      bookId,
-      bookTitle,
-      title: `Chat about ${bookTitle}`,
-    });
-    setActiveSession(session.id, bookId);
+    setActiveSession(null, bookId);
     setPane('chat');
   }, [sideBarBookKey, getBookData, clearPendingQuotes, setActiveSession]);
 
@@ -244,7 +239,7 @@ const AssistantPanel: React.FC = ({}) => {
             handleTogglePin={handleTogglePin}
             onOpenHistory={() => setPane('history')}
             onBackToChat={() => setPane('chat')}
-            onNewSession={() => void handleNewSession()}
+            onNewSession={handleNewSession}
           />
         </div>
         <div className='flex min-h-0 flex-1 flex-col'>
