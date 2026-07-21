@@ -37,8 +37,32 @@ export function normalizeThinkingMode(value) {
 }
 
 /**
+ * DeepSeek / BigModel (GLM) accept the proprietary `thinking` request field.
+ * OpenAI official and many other OpenAI-compatible hosts 400 on it
+ * ("Unrecognized request argument").
+ *
+ * @param {string | undefined | null} baseURL
+ * @returns {boolean}
+ */
+export function supportsThinkingExtension(baseURL) {
+  if (!baseURL || typeof baseURL !== 'string') return false;
+  try {
+    const host = new URL(baseURL).hostname.toLowerCase();
+    return (
+      host === 'api.deepseek.com' ||
+      host.endsWith('.deepseek.com') ||
+      host === 'open.bigmodel.cn' ||
+      host.endsWith('.bigmodel.cn')
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * OpenAI-compatible hosts (DeepSeek, GLM, …):
- * - Thinking controlled via `thinking: { type: 'enabled' | 'disabled' }`.
+ * - Thinking controlled via `thinking: { type: 'enabled' | 'disabled' }`
+ *   **only** on hosts that advertise the extension (see supportsThinkingExtension).
  * - CoT lands on `reasoning_content`; @ai-sdk/openai chat only reads `content`.
  * - Non-gpt* model ids are treated as OpenAI "reasoning" models, so `system` is
  *   rewritten to `role: developer`, which many hosts reject with HTTP 400.
@@ -47,9 +71,14 @@ export function normalizeThinkingMode(value) {
  * In Think mode, forward reasoning via the turn fetch context callback instead.
  *
  * @param {typeof fetch} [baseFetch]
+ * @param {{ injectThinking?: boolean }} [options]
  * @returns {typeof fetch}
  */
-export function withModelFetchPatch(baseFetch = globalThis.fetch.bind(globalThis)) {
+export function withModelFetchPatch(
+  baseFetch = globalThis.fetch.bind(globalThis),
+  options = {},
+) {
+  const injectThinking = options.injectThinking !== false;
   return async (input, init) => {
     const store = turnFetchContext.getStore();
     const thinkingMode = normalizeThinkingMode(store?.thinkingMode);
@@ -62,7 +91,9 @@ export function withModelFetchPatch(baseFetch = globalThis.fetch.bind(globalThis
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           nextInit = {
             ...init,
-            body: JSON.stringify(patchChatCompletionBody(parsed, thinkingMode)),
+            body: JSON.stringify(
+              patchChatCompletionBody(parsed, thinkingMode, { injectThinking }),
+            ),
           };
         }
       } catch {
@@ -80,14 +111,18 @@ export const withDeepSeekThinkingDisabled = withModelFetchPatch;
 /**
  * @param {Record<string, unknown>} parsed
  * @param {ThinkingMode} [thinkingMode]
+ * @param {{ injectThinking?: boolean }} [options]
  * @returns {Record<string, unknown>}
  */
-export function patchChatCompletionBody(parsed, thinkingMode = 'fast') {
+export function patchChatCompletionBody(parsed, thinkingMode = 'fast', options = {}) {
   const mode = normalizeThinkingMode(thinkingMode);
-  const next = {
-    ...parsed,
-    thinking: { type: mode === 'think' ? 'enabled' : 'disabled' },
-  };
+  const injectThinking = options.injectThinking !== false;
+  const next = { ...parsed };
+  if (injectThinking) {
+    next.thinking = { type: mode === 'think' ? 'enabled' : 'disabled' };
+  } else {
+    delete next.thinking;
+  }
   if (Array.isArray(parsed.messages)) {
     next.messages = parsed.messages.map((message) => {
       if (!message || typeof message !== 'object' || Array.isArray(message)) return message;
@@ -309,7 +344,10 @@ export function normalizeModelEnv(input = {}) {
 /**
  * Construct an AI SDK LanguageModel instance (not a string).
  * @param {ReturnType<typeof normalizeModelEnv>} config
- * @param {{ createOpenAI?: typeof import('@ai-sdk/openai').createOpenAI }} [deps]
+ * @param {{
+ *   createOpenAI?: typeof import('@ai-sdk/openai').createOpenAI,
+ *   baseFetch?: typeof fetch,
+ * }} [deps]
  */
 export function createLanguageModel(config, deps = {}) {
   const createOpenAI = deps.createOpenAI;
@@ -319,7 +357,9 @@ export function createLanguageModel(config, deps = {}) {
   const provider = createOpenAI({
     baseURL: config.baseURL,
     apiKey: config.apiKey || 'missing-key',
-    fetch: withModelFetchPatch(),
+    fetch: withModelFetchPatch(deps.baseFetch, {
+      injectThinking: supportsThinkingExtension(config.baseURL),
+    }),
   });
   // Default provider(modelId) is Responses API. Most OpenAI-compatible hosts
   // (DeepSeek included) only speak Chat Completions — that is the default.

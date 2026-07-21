@@ -6,6 +6,7 @@ import {
   normalizeModelEnv,
   normalizeThinkingMode,
   patchChatCompletionBody,
+  supportsThinkingExtension,
   transformCompletionPayload,
   turnFetchContext,
   withModelFetchPatch,
@@ -43,6 +44,21 @@ describe('normalizeThinkingMode', () => {
   });
 });
 
+describe('supportsThinkingExtension', () => {
+  it('recognizes DeepSeek and BigModel hosts', () => {
+    assert.equal(supportsThinkingExtension('https://api.deepseek.com/v1'), true);
+    assert.equal(supportsThinkingExtension('https://api.deepseek.com'), true);
+    assert.equal(supportsThinkingExtension('https://open.bigmodel.cn/api/paas/v4'), true);
+  });
+
+  it('rejects OpenAI official and unknown hosts', () => {
+    assert.equal(supportsThinkingExtension('https://api.openai.com/v1'), false);
+    assert.equal(supportsThinkingExtension('https://api.openai.com'), false);
+    assert.equal(supportsThinkingExtension('https://api.example.com/v1'), false);
+    assert.equal(supportsThinkingExtension('not-a-url'), false);
+  });
+});
+
 describe('patchChatCompletionBody', () => {
   it('rewrites developer role to system and disables thinking in fast mode', () => {
     assert.deepEqual(
@@ -73,6 +89,20 @@ describe('patchChatCompletionBody', () => {
       patchChatCompletionBody({ model: 'glm-5.2', messages: [] }, 'think').thinking,
       { type: 'enabled' },
     );
+  });
+
+  it('omits thinking when injectThinking is false', () => {
+    const out = patchChatCompletionBody(
+      {
+        model: 'gpt-4.1',
+        messages: [{ role: 'developer', content: 'sys' }],
+        thinking: { type: 'enabled' },
+      },
+      'think',
+      { injectThinking: false },
+    );
+    assert.equal('thinking' in out, false);
+    assert.deepEqual(out.messages, [{ role: 'system', content: 'sys' }]);
   });
 });
 
@@ -155,6 +185,32 @@ describe('withModelFetchPatch', () => {
     assert.equal(JSON.parse(/** @type {string} */ (sentBody)).thinking.type, 'enabled');
   });
 
+  it('does not inject thinking when injectThinking is false', async () => {
+    /** @type {string | undefined} */
+    let sentBody;
+    const wrapped = withModelFetchPatch(
+      async (_url, init) => {
+        sentBody = typeof init?.body === 'string' ? init.body : undefined;
+        return new Response('{}', { status: 200 });
+      },
+      { injectThinking: false },
+    );
+
+    await turnFetchContext.run({ thinkingMode: 'think' }, () =>
+      wrapped('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4.1',
+          messages: [],
+          thinking: { type: 'enabled' },
+        }),
+      }),
+    );
+
+    assert.ok(sentBody);
+    assert.equal('thinking' in JSON.parse(sentBody), false);
+  });
+
   it('keeps each concurrent turn thinkingMode isolated', async () => {
     /** @type {string[]} */
     const thinkingTypes = [];
@@ -223,5 +279,71 @@ describe('createLanguageModel', () => {
       { createOpenAI },
     );
     assert.equal(result.model, fakeResponses);
+  });
+
+  it('wires fetch that omits thinking for OpenAI hosts', async () => {
+    /** @type {string | undefined} */
+    let sentBody;
+    /** @type {typeof fetch | undefined} */
+    let patchedFetch;
+    const createOpenAI = (opts) => {
+      patchedFetch = opts.fetch;
+      const provider = () => ({});
+      provider.chat = () => ({});
+      return provider;
+    };
+    createLanguageModel(
+      normalizeModelEnv({
+        apiKey: 'sk-test',
+        baseURL: 'https://api.openai.com/v1',
+        modelId: 'gpt-4.1',
+      }),
+      {
+        createOpenAI,
+        baseFetch: async (_url, init) => {
+          sentBody = typeof init?.body === 'string' ? init.body : undefined;
+          return new Response('{}', { status: 200 });
+        },
+      },
+    );
+    assert.ok(patchedFetch);
+    await turnFetchContext.run({ thinkingMode: 'think' }, () =>
+      patchedFetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-4.1', messages: [] }),
+      }),
+    );
+    assert.ok(sentBody);
+    assert.equal('thinking' in JSON.parse(sentBody), false);
+  });
+
+  it('wires fetch that still injects thinking for DeepSeek hosts', async () => {
+    /** @type {string | undefined} */
+    let sentBody;
+    /** @type {typeof fetch | undefined} */
+    let patchedFetch;
+    const createOpenAI = (opts) => {
+      patchedFetch = opts.fetch;
+      const provider = () => ({});
+      provider.chat = () => ({});
+      return provider;
+    };
+    createLanguageModel(normalizeModelEnv({ apiKey: 'sk-test' }), {
+      createOpenAI,
+      baseFetch: async (_url, init) => {
+        sentBody = typeof init?.body === 'string' ? init.body : undefined;
+        return new Response('{}', { status: 200 });
+      },
+    });
+    assert.ok(patchedFetch);
+    await turnFetchContext.run({ thinkingMode: 'fast' }, () =>
+      patchedFetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'deepseek-v4-flash', messages: [] }),
+      }),
+    );
+    assert.deepEqual(JSON.parse(/** @type {string} */ (sentBody)).thinking, {
+      type: 'disabled',
+    });
   });
 });
