@@ -715,7 +715,6 @@ const AIAssistant = ({ bookKey }: AIAssistantProps) => {
 
   const bookId = bookData?.book?.hash || '';
   const bookTitle = bookData?.book?.title || '';
-  const activeSessionId = useReadingAssistantStore((s) => s.activeSessionId);
 
   if (!available) {
     return (
@@ -744,13 +743,10 @@ const AIAssistant = ({ bookKey }: AIAssistantProps) => {
     );
   }
 
-  return (
-    <ReadingAssistantChat
-      key={`${bookId}-${activeSessionId ?? 'new'}`}
-      bookId={bookId}
-      bookTitle={bookTitle}
-    />
-  );
+  // Key only on bookId — not activeSessionId. First send creates a session and
+  // writes it to the store; a sessionId key remount would drop the in-flight stream.
+  // Session switches (History / New chat) are handled by useEveAgent's load effect.
+  return <ReadingAssistantChat key={bookId} bookId={bookId} bookTitle={bookTitle} />;
 };
 
 export default AIAssistant;

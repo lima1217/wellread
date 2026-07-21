@@ -43,17 +43,45 @@ export function useEveAgent(options: UseEveAgentOptions) {
   const [composer, setComposer] = useState('');
   const [inFlightTools, setInFlightTools] = useState<EveToolTrace[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  /** Session this hook instance created during send — skip disk reload for that id. */
+  const createdSessionIdRef = useRef<string | null>(null);
+  const loadedSessionIdRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
+    const sessionChanged = loadedSessionIdRef.current !== sessionId;
+    loadedSessionIdRef.current = sessionId;
+
     (async () => {
       // Stay session-less until the user sends (or an id is provided).
       // Auto-creating on mount orphans empty "Chat about …" rows whenever
       // Chat History clears the active session and the chat pane remounts.
       if (!sessionId) {
+        createdSessionIdRef.current = null;
+        if (sessionChanged) {
+          abortRef.current?.abort();
+          abortRef.current = null;
+          setInFlightTools([]);
+          setStatus('ready');
+        }
         setActiveSessionId(null);
         setMessages([]);
         return;
+      }
+      // Parent synced the id we just created (store ← agent.sessionId). Disk is
+      // still empty until the turn finishes — do not wipe in-flight messages.
+      if (sessionId === createdSessionIdRef.current) {
+        setActiveSessionId(sessionId);
+        return;
+      }
+      // History / New chat: drop any in-flight turn so its deltas cannot
+      // overwrite the session we are about to load.
+      if (sessionChanged) {
+        createdSessionIdRef.current = null;
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setInFlightTools([]);
+        setStatus('ready');
       }
       try {
         const session = await getEveSession(sessionId);
@@ -97,6 +125,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
             title: bookTitle ? `Chat about ${bookTitle}` : undefined,
           });
           sessionIdForTurn = session.id;
+          createdSessionIdRef.current = session.id;
           setActiveSessionId(session.id);
           setMessages(session.messages);
           setStatus('ready');
@@ -266,6 +295,10 @@ export function useEveAgent(options: UseEveAgentOptions) {
         }
       } finally {
         abortRef.current = null;
+        // Allow later prop-driven reloads of this session (e.g. bookTitle change).
+        if (createdSessionIdRef.current === sessionIdForTurn) {
+          createdSessionIdRef.current = null;
+        }
       }
     },
     [activeSessionId, bookId, bookTitle, composer, status, thinkingMode],
@@ -273,6 +306,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
 
   const reset = useCallback(() => {
     stop();
+    createdSessionIdRef.current = null;
     setMessages([]);
     setActiveSessionId(null);
     setStatus('ready');

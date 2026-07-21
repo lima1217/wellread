@@ -88,6 +88,184 @@ describe('useEveAgent', () => {
     expect(result.current.sessionId).toBe('ses_new');
   });
 
+  it('keeps in-flight messages when sessionId prop updates to the session created mid-send', async () => {
+    createEveSession.mockResolvedValue({
+      id: 'ses_new',
+      bookId: 'book-1',
+      title: 'Chat about Middlemarch',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [],
+    });
+    // Disk still empty — turn has not finished saving yet.
+    getEveSession.mockResolvedValue({
+      id: 'ses_new',
+      bookId: 'book-1',
+      title: 'Chat about Middlemarch',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [],
+    });
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    streamEveTurn.mockImplementation(async function* () {
+      yield { type: 'message.user' as const, id: 'u1', content: 'What is vocation?' };
+      yield { type: 'message.assistant.delta' as const, id: 'a1', delta: 'Hello' };
+      await gate;
+      yield {
+        type: 'message.assistant' as const,
+        id: 'a1',
+        content: 'Hello',
+      };
+      yield { type: 'done' as const };
+    });
+
+    const { result, rerender } = renderHook(
+      ({ sessionId }) => useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId }),
+      { initialProps: { sessionId: null as string | null } },
+    );
+
+    await act(async () => {
+      result.current.setComposer('What is vocation?');
+    });
+
+    let sendDone: Promise<void> | undefined;
+    await act(async () => {
+      sendDone = result.current.send();
+    });
+
+    await waitFor(() => {
+      expect(result.current.sessionId).toBe('ses_new');
+      expect(result.current.messages.some((m) => m.role === 'user')).toBe(true);
+    });
+
+    // Parent synced store → prop (same id this instance just created).
+    rerender({ sessionId: 'ses_new' });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getEveSession).not.toHaveBeenCalled();
+    expect(result.current.messages.some((m) => m.role === 'user')).toBe(true);
+    expect(result.current.messages.some((m) => m.role === 'assistant')).toBe(true);
+
+    release();
+    await act(async () => {
+      await sendDone;
+    });
+
+    expect(result.current.messages.find((m) => m.role === 'assistant')).toMatchObject({
+      content: 'Hello',
+    });
+  });
+
+  it('reloads messages when sessionId prop changes to a different session', async () => {
+    getEveSession
+      .mockResolvedValueOnce({
+        id: 'ses_a',
+        bookId: 'book-1',
+        title: 'A',
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [{ id: 'a1', role: 'user', content: 'from A', createdAt: 1 }],
+      })
+      .mockResolvedValueOnce({
+        id: 'ses_b',
+        bookId: 'book-1',
+        title: 'B',
+        createdAt: 2,
+        updatedAt: 2,
+        messages: [{ id: 'b1', role: 'user', content: 'from B', createdAt: 2 }],
+      });
+
+    const { result, rerender } = renderHook(
+      ({ sessionId }) => useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId }),
+      { initialProps: { sessionId: 'ses_a' } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.messages[0]?.content).toBe('from A');
+    });
+
+    rerender({ sessionId: 'ses_b' });
+
+    await waitFor(() => {
+      expect(result.current.messages[0]?.content).toBe('from B');
+    });
+  });
+
+  it('aborts an in-flight turn when sessionId switches to another session', async () => {
+    getEveSession
+      .mockResolvedValueOnce({
+        id: 'ses_a',
+        bookId: 'book-1',
+        title: 'A',
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [],
+      })
+      .mockResolvedValueOnce({
+        id: 'ses_b',
+        bookId: 'book-1',
+        title: 'B',
+        createdAt: 2,
+        updatedAt: 2,
+        messages: [{ id: 'b1', role: 'user', content: 'from B', createdAt: 2 }],
+      });
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    streamEveTurn.mockImplementation(async function* (_id, _text, signal: AbortSignal) {
+      yield { type: 'message.user' as const, id: 'u1', content: 'streaming…' };
+      yield { type: 'message.assistant.delta' as const, id: 'a1', delta: 'partial' };
+      await gate;
+      if (signal.aborted) {
+        const err = new Error('aborted');
+        err.name = 'AbortError';
+        throw err;
+      }
+      yield { type: 'done' as const };
+    });
+
+    const { result, rerender } = renderHook(
+      ({ sessionId }) => useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId }),
+      { initialProps: { sessionId: 'ses_a' } },
+    );
+    await waitFor(() => {
+      expect(result.current.sessionId).toBe('ses_a');
+    });
+
+    await act(async () => {
+      result.current.setComposer('streaming…');
+    });
+    let sendDone: Promise<void> | undefined;
+    await act(async () => {
+      sendDone = result.current.send();
+    });
+    await waitFor(() => {
+      expect(result.current.messages.some((m) => m.role === 'assistant')).toBe(true);
+    });
+
+    rerender({ sessionId: 'ses_b' });
+    release();
+    await act(async () => {
+      await sendDone;
+    });
+
+    await waitFor(() => {
+      expect(result.current.messages).toEqual([
+        expect.objectContaining({ id: 'b1', content: 'from B' }),
+      ]);
+    });
+    expect(result.current.status).toBe('ready');
+  });
+
   it('wires Pending Quotes into the turn text and skips restore after user commit', async () => {
     getEveSession.mockResolvedValue({
       id: 'ses_existing',

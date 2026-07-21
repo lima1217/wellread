@@ -45,7 +45,6 @@ const AssistantPanel: React.FC = ({}) => {
     setAssistantPanelVisible,
     toggleAssistantPanelPin,
   } = useAssistantPanelStore();
-  const activeSessionId = useReadingAssistantStore((s) => s.activeSessionId);
   const setActiveSession = useReadingAssistantStore((s) => s.setActiveSession);
   const clearPendingQuotes = useReadingAssistantStore((s) => s.clearPendingQuotes);
 
@@ -255,7 +254,10 @@ const AssistantPanel: React.FC = ({}) => {
             className={clsx('flex min-h-0 flex-1 flex-col', pane !== 'chat' && 'hidden')}
             aria-hidden={pane !== 'chat'}
           >
-            <AIAssistant key={activeSessionId ?? 'new'} bookKey={sideBarBookKey} />
+            {/* Do not key on activeSessionId: first send creates a session and
+                syncs it to the store; remounting here would destroy useEveAgent
+                mid-stream. History / new-chat switches load via sessionId prop. */}
+            <AIAssistant bookKey={sideBarBookKey} />
           </div>
           {pane === 'history' && (
             <ChatHistoryView bookKey={sideBarBookKey} onSessionOpen={() => setPane('chat')} />
