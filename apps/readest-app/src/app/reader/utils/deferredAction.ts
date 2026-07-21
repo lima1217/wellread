@@ -1,5 +1,5 @@
 // Tiny helper for the Annotator's instant quick action (translate/dictionary/
-// tts/etc.). It solves two related touch-gesture problems:
+// etc.). It solves two related touch-gesture problems:
 //
 //   * On Android a long-press selects text via selectionchange while the finger
 //     is still down, so the action is deferred until touchend — otherwise the

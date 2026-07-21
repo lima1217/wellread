@@ -19,7 +19,6 @@ export interface CreateProofreadRuleOptions {
   caseSensitive?: boolean;
   order?: number;
   wholeWord?: boolean;
-  onlyForTTS?: boolean;
 }
 
 interface ProofreadStoreState {
@@ -71,7 +70,6 @@ function createProofreadRule(opts: CreateProofreadRuleOptions): ProofreadRule {
     caseSensitive: opts.caseSensitive ?? true,
     order: opts.order ?? 1000,
     wholeWord: opts.wholeWord ?? true,
-    onlyForTTS: opts.onlyForTTS ?? false,
     updatedAt: Date.now(),
   };
   return ensureRuleId(rule);

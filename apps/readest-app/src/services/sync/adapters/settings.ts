@@ -41,7 +41,6 @@ export const SETTINGS_WHITELIST = [
   'globalReadSettings.customHighlightColors',
   'globalReadSettings.userHighlightColors',
   'globalReadSettings.defaultHighlightLabels',
-  'globalReadSettings.customTtsHighlightColors',
   // Dictionary preferences. Whole-field LWW — concurrent edits on
   // different devices may lose one side, but in practice users don't
   // edit these on two devices at once. `defaultProviderId` is

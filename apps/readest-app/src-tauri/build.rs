@@ -1,8 +1,4 @@
-use std::{
-    env, fs,
-    path::PathBuf,
-    process::Command,
-};
+use std::{env, fs, path::PathBuf, process::Command};
 
 fn main() {
     println!(

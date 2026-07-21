@@ -83,10 +83,6 @@ import AutoScrollSpeedOverlay from './AutoScrollSpeedOverlay';
 import Spinner from '@/components/Spinner';
 import ImageViewer from './ImageViewer';
 import TableViewer from './TableViewer';
-import {
-  getTTSMiniPlayerBottomOffset,
-  TTS_MINI_PLAYER_HEIGHT,
-} from '../utils/ttsMiniPlayerPosition';
 
 declare global {
   interface Window {
@@ -214,11 +210,10 @@ const FoliateViewer: React.FC<{
     // it'll pick this up and the intermediate states are skipped.
     pendingRelocateRef.current = event as CustomEvent;
     // requestAnimationFrame is paused while the WebView is backgrounded, so the
-    // rAF-coalesced commit below would never run during background TTS - which
-    // freezes book.progress (and readerProgressStore, and the home-screen
-    // widget that reads them). Commit synchronously when hidden so progress
-    // stays current. The page-follow relocate still fires; only the commit was
-    // being deferred.
+    // rAF-coalesced commit below would never run while hidden — which freezes
+    // book.progress (and readerProgressStore, and the home-screen widget that
+    // reads them). Commit synchronously when hidden so progress stays current.
+    // Relocate still fires; only the commit was being deferred.
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
       if (relocateRafRef.current != null) {
         cancelAnimationFrame(relocateRafRef.current);
@@ -802,7 +797,6 @@ const FoliateViewer: React.FC<{
     // (READEST-2V). Bail: there is no view left to lay out.
     const viewSettings = getViewSettings(bookKey);
     if (!viewSettings) return;
-    const viewState = getViewState(bookKey);
     const bookData = getBookData(bookKey);
     const viewInsets = getViewInsets(viewSettings);
     const showDoubleBorder = viewSettings.vertical && viewSettings.doubleBorder;
@@ -815,17 +809,7 @@ const FoliateViewer: React.FC<{
     // full-width blank bar that steals space from the book text.
     const showBottomFooter = footerReservesBand(viewSettings) && !viewSettings.vertical;
     const moreTopInset = showTopHeader ? Math.max(0, 16 - insets.top) : 0;
-    // Resting position (bottom bar dismissed): the card stacks above the
-    // footer band, so the reserved clearance is its bottom offset plus the
-    // card height.
-    const miniPlayerClearance = viewState?.ttsEnabled
-      ? getTTSMiniPlayerBottomOffset(viewSettings) +
-        TTS_MINI_PLAYER_HEIGHT +
-        gridInsets.bottom * 0.33
-      : 0;
-    const moreBottomInset = showBottomFooter
-      ? Math.max(0, Math.max(miniPlayerClearance, 16) - insets.bottom)
-      : Math.max(0, miniPlayerClearance);
+    const moreBottomInset = showBottomFooter ? Math.max(0, 16 - insets.bottom) : 0;
     const moreRightInset = showDoubleBorderHeader ? 32 : 0;
     const moreLeftInset = showDoubleBorderFooter ? 32 : 0;
     const topMargin = (showTopHeader ? insets.top : viewInsets.top) + moreTopInset;
@@ -843,9 +827,7 @@ const FoliateViewer: React.FC<{
       const safeBottomPadding = appService?.hasSafeAreaInset ? gridInsets.bottom * 0.33 : 0;
       const footerBarHeight = safeBottomPadding + viewSettings.marginBottomPx;
       const scrollTop = headerVisible ? gridInsets.top + viewSettings.marginTopPx : 0;
-      const scrollBottom = footerVisible
-        ? Math.max(footerBarHeight, miniPlayerClearance)
-        : miniPlayerClearance;
+      const scrollBottom = footerVisible ? footerBarHeight : 0;
       setScrollMargins({ top: bookData?.isFixedLayout ? 0 : scrollTop, bottom: scrollBottom });
     } else {
       setScrollMargins({ top: 0, bottom: 0 });
@@ -983,7 +965,6 @@ const FoliateViewer: React.FC<{
     viewSettings?.showFooter,
     viewSettings?.scrolled,
     viewSettings?.noContinuousScroll,
-    viewState?.ttsEnabled,
     // footerReservesBand inputs: the band must collapse/return live when the
     // user flips these settings.
     viewSettings?.showStickyProgressBar,

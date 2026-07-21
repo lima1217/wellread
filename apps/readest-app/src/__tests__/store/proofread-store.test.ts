@@ -121,7 +121,6 @@ function makeRule(overrides: Partial<ProofreadRule> = {}): ProofreadRule {
     caseSensitive: true,
     order: 1000,
     wholeWord: true,
-    onlyForTTS: false,
     ...overrides,
   };
 }
@@ -208,7 +207,6 @@ describe('proofreadStore', () => {
       expect(rule.caseSensitive).toBe(true);
       expect(rule.order).toBe(1000);
       expect(rule.wholeWord).toBe(true);
-      expect(rule.onlyForTTS).toBe(false);
     });
 
     test('handles all optional fields', async () => {
@@ -225,7 +223,6 @@ describe('proofreadStore', () => {
         caseSensitive: false,
         order: 5,
         wholeWord: false,
-        onlyForTTS: true,
       });
 
       expect(rule.cfi).toBe('epubcfi(/6/4)');
@@ -235,7 +232,6 @@ describe('proofreadStore', () => {
       expect(rule.caseSensitive).toBe(false);
       expect(rule.order).toBe(5);
       expect(rule.wholeWord).toBe(false);
-      expect(rule.onlyForTTS).toBe(true);
     });
 
     test('persists via saveConfig', async () => {

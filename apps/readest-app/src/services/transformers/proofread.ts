@@ -206,10 +206,9 @@ export const proofreadTransformer: Transformer = {
   name: 'proofread',
 
   transform: async (ctx, options) => {
-    const { docType = 'text/html', onlyForTTS = false } =
+    const { docType = 'text/html' } =
       (options as {
         docType?: DOMParserSupportedType;
-        onlyForTTS?: boolean;
       }) || {};
     const globalRules = useSettingsStore.getState().settings?.globalViewSettings?.proofreadRules;
     const bookRules = ctx.viewSettings.proofreadRules;
@@ -220,7 +219,6 @@ export const proofreadTransformer: Transformer = {
 
     const processed = merged
       .filter((r) => r.enabled && !r.deletedAt && r.pattern.trim())
-      .filter((r) => (onlyForTTS ? r.onlyForTTS : !r.onlyForTTS))
       .map((r) => ({
         ...r,
         normalizedPattern: normalizePattern(r.pattern, r.isRegex, r.caseSensitive !== false),

@@ -391,16 +391,10 @@ export interface ReadingWidgetBookPayload {
   coverPath: string;
 }
 
-export interface ReadingWidgetTts {
-  active: boolean;
-  playing: boolean;
-}
-
 export interface UpdateReadingWidgetRequest {
   books: ReadingWidgetBookPayload[];
   sectionTitle: string;
   emptyTitle: string;
-  tts?: ReadingWidgetTts;
 }
 
 export async function updateReadingWidget(request: UpdateReadingWidgetRequest): Promise<void> {

@@ -49,7 +49,6 @@ dependencies = [
  "tauri-plugin-http",
  "tauri-plugin-log",
  "tauri-plugin-native-bridge",
- "tauri-plugin-native-tts",
  "tauri-plugin-opener",
  "tauri-plugin-os",
  "tauri-plugin-persisted-scope",
@@ -7877,17 +7876,6 @@ dependencies = [
  "tauri-plugin",
  "thiserror 2.0.18",
  "windows-native-keyring-store",
-]
-
-[[package]]
-name = "tauri-plugin-native-tts"
-version = "0.1.0"
-dependencies = [
- "schemars 0.8.22",
- "serde",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.18",
 ]
 
 [[package]]

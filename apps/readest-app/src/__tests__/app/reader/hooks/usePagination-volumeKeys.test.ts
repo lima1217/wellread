@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { act, cleanup, renderHook } from '@testing-library/react';
+import { cleanup, renderHook } from '@testing-library/react';
 
 // Real deviceStore + eventDispatcher; only the native bridge boundary is mocked
 // so we can observe the interceptKeys({ volumeKeys }) calls the store makes.
@@ -45,7 +45,6 @@ vi.mock('@/store/sidebarStore', () => ({
 }));
 
 import { interceptKeys } from '@/utils/bridge';
-import { eventDispatcher } from '@/utils/event';
 import { useDeviceControlStore } from '@/store/deviceStore';
 import { usePagination } from '@/app/reader/hooks/usePagination';
 
@@ -55,12 +54,6 @@ const setup = () => {
   const viewRef = { current: null };
   const containerRef = { current: null };
   return renderHook(() => usePagination(BOOK_KEY, viewRef, containerRef));
-};
-
-const emitPlayback = async (state: string, bookKey = BOOK_KEY) => {
-  await act(async () => {
-    await eventDispatcher.dispatch('tts-playback-state', { bookKey, state });
-  });
 };
 
 beforeEach(() => {
@@ -80,52 +73,10 @@ afterEach(() => {
   cleanup();
 });
 
-describe('usePagination volume-key interception with TTS (#4691)', () => {
-  test('intercepts volume keys on mount when the setting is on and TTS is idle', () => {
+describe('usePagination volume-key interception', () => {
+  test('intercepts volume keys on mount when the setting is on', () => {
     setup();
     expect(interceptKeys).toHaveBeenCalledWith({ volumeKeys: true });
-    expect(useDeviceControlStore.getState().volumeKeysIntercepted).toBe(true);
-  });
-
-  test('hands volume keys back to the OS while TTS is playing', async () => {
-    setup();
-    vi.mocked(interceptKeys).mockClear();
-
-    await emitPlayback('playing');
-
-    expect(interceptKeys).toHaveBeenCalledWith({ volumeKeys: false });
-    expect(useDeviceControlStore.getState().volumeKeysIntercepted).toBe(false);
-  });
-
-  test('restores interception when TTS is paused', async () => {
-    setup();
-    await emitPlayback('playing');
-    vi.mocked(interceptKeys).mockClear();
-
-    await emitPlayback('paused');
-
-    expect(interceptKeys).toHaveBeenCalledWith({ volumeKeys: true });
-    expect(useDeviceControlStore.getState().volumeKeysIntercepted).toBe(true);
-  });
-
-  test('restores interception when TTS is stopped', async () => {
-    setup();
-    await emitPlayback('playing');
-    vi.mocked(interceptKeys).mockClear();
-
-    await emitPlayback('stopped');
-
-    expect(interceptKeys).toHaveBeenCalledWith({ volumeKeys: true });
-    expect(useDeviceControlStore.getState().volumeKeysIntercepted).toBe(true);
-  });
-
-  test('ignores TTS playback state from a different book', async () => {
-    setup();
-    vi.mocked(interceptKeys).mockClear();
-
-    await emitPlayback('playing', 'other-book');
-
-    expect(interceptKeys).not.toHaveBeenCalledWith({ volumeKeys: false });
     expect(useDeviceControlStore.getState().volumeKeysIntercepted).toBe(true);
   });
 

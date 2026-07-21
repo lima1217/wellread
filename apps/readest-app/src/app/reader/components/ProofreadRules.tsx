@@ -208,13 +208,6 @@ const RuleItem: React.FC<{
               {rule.caseSensitive !== false ? _('Yes') : _('No')}
             </span>
           </span>
-          <span className='text-base-content/30'>•</span>
-          <span className='inline-flex items-center gap-1'>
-            <span className='text-base-content/50'>{_('Only for TTS:')}</span>
-            <span className='text-base-content/70 font-medium'>
-              {rule.onlyForTTS === true ? _('Yes') : _('No')}
-            </span>
-          </span>
         </div>
       </div>
       <div className='absolute right-2 top-2 flex items-center gap-1'>
@@ -365,7 +358,6 @@ export const ProofreadRulesManager: React.FC = () => {
     enabled: boolean;
     isRegex: boolean;
     caseSensitive: boolean;
-    onlyForTTS: boolean;
   }>({
     id: null,
     scope: null,
@@ -374,7 +366,6 @@ export const ProofreadRulesManager: React.FC = () => {
     enabled: true,
     isRegex: false,
     caseSensitive: true,
-    onlyForTTS: false,
   });
 
   const { singleRules, bookRules } = useReplacementRules(sideBarBookKey);
@@ -396,7 +387,6 @@ export const ProofreadRulesManager: React.FC = () => {
       enabled: !!rule.enabled,
       isRegex: !!rule.isRegex,
       caseSensitive: rule.caseSensitive !== false,
-      onlyForTTS: !!rule.onlyForTTS,
     });
   };
 
@@ -409,7 +399,6 @@ export const ProofreadRulesManager: React.FC = () => {
       enabled: true,
       isRegex: false,
       caseSensitive: true,
-      onlyForTTS: false,
     });
   };
 
@@ -439,30 +428,23 @@ export const ProofreadRulesManager: React.FC = () => {
       isRegex: editing.isRegex,
       caseSensitive: editing.caseSensitive,
       enabled: editing.enabled,
-      onlyForTTS: editing.onlyForTTS,
     });
 
     cancelEdit();
 
-    if (!editing.onlyForTTS) {
-      recreateViewer(envConfig, sideBarBookKey);
-    }
+    recreateViewer(envConfig, sideBarBookKey);
   };
 
   const deleteRule = async (rule: ProofreadRule) => {
     if (!sideBarBookKey) return;
     await removeRule(envConfig, sideBarBookKey, rule.id, rule.scope);
-    if (!rule.onlyForTTS) {
-      recreateViewer(envConfig, sideBarBookKey);
-    }
+    recreateViewer(envConfig, sideBarBookKey);
   };
 
   const handleToggle = async (rule: ProofreadRule) => {
     if (!sideBarBookKey) return;
     await toggleRule(envConfig, sideBarBookKey, rule.id);
-    if (!rule.onlyForTTS) {
-      recreateViewer(envConfig, sideBarBookKey);
-    }
+    recreateViewer(envConfig, sideBarBookKey);
   };
 
   const handleAddRule = async () => {

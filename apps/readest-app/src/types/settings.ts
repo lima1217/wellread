@@ -63,7 +63,6 @@ export interface ReadSettings {
   customHighlightColors: Record<HighlightColor, string>;
   userHighlightColors: UserHighlightColor[];
   defaultHighlightLabels: Partial<Record<HighlightColor, string>>;
-  customTtsHighlightColors: string[];
   customThemes: CustomTheme[];
 }
 
@@ -218,8 +217,9 @@ export interface SystemSettings {
   hardcover: HardcoverSettings;
 
   /**
-   * BYO OpenAI-compatible model settings (wellread). apiKey is NOT stored
-   * here — OS keychain via `MODEL_API_KEY_SECURE_ITEM`.
+   * BYO OpenAI-compatible model settings (wellread): `enabled` +
+   * `activeProfileId` + named `profiles[]`. apiKey is NOT stored here —
+   * OS keychain per `modelApiKeySecureItem(profile.id)`.
    */
   modelConfig: ModelConfig;
   /**

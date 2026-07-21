@@ -62,8 +62,7 @@ export const NavigationPanel: React.FC<NavigationPanelProps> = ({
     'eink:border-base-content eink:border-t',
     !forceMobileLayout && 'sm:hidden',
     // Paddings stay constant in both states (the slide is transform-only) so
-    // offsetHeight always reports the panel's settled height; the TTS mini
-    // player measures it to stack above the expanded panel.
+    // offsetHeight always reports the panel's settled height.
     'pb-4 pt-8',
     actionTab === 'progress'
       ? 'pointer-events-auto translate-y-0 ease-out'

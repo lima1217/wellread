@@ -532,29 +532,17 @@ describe('RSVPOverlay — dictionary lookup (#4475)', () => {
 describe('RSVPOverlay — playback control layout (#4585, regressed by #4589)', () => {
   afterEach(() => cleanup());
 
-  // The audio (TTS) toggle and the settings gear must sit in the SAME flex row
-  // as the transport buttons, flanking the centered play button in normal flow.
-  // The earlier `absolute end-0` cluster overlaid them on top of the right end
-  // of the transport, hiding the audio button behind "skip forward 15" on narrow
-  // phones. Keeping all three as siblings of the play button is what prevents the
-  // overlap, so assert the structure here (jsdom can't measure the overlap).
-  test('audio toggle and settings flank the transport in the same flex row', () => {
+  test('settings button shares the transport flex row', () => {
     const state = buildState({
       words: [{ text: 'hello', orpIndex: 1, pauseMultiplier: 1 }],
       currentIndex: 0,
     });
     const { container } = renderOverlay(state);
 
-    const audioButton = container.querySelector('[aria-label="Play audio"]') as HTMLElement;
     const settingsButton = container.querySelector('[aria-label="Settings"]') as HTMLElement;
     const playButton = container.querySelector('[aria-label="Play"]') as HTMLElement;
-    expect(audioButton).not.toBeNull();
     expect(settingsButton).not.toBeNull();
     expect(playButton).not.toBeNull();
-
-    // All three share the play button's parent (the single flex row) — the audio
-    // toggle and settings are not tucked into a separate absolute cluster.
-    expect(audioButton.parentElement).toBe(playButton.parentElement);
     expect(settingsButton.parentElement).toBe(playButton.parentElement);
   });
 
@@ -571,14 +559,11 @@ describe('RSVPOverlay — playback control layout (#4585, regressed by #4589)', 
     const decrease = container.querySelector('[aria-label="Decrease speed"]') as HTMLElement;
     const increase = container.querySelector('[aria-label="Increase speed"]') as HTMLElement;
     const play = container.querySelector('[aria-label="Play"]') as HTMLElement;
-    const audio = container.querySelector('[aria-label="Play audio"]') as HTMLElement;
     const settings = container.querySelector('[aria-label="Settings"]') as HTMLElement;
 
     expect(decrease.className).toContain('max-[350px]:hidden');
     expect(increase.className).toContain('max-[350px]:hidden');
-    // Transport, audio toggle and settings must remain visible at any width.
     expect(play.className).not.toContain('max-[350px]:hidden');
-    expect(audio.className).not.toContain('max-[350px]:hidden');
     expect(settings.className).not.toContain('max-[350px]:hidden');
   });
 
@@ -592,9 +577,7 @@ describe('RSVPOverlay — playback control layout (#4585, regressed by #4589)', 
     const { container } = renderOverlay(state);
 
     const playButton = container.querySelector('[aria-label="Play"]') as HTMLElement;
-    const audioButton = container.querySelector('[aria-label="Play audio"]') as HTMLElement;
     expect(playButton.parentElement!.className).not.toContain('absolute');
-    expect(audioButton.parentElement!.className).not.toContain('absolute');
   });
 });
 

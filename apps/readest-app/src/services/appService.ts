@@ -310,10 +310,6 @@ export abstract class BaseAppService implements AppService {
         if (await this.fs.exists(dir, 'Books')) {
           await this.fs.removeDir(dir, 'Books', true);
         }
-        const ttsCacheDir = `tts-cache/${book.hash}`;
-        if (await this.fs.exists(ttsCacheDir, 'Cache')) {
-          await this.fs.removeDir(ttsCacheDir, 'Cache', true);
-        }
       }
 
       if (deleteAction === 'both' && (await this.fs.exists(getCoverFilename(book), 'Books'))) {

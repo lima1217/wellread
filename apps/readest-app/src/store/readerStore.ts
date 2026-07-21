@@ -44,7 +44,6 @@ interface ViewState {
      rationale. Use `useBookProgress(key)` for reactive subscription or
      `getBookProgress(key)` for one-shot reads. */
   ribbonVisible: boolean;
-  ttsEnabled: boolean;
   /* True while an Auto Scroll session (#4998) is engaged for this view;
      session-only, never persisted. Drives the View menu checkmark. */
   autoScrollEnabled: boolean;
@@ -68,14 +67,13 @@ interface ReaderStore {
   bookKeys: string[];
   hoveredBookKey: string | null;
   /* The action tab selected in the mobile bottom bar (font/color/progress);
-     lives here rather than in FooterBar state so the TTS mini player can
-     stack above the expanded panel. Persists across bar hide/show. */
+     lives here rather than in FooterBar state so the expanded panel can
+     persist across bar hide/show. */
   bottomBarTab: string;
   setBookKeys: (keys: string[]) => void;
   setHoveredBookKey: (key: string | null) => void;
   setBottomBarTab: (tab: string) => void;
   setBookmarkRibbonVisibility: (key: string, visible: boolean) => void;
-  setTTSEnabled: (key: string, enabled: boolean) => void;
   setAutoScrollEnabled: (key: string, enabled: boolean) => void;
   setIsLoading: (key: string, loading: boolean) => void;
   setIsSyncing: (key: string, syncing: boolean) => void;
@@ -170,7 +168,6 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
           inited: false,
           error: null,
           ribbonVisible: false,
-          ttsEnabled: false,
           autoScrollEnabled: false,
           syncing: false,
           gridInsets: null,
@@ -328,7 +325,6 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
             inited: false,
             error: null,
             ribbonVisible: false,
-            ttsEnabled: false,
             autoScrollEnabled: false,
             syncing: false,
             gridInsets: null,
@@ -352,7 +348,6 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
             inited: false,
             error: 'Failed to load book.',
             ribbonVisible: false,
-            ttsEnabled: false,
             autoScrollEnabled: false,
             syncing: false,
             gridInsets: null,
@@ -486,17 +481,6 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
         [key]: {
           ...state.viewStates[key]!,
           ribbonVisible: visible,
-        },
-      },
-    })),
-
-  setTTSEnabled: (key: string, enabled: boolean) =>
-    set((state) => ({
-      viewStates: {
-        ...state.viewStates,
-        [key]: {
-          ...state.viewStates[key]!,
-          ttsEnabled: enabled,
         },
       },
     })),

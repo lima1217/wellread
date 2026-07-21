@@ -8,7 +8,7 @@ import { useCommandPalette } from '@/components/command-palette';
 import { RiFontSize, RiShareLine } from 'react-icons/ri';
 import { RiDashboardLine, RiTranslate } from 'react-icons/ri';
 import { VscSymbolColor } from 'react-icons/vsc';
-import { PiDotsThreeVerticalBold, PiRobot, PiSpeakerHigh } from 'react-icons/pi';
+import { PiDotsThreeVerticalBold, PiRobot } from 'react-icons/pi';
 import { LiaHandPointerSolid } from 'react-icons/lia';
 import { IoAccessibilityOutline } from 'react-icons/io5';
 import {
@@ -32,14 +32,12 @@ import ControlPanel from './ControlPanel';
 import LangPanel from './LangPanel';
 import MiscPanel from './MiscPanel';
 import AIPanel from './AIPanel';
-import TTSPanel from './TTSPanel';
 
 export type SettingsPanelType =
   | 'Font'
   | 'Layout'
   | 'Theme'
   | 'Control'
-  | 'TTS'
   | 'Language'
   | 'AI'
   | 'Integrations'
@@ -114,12 +112,7 @@ const SettingsDialog: React.FC<{ bookKey: string }> = ({ bookKey }) => {
     {
       tab: 'AI',
       icon: PiRobot,
-      label: _('Reading Assistant'),
-    },
-    {
-      tab: 'TTS',
-      icon: PiSpeakerHigh,
-      label: _('TTS'),
+      label: _('AI'),
     },
     {
       tab: 'Custom',
@@ -175,7 +168,6 @@ const SettingsDialog: React.FC<{ bookKey: string }> = ({ bookKey }) => {
     Layout: null,
     Theme: null,
     Control: null,
-    TTS: null,
     Language: null,
     AI: null,
     Integrations: null,
@@ -209,7 +201,6 @@ const SettingsDialog: React.FC<{ bookKey: string }> = ({ bookKey }) => {
         layout: 'Layout',
         theme: 'Theme',
         control: 'Control',
-        tts: 'TTS',
         language: 'Language',
         ai: 'AI',
         integrations: 'Integrations',
@@ -461,9 +452,6 @@ const SettingsDialog: React.FC<{ bookKey: string }> = ({ bookKey }) => {
             bookKey={bookKey}
             onRegisterReset={(fn) => registerResetFunction('Control', fn)}
           />
-        )}
-        {activePanel === 'TTS' && (
-          <TTSPanel bookKey={bookKey} onRegisterReset={(fn) => registerResetFunction('TTS', fn)} />
         )}
         {activePanel === 'Language' && (
           <LangPanel

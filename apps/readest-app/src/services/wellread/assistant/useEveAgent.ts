@@ -77,8 +77,27 @@ export function useEveAgent(options: UseEveAgentOptions) {
   const send = useCallback(
     async (input?: { message?: string }) => {
       const text = (input?.message ?? composer).trim();
-      if (!text || !activeSessionId) return;
+      if (!text) return;
       if (status === 'submitted' || status === 'streaming') return;
+
+      let sessionIdForTurn = activeSessionId;
+      if (!sessionIdForTurn) {
+        try {
+          const session = await createEveSession({
+            bookId,
+            bookTitle,
+            title: bookTitle ? `Chat about ${bookTitle}` : undefined,
+          });
+          sessionIdForTurn = session.id;
+          setActiveSessionId(session.id);
+          setMessages(session.messages);
+          setStatus('ready');
+        } catch (err) {
+          setError(err instanceof Error ? err : new Error(String(err)));
+          setStatus('error');
+          return;
+        }
+      }
 
       setError(null);
       setStatus('submitted');
@@ -92,7 +111,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
       let tools: EveToolTrace[] = [];
 
       try {
-        for await (const event of streamEveTurn(activeSessionId, text, controller.signal)) {
+        for await (const event of streamEveTurn(sessionIdForTurn, text, controller.signal)) {
           if (event.type === 'message.user') {
             setMessages((prev) => [
               ...prev,
@@ -164,7 +183,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
         abortRef.current = null;
       }
     },
-    [activeSessionId, composer, options, status],
+    [activeSessionId, bookId, bookTitle, composer, options, status],
   );
 
   const reset = useCallback(() => {

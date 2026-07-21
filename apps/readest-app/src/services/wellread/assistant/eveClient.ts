@@ -2,6 +2,8 @@
  * Minimal eve-compatible HTTP client for Reading Assistant sessions.
  */
 
+import { eveFetch } from './eveFetch';
+
 export type EveSource = {
   cfi: string;
   endCfi?: string;
@@ -67,7 +69,7 @@ function base(): { baseUrl: string; token?: string } {
 
 export async function listEveSessions(bookId: string): Promise<EveSessionMeta[]> {
   const { baseUrl, token } = base();
-  const res = await fetch(`${baseUrl}/eve/v1/sessions?bookId=${encodeURIComponent(bookId)}`, {
+  const res = await eveFetch(`${baseUrl}/eve/v1/sessions?bookId=${encodeURIComponent(bookId)}`, {
     headers: authHeaders(token),
   });
   if (!res.ok) throw new Error(`list sessions failed: ${res.status}`);
@@ -81,7 +83,7 @@ export async function createEveSession(input: {
   title?: string;
 }): Promise<EveSession> {
   const { baseUrl, token } = base();
-  const res = await fetch(`${baseUrl}/eve/v1/sessions`, {
+  const res = await eveFetch(`${baseUrl}/eve/v1/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...authHeaders(token) },
     body: JSON.stringify(input),
@@ -92,7 +94,7 @@ export async function createEveSession(input: {
 
 export async function getEveSession(id: string): Promise<EveSession> {
   const { baseUrl, token } = base();
-  const res = await fetch(`${baseUrl}/eve/v1/sessions/${encodeURIComponent(id)}`, {
+  const res = await eveFetch(`${baseUrl}/eve/v1/sessions/${encodeURIComponent(id)}`, {
     headers: authHeaders(token),
   });
   if (!res.ok) throw new Error(`get session failed: ${res.status}`);
@@ -101,7 +103,7 @@ export async function getEveSession(id: string): Promise<EveSession> {
 
 export async function deleteEveSession(id: string): Promise<void> {
   const { baseUrl, token } = base();
-  const res = await fetch(`${baseUrl}/eve/v1/sessions/${encodeURIComponent(id)}`, {
+  const res = await eveFetch(`${baseUrl}/eve/v1/sessions/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: authHeaders(token),
   });
@@ -114,7 +116,7 @@ export async function* streamEveTurn(
   signal?: AbortSignal,
 ): AsyncGenerator<EveStreamEvent> {
   const { baseUrl, token } = base();
-  const res = await fetch(`${baseUrl}/eve/v1/sessions/${encodeURIComponent(sessionId)}/turns`, {
+  const res = await eveFetch(`${baseUrl}/eve/v1/sessions/${encodeURIComponent(sessionId)}/turns`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...authHeaders(token) },
     body: JSON.stringify({ message }),

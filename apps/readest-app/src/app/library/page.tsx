@@ -92,8 +92,6 @@ import ImportFromFolderDialog, {
   ImportFromFolderResult,
 } from './components/ImportFromFolderDialog';
 import ImportFromUrlDialog from './components/ImportFromUrlDialog';
-import NowPlayingBar from './components/NowPlayingBar';
-import { ttsSessionManager } from '@/services/tts';
 import { convertToEpubWithWorker } from '@/services/send/conversion/conversionWorker';
 import { getClipOptions } from '@/services/send/clipOptions';
 import { invoke } from '@tauri-apps/api/core';
@@ -478,11 +476,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       appService.saveLibraryBooks(libraryBooks);
 
       console.log('Opening books:', bookIds);
-      if (bookIds.length > 0) {
-        setPendingNavigationBookIds(bookIds);
-        return true;
-      }
-      return false;
+      return bookIds.length > 0 ? bookIds : null;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -492,8 +486,8 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
     appService: AppService,
     lastBookIds: string[],
     libraryBooks: Book[],
-  ) => {
-    if (lastBookIds.length === 0) return false;
+  ): Promise<string[] | null> => {
+    if (lastBookIds.length === 0) return null;
     const bookIds: string[] = [];
     for (const bookId of lastBookIds) {
       const book = libraryBooks.find((b) => b.hash === bookId && b.readingStatus !== 'finished');
@@ -502,11 +496,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       }
     }
     console.log('Opening last books:', bookIds);
-    if (bookIds.length > 0) {
-      setPendingNavigationBookIds(bookIds);
-      return true;
-    }
-    return false;
+    return bookIds.length > 0 ? bookIds : null;
   };
 
   const handleShowFeeds = () => {
@@ -547,25 +537,28 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   };
 
   useEffect(() => {
-    if (pendingNavigationBookIds) {
-      const bookIds = pendingNavigationBookIds;
-      setPendingNavigationBookIds(null);
-      if (bookIds.length > 0) {
-        navigateToReader(router, bookIds);
-      }
-    }
-  }, [pendingNavigationBookIds, appService, router]);
+    if (!pendingNavigationBookIds?.length) return;
+    const bookIds = pendingNavigationBookIds;
+    setPendingNavigationBookIds(null);
+    navigateToReader(router, bookIds);
+  }, [pendingNavigationBookIds, router]);
 
   useEffect(() => {
     if (isInitiating.current) return;
     isInitiating.current = true;
+    // React Strict Mode remounts this effect (cleanup then re-run). Without a
+    // cancelled flag, both async inits can call navigateToReader and WebKit
+    // aborts the first View Transition with AbortError.
+    let cancelled = false;
 
     const hasCachedLibrary = libraryLoadedFromDisk;
     const loadingTimeout = hasCachedLibrary ? null : setTimeout(() => setLoading(true), 500);
 
     const initLibrary = async () => {
       const appService = await envConfig.getAppService();
+      if (cancelled) return;
       const settings = await appService.loadSettings();
+      if (cancelled) return;
       setSettings(settings);
 
       // Re-grant fs_scope / asset_protocol_scope for every external
@@ -582,18 +575,25 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       if (externalRoots.length > 0 && appService.allowPathsInScopes) {
         await appService.allowPathsInScopes(externalRoots, true);
       }
+      if (cancelled) return;
 
       // Reuse the library from the store when we return from the reader
       const library = hasCachedLibrary ? libraryBooks : await appService.loadLibraryBooks();
-      let opened = false;
+      if (cancelled) return;
+      let pendingIds: string[] | null = null;
       if (checkOpenWithBooks) {
-        opened = await handleOpenWithBooks(appService, library);
+        pendingIds = await handleOpenWithBooks(appService, library);
       }
-      setCheckOpenWithBooks(opened);
-      if (!opened && checkLastOpenBooks && settings.openLastBooks) {
-        opened = await handleOpenLastBooks(appService, settings.lastOpenBooks, library);
+      if (cancelled) return;
+      setCheckOpenWithBooks(!!pendingIds);
+      if (!pendingIds && checkLastOpenBooks && settings.openLastBooks) {
+        pendingIds = await handleOpenLastBooks(appService, settings.lastOpenBooks, library);
       }
-      setCheckLastOpenBooks(opened);
+      if (cancelled) return;
+      setCheckLastOpenBooks(!!pendingIds);
+      if (pendingIds?.length) {
+        setPendingNavigationBookIds(pendingIds);
+      }
 
       // Skip the redundant setLibrary on the cached path: the store already
       // contains the same array reference, and a no-op set would still
@@ -609,17 +609,25 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       setLoading(false);
     };
 
-    const handleOpenWithBooks = async (appService: AppService, library: Book[]) => {
+    const handleOpenWithBooks = async (
+      appService: AppService,
+      library: Book[],
+    ): Promise<string[] | null> => {
       const openWithFiles = (await parseOpenWithFiles(appService)) || [];
 
       if (openWithFiles.length > 0) {
         return await processOpenWithFiles(appService, openWithFiles, library);
       }
-      return false;
+      return null;
     };
 
     initLibrary();
     return () => {
+      cancelled = true;
+      // Strict Mode remounts this effect in dev. If we leave the timeout
+      // armed, it fires after the successor effect finishes and freezes
+      // the library spinner forever ("加载中..." with books already shown).
+      if (loadingTimeout) clearTimeout(loadingTimeout);
       setCheckOpenWithBooks(false);
       setCheckLastOpenBooks(false);
       isInitiating.current = false;
@@ -917,9 +925,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
             book.coverDownloadedAt = null;
           }
           await updateBook(envConfig, book);
-          if (ttsSessionManager.getSessionByHash(book.hash)) {
-            await ttsSessionManager.stopActive('deleted');
-          }
           clearBookData(book.hash);
         }
 
@@ -1536,7 +1541,6 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
             <LibraryEmptyState onImport={handleImportBooksFromFiles} />
           </div>
         ))}
-      <NowPlayingBar isSelectMode={isSelectMode} />
       {showDetailsBook && (
         <BookDetailModal
           isOpen={!!showDetailsBook}

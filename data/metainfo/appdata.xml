@@ -47,7 +47,6 @@
     <keyword>highlight</keyword>
     <keyword>notes</keyword>
     <keyword>translation</keyword>
-    <keyword>tts</keyword>
     <keyword>sync</keyword>
   </keywords>
 
@@ -241,10 +240,6 @@
     <screenshot>
       <caption>Reading interface with dark mode</caption>
       <image type="source">https://raw.githubusercontent.com/readest/readest/refs/heads/main/data/screenshots/dark_mode.png</image>
-    </screenshot>
-    <screenshot>
-      <caption>Reading with TTS speak out</caption>
-      <image type="source">https://raw.githubusercontent.com/readest/readest/refs/heads/main/data/screenshots/tts_speak_aloud.png</image>
     </screenshot>
     <screenshot>
       <caption>Reading tools with Wikipedia integration</caption>

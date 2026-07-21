@@ -77,7 +77,7 @@ const IntegrationsPanel: React.FC = () => {
       <div className='w-full px-4'>
         <h2 className='mb-1.5 text-lg font-semibold tracking-tight'>{_('Integrations')}</h2>
         <p className='text-base-content/70 text-sm leading-relaxed'>
-          {_('Connect Readest to external services for highlights and catalogs.')}
+          {_('Connect Wellread to external services for highlights and catalogs.')}
         </p>
       </div>
 

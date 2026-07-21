@@ -38,7 +38,7 @@ const currentViewSettings = {
 vi.mock('@/store/readerStore', () => ({
   useReaderStore: () => ({
     getView: () => mockView,
-    getViewState: () => ({ ttsEnabled: false }),
+    getViewState: () => ({}),
     getViewSettings: () => currentViewSettings,
     setViewSettings: vi.fn(),
   }),

@@ -190,8 +190,7 @@ const HighlightColorsEditor: React.FC<HighlightColorsEditorProps> = ({
 
   // Two-trigger UX inside each color cell: clicking the SWATCH opens the
   // color picker (color edit), clicking the LABEL TEXT below opens the
-  // label popover (rename). Matches the TTS Highlighting swatch+commit
-  // pattern for color editing while preserving per-color labels.
+  // label popover (rename). Swatch opens the picker; label text opens rename.
   return (
     <BoxedList title={_('Highlight Colors')}>
       <div className='grid grid-cols-3 gap-3 py-4 pe-4 sm:grid-cols-5'>
@@ -226,9 +225,8 @@ const HighlightColorsEditor: React.FC<HighlightColorsEditorProps> = ({
           <SettingLabel>
             {_('Custom Colors')} ({userHighlightColors.length}/{MAX_USER_HIGHLIGHT_COLORS})
           </SettingLabel>
-          {/* Swatch + picker icon — matches TTS Highlighting's Color row.
-              Closing the picker fires onCommit, which auto-pins the color
-              to the user's palette. */}
+          {/* Swatch + picker icon. Closing the picker fires onCommit,
+              which auto-pins the color to the user's palette. */}
           <ColorInput
             label={_('Add custom color')}
             value={newColor}

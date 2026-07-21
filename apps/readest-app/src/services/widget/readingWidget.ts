@@ -3,7 +3,6 @@ import type { AppService } from '@/types/system';
 import { useLibraryStore } from '@/store/libraryStore';
 import { getCoverFilename, isCurrentlyReadingBook } from '@/utils/book';
 import { updateReadingWidget } from '@/utils/bridge';
-import type { ReadingWidgetTts } from '@/utils/bridge';
 
 export interface ReadingWidgetBook {
   hash: string;
@@ -17,7 +16,6 @@ export interface ReadingWidgetPayload {
   books: ReadingWidgetBook[];
   sectionTitle: string;
   emptyTitle: string;
-  tts?: ReadingWidgetTts;
 }
 
 export const computeReadingPercent = (book: Book): number => {
@@ -43,7 +41,6 @@ export const buildReadingWidgetPayload = async (
   books: Book[],
   appService: AppService,
   labels: ReadingWidgetLabels,
-  tts?: ReadingWidgetTts,
 ): Promise<ReadingWidgetPayload> => {
   // resolveFilePath('', 'Books') returns the absolute Books dir (no trailing
   // slash) by delegating to fs.getPrefix internally. Both platforms use `/`,
@@ -61,19 +58,17 @@ export const buildReadingWidgetPayload = async (
     books: widgetBooks,
     sectionTitle: labels.sectionTitle,
     emptyTitle: labels.emptyTitle,
-    ...(tts ? { tts } : {}),
   };
 };
 
 export const refreshReadingWidget = async (
   appService: AppService,
   labels: ReadingWidgetLabels,
-  tts?: ReadingWidgetTts,
 ): Promise<void> => {
   if (!appService.isMobileApp) return;
   const library = useLibraryStore.getState().library;
   const selected = selectReadingWidgetBooks(library);
-  const payload = await buildReadingWidgetPayload(selected, appService, labels, tts);
+  const payload = await buildReadingWidgetPayload(selected, appService, labels);
   try {
     await updateReadingWidget(payload);
   } catch (err) {

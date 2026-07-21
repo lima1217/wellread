@@ -4,7 +4,7 @@
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
@@ -28,6 +28,8 @@ pub struct ModelConfigPayload {
     pub base_url: Option<String>,
     pub model_id: Option<String>,
     pub context_window_tokens: Option<u64>,
+    /// `chat` (Chat Completions) or `responses` (OpenAI Responses API).
+    pub api_mode: Option<String>,
     /// Optional apiKey from the frontend (already written to keychain).
     /// Passed over local IPC so the main crate need not own keyring deps.
     pub api_key: Option<String>,
@@ -105,6 +107,10 @@ fn read_model_config_from_settings(app: &AppHandle) -> ModelConfigPayload {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
         context_window_tokens: mc.get("contextWindowTokens").and_then(|v| v.as_u64()),
+        api_mode: mc
+            .get("apiMode")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
         api_key: None,
     }
 }
@@ -158,7 +164,7 @@ fn resolve_eve_output(app: &AppHandle) -> PathBuf {
 }
 
 /// Prefer packaged `.output/node_modules`, then repo eve-sidecar node_modules (dev).
-fn resolve_node_modules(app: &AppHandle, entry: &PathBuf) -> Option<PathBuf> {
+fn resolve_node_modules(app: &AppHandle, entry: &Path) -> Option<PathBuf> {
     if let Some(server_dir) = entry.parent() {
         if let Some(output_dir) = server_dir.parent() {
             let packaged = output_dir.join("node_modules");
@@ -204,11 +210,21 @@ fn stop_locked(inner: &mut EveSidecarInner) {
     inner.info = None;
 }
 
-fn health_ok(url: &str, token: &str) -> bool {
-    let client = reqwest::blocking::Client::builder()
+/// Build the HTTP client used for loopback readiness probes.
+///
+/// Must disable proxies: with a system HTTP proxy (Clash/V2Ray/etc.), reqwest's
+/// macOS system-proxy support sends `http://127.0.0.1:<sidecar>` through the
+/// proxy, which returns 502 and makes health checks time out even though the
+/// sidecar is healthy.
+fn health_client() -> Result<reqwest::blocking::Client, reqwest::Error> {
+    reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(2))
-        .build();
-    let Ok(client) = client else {
+        .no_proxy()
+        .build()
+}
+
+fn health_ok(url: &str, token: &str) -> bool {
+    let Ok(client) = health_client() else {
         return false;
     };
     client
@@ -275,6 +291,13 @@ pub fn start_or_restart(
             "EVE_MODEL_CONTEXT_WINDOW",
             model.context_window_tokens.unwrap_or(1_000_000).to_string(),
         )
+        .env(
+            "EVE_MODEL_API_MODE",
+            match model.api_mode.as_deref() {
+                Some("responses") => "responses",
+                _ => "chat",
+            },
+        )
         .env("EVE_MODEL_API_KEY", api_key)
         .env("EVE_BOOKS_ROOT", resolve_books_root(app))
         .stdout(Stdio::piped())
@@ -292,7 +315,7 @@ pub fn start_or_restart(
     let stdout = child.stdout.take().ok_or("missing sidecar stdout")?;
     if let Some(stderr) = child.stderr.take() {
         thread::spawn(move || {
-            for line in BufReader::new(stderr).lines().flatten() {
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
                 log::info!("[eve-sidecar:err] {line}");
             }
         });
@@ -301,7 +324,7 @@ pub fn start_or_restart(
     let (tx, rx) = std::sync::mpsc::channel::<Option<String>>();
     thread::spawn(move || {
         let mut found = None;
-        for line in BufReader::new(stdout).lines().flatten() {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             log::info!("[eve-sidecar] {line}");
             if found.is_none() {
                 if let Some(url) = parse_listen_url(&line) {
@@ -379,7 +402,13 @@ pub fn bootstrap(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_listen_url;
+    use super::{health_ok, parse_listen_url};
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::Mutex;
+    use std::thread;
+
+    static PROXY_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn parses_listen_line() {
@@ -394,5 +423,43 @@ mod tests {
         let url = parse_listen_url("Listening on http://0.0.0.0:4123").unwrap();
         assert!(url.contains("127.0.0.1"));
         assert!(url.ends_with('/'));
+    }
+
+    #[test]
+    fn health_ok_reaches_loopback_despite_http_proxy_env() {
+        let _guard = PROXY_ENV_LOCK.lock().unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let addr = listener.local_addr().expect("local_addr");
+        thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"ok\":true}",
+                );
+            }
+        });
+
+        let prev_http = std::env::var("HTTP_PROXY").ok();
+        let prev_http_l = std::env::var("http_proxy").ok();
+        // Dead proxy — without .no_proxy() the probe would fail here (and under
+        // macOS system proxy it fails even when the sidecar is healthy).
+        std::env::set_var("HTTP_PROXY", "http://127.0.0.1:9");
+        std::env::set_var("http_proxy", "http://127.0.0.1:9");
+
+        let url = format!("http://{addr}/eve/v1");
+        let ok = health_ok(&url, "test-token");
+
+        match prev_http {
+            Some(v) => std::env::set_var("HTTP_PROXY", v),
+            None => std::env::remove_var("HTTP_PROXY"),
+        }
+        match prev_http_l {
+            Some(v) => std::env::set_var("http_proxy", v),
+            None => std::env::remove_var("http_proxy"),
+        }
+
+        assert!(ok, "loopback health probe must bypass HTTP_PROXY");
     }
 }

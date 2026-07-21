@@ -80,26 +80,15 @@ const labelsForBuild = { sectionTitle: 'Continue reading', emptyTitle: 'Empty' }
 const booksForBuild: Book[] = [mk({ hash: 'x', updatedAt: 1, progress: [1, 4] })];
 
 describe('buildReadingWidgetPayload', () => {
-  it('includes tts field when provided', async () => {
-    const payload = await buildReadingWidgetPayload(
-      booksForBuild,
-      appServiceForBuild,
-      labelsForBuild,
-      {
-        active: true,
-        playing: false,
-      },
-    );
-    expect(payload.tts).toEqual({ active: true, playing: false });
-  });
-
-  it('omits tts key when not provided', async () => {
+  it('builds the widget payload from selected books', async () => {
     const payload = await buildReadingWidgetPayload(
       booksForBuild,
       appServiceForBuild,
       labelsForBuild,
     );
-    expect('tts' in payload).toBe(false);
+    expect(payload.books).toHaveLength(1);
+    expect(payload.sectionTitle).toBe(labelsForBuild.sectionTitle);
+    expect(payload.emptyTitle).toBe(labelsForBuild.emptyTitle);
   });
 });
 

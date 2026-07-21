@@ -213,7 +213,7 @@ export class ParagraphIterator {
   }
 
   /**
-   * Synchronous, containment-based mapper for TTS-driven sync.
+   * Synchronous, containment-based mapper for range → paragraph index.
    *
    * Returns the index of the block whose range CONTAINS the target's start
    * position. If the target start falls in a gap between blocks, returns the

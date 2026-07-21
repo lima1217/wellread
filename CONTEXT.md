@@ -18,14 +18,25 @@ eve 的沙盒后端接口实现。wellread 使用薄宿主 FS 后端（路径夹
 
 ## Reading Assistant（读书助手）
 
-绑定**当前打开书**的 eve 问答面（notebook AI tab）。v1 产品能力仅限当前书问答；摘要、导览、翻译、知识包等扩展靠日后 skill / 自定义工具，不进内建产品壳。
-_Avoid_: AI 助手（泛称）、Reedy、内置 AI 服务
+绑定**当前打开书**的 eve 问答面。用户可见**面板标题**为 **Reading Assistant**（原 notebook）；其余用户面文案仍用 **「AI」**（入口、开关等）；v1 产品能力仅限当前书问答；摘要、导览、翻译、知识包等扩展靠日后 skill / 自定义工具（输入框 `/` 调用），不进内建芯片。
+_Avoid_: 把面板标题写成「AI」、AI 助手（泛称）、Reedy、内置 AI 服务、Notebook（对用户称呼或入口文案）；执行期标识符亦应迁离 `Notebook*` / `notebookStore` 等命名
 
 ## Ask about this（问助手）
 
-阅读器划词工具栏入口：把选区预填进当前书的 Reading Assistant 会话（可见引用块 + 空追问），不自动发送。
+阅读器划词工具栏入口：打开 Reading Assistant，并把当前选区**追加**为一段 Pending Quote（不替换已有段），不写入 composer、不自动发送。
+_Avoid_: 把选区预填进输入草稿（旧 08 做法）、用新选区替换整条 Pending Quote
 
-## ModelConfig（模型配置）
+## Pending Quote（待发引用）
 
-用户自带的 OpenAI 兼容云端连接信息：端点、模型 id、上下文窗口、是否启用。apiKey 不属于此对象，存放在 OS keychain。
-_Avoid_: aiSettings, AI Gateway 配置, Ollama 配置
+发送前展示在 AI 面板上方的选区上下文，可一段或多段堆叠；可单项或全部清除。用户一点发送，整组归属该条用户消息气泡，live 条清空。
+_Avoid_: source bar（实现绰号）、草稿引用块、把阅读器 live 选区镜像进条
+
+## Thinking Mode（Think/Fast）
+
+Composer 上的二档：Think = 思考模式开，Fast = 思考模式关。默认 Fast；写入用户全局设置。不预设具体厂商 API 字段。
+_Avoid_: temperature 滑杆、思考速度滑杆、「更深 vs 更快」质量轴、按会话记忆、按消息锁定
+
+## ModelProfile（模型配置档）
+
+一份命名的 OpenAI 兼容云端连接：显示名、端点、模型 id、上下文窗口等。用户可保存多份，**一份激活**；composer 切换激活项。apiKey 不属于此对象，存放在 OS keychain。
+_Avoid_: ModelConfig（旧单轨名，已被多 profile 取代）、aiSettings, AI Gateway 配置, Ollama 配置

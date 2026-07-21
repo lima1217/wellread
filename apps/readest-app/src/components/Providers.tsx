@@ -23,6 +23,7 @@ import AtmosphereOverlay from '@/components/AtmosphereOverlay';
 import AppLockScreen from '@/components/AppLockScreen';
 import AppLockDialog from '@/components/settings/AppLockDialog';
 import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
+import { syncEveSidecarApiKey } from '@/services/wellread/syncEveSidecarApiKey';
 import { useAppLockStore } from '@/store/appLockStore';
 
 const Providers = ({ children }: { children: React.ReactNode }) => {
@@ -92,6 +93,10 @@ const Providers = ({ children }: { children: React.ReactNode }) => {
           salt: settings.pinCodeSalt,
           biometricUnlockEnabled: !!settings.biometricUnlockEnabled,
         });
+        // Rust bootstrap cannot read keychain; inject apiKey so turns work
+        // after cold start without requiring a Settings → AI re-save.
+        await syncEveSidecarApiKey(settings.modelConfig);
+        await useEveConnectionStore.getState().refresh();
       });
     }
   }, [

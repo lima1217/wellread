@@ -47,7 +47,6 @@ const ProofreadPopup: React.FC<ProofreadPopupProps> = ({
   const [wholeWord, setWholeWord] = useState(!isPunctuationOnly(selection?.text || ''));
   const [isRegex, setIsRegex] = useState(false);
   const [scope, setScope] = useState<ProofreadScope>('selection');
-  const [onlyForTTS, setOnlyForTTS] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   useAutoFocus<HTMLInputElement>({ ref: inputRef });
@@ -96,7 +95,6 @@ const ProofreadPopup: React.FC<ProofreadPopupProps> = ({
         enabled: true,
         caseSensitive,
         wholeWord: isRegex ? false : wholeWord,
-        onlyForTTS: scope !== 'selection' ? onlyForTTS : undefined,
       };
       onConfirm?.(options);
 
@@ -104,7 +102,7 @@ const ProofreadPopup: React.FC<ProofreadPopupProps> = ({
 
       onDismiss();
 
-      if (scope !== 'selection' && !onlyForTTS) {
+      if (scope !== 'selection') {
         if (getView(bookKey)) {
           recreateViewer(envConfig, bookKey);
         }
@@ -236,24 +234,6 @@ const ProofreadPopup: React.FC<ProofreadPopupProps> = ({
               }
               checked={isRegex}
               onChange={(e) => setIsRegex(e.target.checked)}
-            />
-          </label>
-
-          <label className='flex cursor-pointer items-center gap-2'>
-            <span className='line-clamp-1 text-xs' title={_('Only for TTS:')}>
-              {_('Only for TTS:')}
-            </span>
-            <input
-              type='checkbox'
-              disabled={scope === 'selection'}
-              className='toggle toggle-sm bg-gray-500 checked:bg-black hover:bg-gray-500 hover:checked:bg-black'
-              style={
-                {
-                  '--tglbg': '#4B5563',
-                } as React.CSSProperties
-              }
-              checked={onlyForTTS}
-              onChange={(e) => setOnlyForTTS(e.target.checked)}
             />
           </label>
         </div>

@@ -39,10 +39,6 @@ Z-Index Layering Guide:
      • Includes Settings, About, Updater, KOSync dialogs and Annotation popups.
 45 – Sidebar / Notebook (Unpinned)
      • Floats above the content but below global dialogs.
-40 – TTS Bar
-     • Mini controls for TTS playback on top of the TTS Control.
-30 – TTS Control
-     • Persistent TTS icon/panel.
 20 – Menu / Sidebar / Notebook (Pinned)
      • Docked navigation or note views.
 10 – Headerbar / Footbar / Ribbon

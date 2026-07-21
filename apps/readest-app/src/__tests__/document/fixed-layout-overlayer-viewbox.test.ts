@@ -1,4 +1,4 @@
-// Regression test for: TTS highlight overlay is off the text boxes in
+// Regression test for: highlight overlay is off the text boxes in
 // fixed-layout EPUBs when the page is scaled up.
 //
 // In non-PDF fixed-layout, the iframe is visually scaled with `transform:

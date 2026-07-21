@@ -30,9 +30,15 @@ const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({ bookKey }) => {
   const setActiveSession = useReadingAssistantStore((s) => s.setActiveSession);
   const activeSessionId = useReadingAssistantStore((s) => s.activeSessionId);
   const ready = useEveConnectionStore((s) => s.ready);
+  const refresh = useEveConnectionStore((s) => s.refresh);
 
   const [sessions, setSessions] = useState<EveSessionMeta[]>([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (ready) return;
+    void refresh();
+  }, [ready, refresh]);
 
   const bookData = getBookData(bookKey);
   const bookId = bookData?.book?.hash || bookKey.split('-')[0] || '';

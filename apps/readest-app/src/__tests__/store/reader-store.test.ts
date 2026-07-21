@@ -87,7 +87,6 @@ function seedViewState(key: string, overrides: Record<string, unknown> = {}) {
         inited: false,
         error: null,
         ribbonVisible: false,
-        ttsEnabled: false,
         autoScrollEnabled: false,
         syncing: false,
         gridInsets: null,
@@ -255,17 +254,6 @@ describe('readerStore', () => {
 
       useReaderStore.getState().setBookmarkRibbonVisibility('book-1', false);
       expect(useReaderStore.getState().viewStates['book-1']!.ribbonVisible).toBe(false);
-    });
-  });
-
-  describe('setTTSEnabled', () => {
-    test('sets ttsEnabled on view state', () => {
-      seedViewState('book-1');
-      useReaderStore.getState().setTTSEnabled('book-1', true);
-      expect(useReaderStore.getState().viewStates['book-1']!.ttsEnabled).toBe(true);
-
-      useReaderStore.getState().setTTSEnabled('book-1', false);
-      expect(useReaderStore.getState().viewStates['book-1']!.ttsEnabled).toBe(false);
     });
   });
 

@@ -1,5 +1,4 @@
-// jsdom does not implement the CSS namespace; foliate-js TTS uses CSS.escape
-// (mark[name="…"] lookups). Provide the standard polyfill so those paths work.
+// jsdom does not implement the CSS namespace; provide CSS.escape for selectors.
 const globalWithCSS = globalThis as { CSS?: { escape?: (value: string) => string } };
 if (!globalWithCSS.CSS) globalWithCSS.CSS = {};
 if (typeof globalWithCSS.CSS.escape !== 'function') {

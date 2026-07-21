@@ -6,7 +6,6 @@ import { PiHighlighterFill } from 'react-icons/pi';
 import { LuBookA } from 'react-icons/lu';
 import { BsPencilSquare } from 'react-icons/bs';
 import { PiRobot } from 'react-icons/pi';
-import { FaHeadphones } from 'react-icons/fa6';
 import { IoIosBuild } from 'react-icons/io';
 import { AnnotationToolType } from '@/types/annotator';
 import { stubTranslation as _ } from '@/utils/misc';
@@ -75,13 +74,6 @@ export const annotationToolButtons = createAnnotationToolButtons([
     label: _('Ask about this'),
     tooltip: _('Ask the Reading Assistant about the selection'),
     Icon: PiRobot,
-    quickAction: true,
-  },
-  {
-    type: 'tts',
-    label: _('Speak'),
-    tooltip: _('Read text aloud after selection'),
-    Icon: FaHeadphones,
     quickAction: true,
   },
   {

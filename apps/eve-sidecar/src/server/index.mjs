@@ -10,6 +10,7 @@ import http from 'node:http';
 import { mkdirSync } from 'node:fs';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createLanguageModel, normalizeModelEnv } from '../createModel.mjs';
+import { createHttpAbort } from '../agent/httpAbort.mjs';
 import { createSessionStore } from '../agent/sessionStore.mjs';
 import { runTurn } from '../agent/runTurn.mjs';
 
@@ -25,6 +26,7 @@ const modelConfig = normalizeModelEnv({
   apiKey: process.env.EVE_MODEL_API_KEY,
   modelId: process.env.EVE_MODEL_ID,
   contextWindowTokens: process.env.EVE_MODEL_CONTEXT_WINDOW,
+  apiMode: process.env.EVE_MODEL_API_MODE,
 });
 
 let languageModel = null;
@@ -47,9 +49,23 @@ function getBooksRoot() {
   return booksRootEnv;
 }
 
-function unauthorized(res) {
-  res.writeHead(401, { 'content-type': 'application/json' });
+function unauthorized(res, req) {
+  res.writeHead(401, {
+    'content-type': 'application/json',
+    ...corsHeaders(req),
+  });
   res.end(JSON.stringify({ error: 'unauthorized' }));
+}
+
+function corsHeaders(req) {
+  const origin = req?.headers?.origin || '*';
+  return {
+    'access-control-allow-origin': origin,
+    'access-control-allow-methods': 'GET,POST,DELETE,OPTIONS',
+    'access-control-allow-headers': 'authorization,content-type',
+    'access-control-max-age': '86400',
+    vary: 'Origin',
+  };
 }
 
 function checkAuth(req) {
@@ -58,8 +74,8 @@ function checkAuth(req) {
   return header === `Bearer ${token}`;
 }
 
-function sendJson(res, status, body) {
-  res.writeHead(status, { 'content-type': 'application/json' });
+function sendJson(res, status, body, req) {
+  res.writeHead(status, { 'content-type': 'application/json', ...corsHeaders(req) });
   res.end(body === undefined ? '' : JSON.stringify(body));
 }
 
@@ -75,8 +91,15 @@ async function readJson(req) {
 }
 
 const server = http.createServer(async (req, res) => {
+  // Preflight before auth — browsers omit Authorization on OPTIONS.
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, corsHeaders(req));
+    res.end();
+    return;
+  }
+
   if (!checkAuth(req)) {
-    unauthorized(res);
+    unauthorized(res, req);
     return;
   }
 
@@ -85,33 +108,38 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (req.method === 'GET' && (path === '/eve/v1' || path === '/eve/v1/')) {
-      sendJson(res, 200, {
-        ok: true,
-        modelReady,
-        modelId: modelConfig.modelId,
-        modelError: modelError || undefined,
-        dataDir,
-        booksRoot: booksRootEnv || undefined,
-      });
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          modelReady,
+          modelId: modelConfig.modelId,
+          modelError: modelError || undefined,
+          dataDir,
+          booksRoot: booksRootEnv || undefined,
+        },
+        req,
+      );
       return;
     }
 
     if (req.method === 'GET' && path === '/health') {
-      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.writeHead(200, { 'content-type': 'text/plain', ...corsHeaders(req) });
       res.end('ok');
       return;
     }
 
     if (req.method === 'GET' && path === '/eve/v1/sessions') {
       const bookId = url.searchParams.get('bookId') || undefined;
-      sendJson(res, 200, { sessions: sessions.list(bookId) });
+      sendJson(res, 200, { sessions: sessions.list(bookId) }, req);
       return;
     }
 
     if (req.method === 'POST' && path === '/eve/v1/sessions') {
       const body = await readJson(req);
       if (!body.bookId || typeof body.bookId !== 'string') {
-        sendJson(res, 400, { error: 'bookId_required' });
+        sendJson(res, 400, { error: 'bookId_required' }, req);
         return;
       }
       const session = sessions.create({
@@ -119,7 +147,7 @@ const server = http.createServer(async (req, res) => {
         bookTitle: body.bookTitle,
         title: body.title,
       });
-      sendJson(res, 201, session);
+      sendJson(res, 201, session, req);
       return;
     }
 
@@ -129,18 +157,18 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'GET') {
         const session = sessions.get(id);
         if (!session) {
-          sendJson(res, 404, { error: 'not_found' });
+          sendJson(res, 404, { error: 'not_found' }, req);
           return;
         }
-        sendJson(res, 200, session);
+        sendJson(res, 200, session, req);
         return;
       }
       if (req.method === 'DELETE') {
         if (!sessions.remove(id)) {
-          sendJson(res, 404, { error: 'not_found' });
+          sendJson(res, 404, { error: 'not_found' }, req);
           return;
         }
-        res.writeHead(204);
+        res.writeHead(204, corsHeaders(req));
         res.end();
         return;
       }
@@ -151,17 +179,17 @@ const server = http.createServer(async (req, res) => {
       const id = decodeURIComponent(turnMatch[1]);
       const session = sessions.get(id);
       if (!session) {
-        sendJson(res, 404, { error: 'not_found' });
+        sendJson(res, 404, { error: 'not_found' }, req);
         return;
       }
       if (!languageModel || !modelReady) {
-        sendJson(res, 503, { error: 'model_not_ready', detail: modelError || 'missing apiKey' });
+        sendJson(res, 503, { error: 'model_not_ready', detail: modelError || 'missing apiKey' }, req);
         return;
       }
       const body = await readJson(req);
       const message = typeof body.message === 'string' ? body.message.trim() : '';
       if (!message) {
-        sendJson(res, 400, { error: 'message_required' });
+        sendJson(res, 400, { error: 'message_required' }, req);
         return;
       }
 
@@ -169,10 +197,19 @@ const server = http.createServer(async (req, res) => {
         'content-type': 'application/x-ndjson; charset=utf-8',
         'cache-control': 'no-cache',
         connection: 'keep-alive',
+        ...corsHeaders(req),
       });
 
+      // Client AbortController cancels the fetch; propagate into streamText.
+      const { signal: abortSignal, settle: settleAbort } = createHttpAbort(req, res);
+
       const writeEvent = (event) => {
-        res.write(`${JSON.stringify(event)}\n`);
+        if (res.writableEnded || res.destroyed) return;
+        try {
+          res.write(`${JSON.stringify(event)}\n`);
+        } catch {
+          // Client gone — abort path will stop the model/tools.
+        }
       };
 
       try {
@@ -182,6 +219,7 @@ const server = http.createServer(async (req, res) => {
           userMessage: message,
           getBooksRoot,
           onEvent: writeEvent,
+          abortSignal,
         });
         sessions.save(session);
       } catch (error) {
@@ -189,17 +227,24 @@ const server = http.createServer(async (req, res) => {
           type: 'error',
           message: error instanceof Error ? error.message : String(error),
         });
+      } finally {
+        settleAbort();
       }
-      res.end();
+      if (!res.writableEnded) res.end();
       return;
     }
 
-    sendJson(res, 404, { error: 'not_found' });
+    sendJson(res, 404, { error: 'not_found' }, req);
   } catch (error) {
-    sendJson(res, 500, {
-      error: 'internal',
-      message: error instanceof Error ? error.message : String(error),
-    });
+    sendJson(
+      res,
+      500,
+      {
+        error: 'internal',
+        message: error instanceof Error ? error.message : String(error),
+      },
+      req,
+    );
   }
 });
 

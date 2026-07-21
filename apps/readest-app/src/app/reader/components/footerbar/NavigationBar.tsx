@@ -4,9 +4,7 @@ import { IoIosList as TOCIcon } from 'react-icons/io';
 import { RxSlider as SliderIcon } from 'react-icons/rx';
 import { RiFontFamily as FontIcon } from 'react-icons/ri';
 import { PiSun as ColorIcon } from 'react-icons/pi';
-import { MdOutlineHeadphones as TTSIcon } from 'react-icons/md';
 import { useEnv } from '@/context/EnvContext';
-import { useReaderStore } from '@/store/readerStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
@@ -22,7 +20,6 @@ interface NavigationBarProps {
 }
 
 export const NavigationBar: React.FC<NavigationBarProps> = ({
-  bookKey,
   actionTab,
   gridInsets,
   forceMobileLayout,
@@ -31,10 +28,8 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
   const isMobile = forceMobileLayout || window.innerWidth < 640 || window.innerHeight < 640;
   const _ = useTranslation();
   const { appService } = useEnv();
-  const { getViewState } = useReaderStore();
   const { isSideBarVisible, isSideBarPinned } = useSidebarStore();
 
-  const viewState = getViewState(bookKey);
   const tocIconSize = useResponsiveSize(23);
   const fontIconSize = useResponsiveSize(18);
   const navPadding = isMobile ? `${gridInsets.bottom * 0.33 + 16}px` : '0px';
@@ -75,11 +70,6 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
           <FontIcon size={fontIconSize} className={clsx(actionTab === 'font' && 'text-blue-500')} />
         }
         onClick={() => onSetActionTab('font')}
-      />
-      <Button
-        label={_('Speak')}
-        icon={<TTSIcon className={viewState?.ttsEnabled ? 'text-blue-500' : ''} />}
-        onClick={() => onSetActionTab('tts')}
       />
     </div>
   );

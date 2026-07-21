@@ -14,7 +14,7 @@ import { sanitizeHtml } from './sanitize';
 // Render a standalone Markdown (.md) file into an in-memory foliate-js book at
 // runtime (no EPUB conversion). The document is split into one section per
 // top-level heading so reading progress, the cross-device location cursor and
-// TTS section tracking all work per chapter — the same contract fb2.js gives a
+// section tracking all work per chapter — the same contract fb2.js gives a
 // single-file format. Layout/font/theme styling applies for free because the
 // reader styles whatever HTML the view renders.
 

@@ -349,19 +349,10 @@ pub struct ReadingWidgetBook {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReadingWidgetTts {
-    pub active: bool,
-    pub playing: bool,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct UpdateReadingWidgetRequest {
     pub books: Vec<ReadingWidgetBook>,
     pub section_title: String,
     pub empty_title: String,
-    #[serde(default)]
-    pub tts: Option<ReadingWidgetTts>,
 }
 
 /// Region of the webview to snapshot for the mesh page-curl (#555),

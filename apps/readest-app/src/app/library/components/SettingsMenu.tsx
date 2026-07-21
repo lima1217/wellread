@@ -3,8 +3,6 @@ import React, { useEffect, useState } from 'react';
 import { PiGear } from 'react-icons/pi';
 import { PiSun, PiMoon } from 'react-icons/pi';
 import { TbSunMoon } from 'react-icons/tb';
-import { MdSync } from 'react-icons/md';
-
 import { isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
 import { DOWNLOAD_READEST_URL } from '@/services/constants';
 import { setBackupDialogVisible } from '@/app/library/components/BackupWindow';
@@ -78,7 +76,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
     openAppLockDialogInStore(mode);
     setIsDropdownOpen?.(false);
   };
-  const { isSyncing, setLibrary } = useLibraryStore();
+  const { setLibrary } = useLibraryStore();
 
   const showAboutReadest = () => {
     setAboutDialogVisible(true);
@@ -201,11 +199,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
     setSavedBookCoverForLockScreen(newValue);
   };
 
-  const handleSyncLibrary = () => {
-    onPullLibrary(true, true);
-    setIsDropdownOpen?.(false);
-  };
-
   const themeModeLabel =
     themeMode === 'dark'
       ? _('Dark Mode')
@@ -225,13 +218,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
       )}
       onCancel={() => setIsDropdownOpen?.(false)}
     >
-      <MenuItem
-        label={_('Sync Library')}
-        Icon={MdSync}
-        iconClassName={isSyncing ? 'animate-reverse-spin' : ''}
-        onClick={handleSyncLibrary}
-      />
-
       {isTauriAppPlatform() && (
         <MenuItem
           label={_('Auto Import on File Open')}
@@ -292,8 +278,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
               label={_('Set PIN…')}
               tooltip={
                 appService?.isMobileApp
-                  ? _('Require a PIN (and biometrics, if available) to open Readest')
-                  : _('Require a 4-digit PIN to open Readest')
+                  ? _('Require a PIN (and biometrics, if available) to open Wellread')
+                  : _('Require a 4-digit PIN to open Wellread')
               }
               onClick={() => openAppLockDialog('set')}
             />
@@ -323,8 +309,8 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
         </ul>
       </MenuItem>
       <hr aria-hidden='true' className='border-base-200 my-1' />
-      {isWebAppPlatform() && <MenuItem label={_('Download Readest')} onClick={downloadReadest} />}
-      <MenuItem label={_('About Readest')} onClick={showAboutReadest} />
+      {isWebAppPlatform() && <MenuItem label={_('Download Wellread')} onClick={downloadReadest} />}
+      <MenuItem label={_('About Wellread')} onClick={showAboutReadest} />
     </Menu>
   );
 };

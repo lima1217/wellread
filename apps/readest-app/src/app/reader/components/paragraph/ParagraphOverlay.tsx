@@ -12,25 +12,14 @@ import {
   getParagraphLayoutContext,
   ParagraphPresentation,
 } from '@/utils/paragraphPresentation';
-import { getTextSubRange } from '@/services/tts/wordHighlight';
 import { loadShortcuts } from '@/helpers/shortcuts';
 import { matchesShortcut } from '@/utils/shortcutKeys';
-import TTSFollowIndicator, { TtsSyncStatus } from '../tts/TTSFollowIndicator';
-import { buildTtsHighlightCssText } from './paragraphTts';
-
-// CSS Custom Highlight registry name for the in-paragraph TTS word/sentence
-// highlight (#3235). Unique per app so it never collides with other highlights.
-const TTS_HIGHLIGHT_NAME = 'readest-tts-paragraph';
 
 interface ParagraphOverlayProps {
   bookKey: string;
   dimOpacity: number;
   viewSettings?: ViewSettings;
   gridInsets?: Insets;
-  /** Derived TTS-sync status driving the "following audio" indicator (#3235). */
-  ttsSyncStatus?: TtsSyncStatus;
-  /** Re-engage following after a manual nav decoupled it (indicator action). */
-  onResumeTtsFollow?: () => void;
   onClose?: () => void;
 }
 
@@ -132,8 +121,6 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
   dimOpacity,
   viewSettings,
   gridInsets = { top: 0, right: 0, bottom: 0, left: 0 },
-  ttsSyncStatus = 'idle',
-  onResumeTtsFollow,
   onClose,
 }) => {
   const { appService } = useEnv();
@@ -142,14 +129,6 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
   const [isOverlayMounted, setIsOverlayMounted] = useState(false);
   const [isChangingSection, setIsChangingSection] = useState(false);
   const [sectionDirection, setSectionDirection] = useState<'next' | 'prev'>('next');
-  // Index of the currently focused paragraph, used to gate the TTS word/sentence
-  // highlight so a stale highlight never lands on the wrong paragraph (#3235).
-  const [focusIndex, setFocusIndex] = useState(-1);
-  const [ttsHighlight, setTtsHighlight] = useState<{
-    index: number;
-    start: number;
-    end: number;
-  } | null>(null);
   const paragraphIdCounter = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -219,12 +198,6 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
       }) as React.CSSProperties,
     [],
   );
-  // `::highlight()` declaration matching the user's TTS highlight color/style so
-  // the in-paragraph word/sentence highlight looks like normal mode (#3235).
-  const ttsHighlightCss = useMemo(
-    () => buildTtsHighlightCssText(viewSettings?.ttsHighlightOptions),
-    [viewSettings?.ttsHighlightOptions],
-  );
   const fallbackPresentation = useMemo(
     (): ParagraphPresentation => ({
       dir: layoutContext.rtl ? 'rtl' : 'ltr',
@@ -274,7 +247,6 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
         setIsChangingSection(false);
         setIsVisible(true);
         setIsOverlayMounted(true);
-        setFocusIndex(typeof event.detail?.index === 'number' ? event.detail.index : -1);
         addParagraph(range, presentation);
       }
     };
@@ -287,7 +259,6 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
       }
       setIsOverlayMounted(false);
       setIsChangingSection(false);
-      setTtsHighlight(null);
       setTimeout(() => {
         setIsVisible(false);
         setParagraphs([]);
@@ -298,36 +269,18 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
       if (event.detail?.bookKey !== bookKey) return;
       setSectionDirection(event.detail?.direction || 'next');
       setParagraphs([]);
-      setTtsHighlight(null);
       setIsChangingSection(true);
-    };
-
-    // TTS word/sentence highlight within the focused paragraph (#3235). The hook
-    // sends character offsets relative to the paragraph start (+ its index, to
-    // guard against landing on the wrong paragraph) or a clear when TTS stops.
-    const handleTtsHighlight = (event: CustomEvent) => {
-      if (event.detail?.bookKey !== bookKey) return;
-      const detail = event.detail as
-        | { clear?: boolean; index?: number; start?: number; end?: number }
-        | undefined;
-      if (detail?.clear || typeof detail?.start !== 'number' || typeof detail?.end !== 'number') {
-        setTtsHighlight(null);
-        return;
-      }
-      setTtsHighlight({ index: detail.index ?? -1, start: detail.start, end: detail.end });
     };
 
     eventDispatcher.on('paragraph-focus', handleFocus);
     eventDispatcher.on('paragraph-mode-disabled', handleDisabled);
     eventDispatcher.on('paragraph-section-changing', handleSectionChanging);
-    eventDispatcher.on('paragraph-tts-highlight', handleTtsHighlight);
 
     return () => {
       if (sectionChangeTimeoutId) clearTimeout(sectionChangeTimeoutId);
       eventDispatcher.off('paragraph-focus', handleFocus);
       eventDispatcher.off('paragraph-mode-disabled', handleDisabled);
       eventDispatcher.off('paragraph-section-changing', handleSectionChanging);
-      eventDispatcher.off('paragraph-tts-highlight', handleTtsHighlight);
     };
   }, [bookKey, addParagraph]);
 
@@ -392,39 +345,6 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
     window.addEventListener('wheel', handleWheel, { passive: false, capture: true });
     return () => window.removeEventListener('wheel', handleWheel, true);
   }, [isVisible, bookKey]);
-
-  // Paint the current TTS word/sentence onto the cloned paragraph using the CSS
-  // Custom Highlight API (#3235). It highlights a Range without mutating the DOM
-  // and natively spans inline element boundaries (sentences), so the fade-in
-  // animation and the clone's markup stay untouched. Re-runs when the clone
-  // (paragraphs) or the offsets change; gated on the index so a highlight from a
-  // previous paragraph never paints the wrong text. No-op where unsupported.
-  useEffect(() => {
-    const registry = typeof CSS !== 'undefined' ? CSS.highlights : undefined;
-    if (!registry || typeof Highlight === 'undefined') return undefined;
-    const clear = () => {
-      registry.delete(TTS_HIGHLIGHT_NAME);
-    };
-
-    if (!ttsHighlight || ttsHighlight.index !== focusIndex) {
-      clear();
-      return clear;
-    }
-    const contentEl = contentRef.current?.querySelector('.paragraph-content');
-    if (!contentEl) {
-      clear();
-      return clear;
-    }
-    const base = document.createRange();
-    base.selectNodeContents(contentEl);
-    const range = getTextSubRange(base, ttsHighlight.start, ttsHighlight.end);
-    if (!range) {
-      clear();
-      return clear;
-    }
-    registry.set(TTS_HIGHLIGHT_NAME, new Highlight(range));
-    return clear;
-  }, [ttsHighlight, focusIndex, paragraphs]);
 
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
@@ -566,21 +486,6 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
       onTouchStart={handleTouchStart}
       onKeyDown={handleKeyDown}
     >
-      {/* TTS "following audio" indicator, pinned top-center. Anchored below the
-          top safe-area inset the overlay already accounts for; idle/unsupported
-          render nothing so it stays out of the way when TTS isn't driving. */}
-      <div
-        className='pointer-events-none absolute inset-x-0 z-10 flex justify-center'
-        style={{
-          top: appService?.hasSafeAreaInset ? `calc(${gridInsets.top}px + 0.75rem)` : '0.75rem',
-        }}
-      >
-        {/* Only the indicator itself takes pointer events (its decoupled state is
-            a button); the wrapper stays transparent to backdrop/region taps. */}
-        <div className='pointer-events-auto'>
-          <TTSFollowIndicator status={ttsSyncStatus} onResume={onResumeTtsFollow} />
-        </div>
-      </div>
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
       <div
         ref={contentRef}
@@ -607,10 +512,6 @@ const ParagraphOverlay: React.FC<ParagraphOverlayProps> = ({
 
           .paragraph-content > :last-child {
             margin-block-end: 0;
-          }
-
-          ::highlight(${TTS_HIGHLIGHT_NAME}) {
-            ${ttsHighlightCss}
           }
         `}</style>
         {activeParagraph ? (

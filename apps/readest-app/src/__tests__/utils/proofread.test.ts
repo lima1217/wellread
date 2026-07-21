@@ -13,7 +13,6 @@ function rule(overrides: Partial<ProofreadRule> = {}): ProofreadRule {
     caseSensitive: true,
     order: 1000,
     wholeWord: true,
-    onlyForTTS: false,
     ...overrides,
   };
 }

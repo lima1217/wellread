@@ -514,10 +514,10 @@ export const UpdaterContent = ({
           {checkUpdate ? (
             <div className='text-base-content flex-grow text-sm'>
               <h2 className='mb-4 text-center font-bold sm:text-start'>
-                {_('A new version of Readest is available!')}
+                {_('A new version of Wellread is available!')}
               </h2>
               <p className='mb-2'>
-                {_('Readest {{newVersion}} is available (installed version {{currentVersion}}).', {
+                {_('Wellread {{newVersion}} is available (installed version {{currentVersion}}).', {
                   newVersion,
                   currentVersion,
                 })}
@@ -686,7 +686,7 @@ export const UpdaterWindow = () => {
     <Dialog
       id='updater_window'
       isOpen={isOpen}
-      title={checkUpdate ? _('Software Update') : _("What's New in Readest")}
+      title={checkUpdate ? _('Software Update') : _("What's New in Wellread")}
       onClose={() => setIsOpen(false)}
       boxClassName='sm:!w-[75%] sm:h-auto sm:!max-h-[85vh] sm:!max-w-2xl'
     >

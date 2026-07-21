@@ -23,7 +23,6 @@ describe('annotationToolbar helpers', () => {
       'search',
       'dictionary',
       'ask',
-      'tts',
       'proofread',
     ]);
     expect(DEFAULT_ANNOTATION_TOOLBAR_ITEMS).not.toContain('share');
@@ -51,7 +50,6 @@ describe('annotationToolbar helpers', () => {
       'search',
       'dictionary',
       'ask',
-      'tts',
       'proofread',
       'share',
     ]);

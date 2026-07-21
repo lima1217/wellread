@@ -14,7 +14,7 @@ export const PageFooter: React.FC<PageFooterProps> = ({ tagline }) => (
       target='_blank'
       rel='noopener'
     >
-      Readest
+      Wellread
     </a>
     <span className='mx-1.5'>·</span>
     <span>{tagline}</span>

@@ -25,18 +25,18 @@ const makeBook = (overrides?: Partial<Book>): Book =>
   }) as Book;
 
 describe('BookCover', () => {
-  it('passes loading="lazy" to crop-mode Image', () => {
+  it('passes loading="eager" to crop-mode Image', () => {
     const { container } = render(<BookCover book={makeBook()} coverFit='crop' />);
     const img = container.querySelector('img.cover-image');
     expect(img).toBeTruthy();
-    expect(img?.getAttribute('loading')).toBe('lazy');
+    expect(img?.getAttribute('loading')).toBe('eager');
   });
 
-  it('passes loading="lazy" to fit-mode Image', () => {
+  it('passes loading="eager" to fit-mode Image', () => {
     const { container } = render(<BookCover book={makeBook()} coverFit='fit' />);
     const img = container.querySelector('img.cover-image');
     expect(img).toBeTruthy();
-    expect(img?.getAttribute('loading')).toBe('lazy');
+    expect(img?.getAttribute('loading')).toBe('eager');
   });
 
   it('reports natural aspect ratio via onAspectRatioChange when fit-mode image loads', () => {
