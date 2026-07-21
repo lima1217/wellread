@@ -41,19 +41,16 @@ export function useEveAgent(options: UseEveAgentOptions) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Stay session-less until the user sends (or an id is provided).
+      // Auto-creating on mount orphans empty "Chat about …" rows whenever
+      // Chat History clears the active session and the chat pane remounts.
+      if (!sessionId) {
+        setActiveSessionId(null);
+        setMessages([]);
+        return;
+      }
       try {
-        if (sessionId) {
-          const session = await getEveSession(sessionId);
-          if (cancelled) return;
-          setActiveSessionId(session.id);
-          setMessages(session.messages);
-          return;
-        }
-        const session = await createEveSession({
-          bookId,
-          bookTitle,
-          title: bookTitle ? `Chat about ${bookTitle}` : undefined,
-        });
+        const session = await getEveSession(sessionId);
         if (cancelled) return;
         setActiveSessionId(session.id);
         setMessages(session.messages);
