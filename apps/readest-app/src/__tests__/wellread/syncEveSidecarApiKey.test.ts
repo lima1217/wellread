@@ -24,7 +24,7 @@ describe('syncEveSidecarApiKey', () => {
     isTauriAppPlatform.mockReset();
   });
 
-  it('reloads the sidecar with the active profile keychain apiKey on Tauri', async () => {
+  it('starts the sidecar once with the active profile keychain apiKey on Tauri', async () => {
     isTauriAppPlatform.mockReturnValue(true);
     getModelApiKey.mockResolvedValue('  sk-live  ');
     const info = { baseUrl: 'http://127.0.0.1:9', token: 'tok' };
@@ -58,7 +58,7 @@ describe('syncEveSidecarApiKey', () => {
     });
   });
 
-  it('migrates a legacy single-track config then injects that profile key', async () => {
+  it('migrates a legacy single-track config then starts with that profile key', async () => {
     isTauriAppPlatform.mockReturnValue(true);
     getModelApiKey.mockResolvedValue('sk-legacy');
     reloadEveSidecar.mockResolvedValue({ baseUrl: 'http://127.0.0.1:1', token: 't' });
@@ -82,9 +82,10 @@ describe('syncEveSidecarApiKey', () => {
     );
   });
 
-  it('skips reload when keychain has no apiKey for the active profile', async () => {
+  it('starts with empty apiKey when keychain has none so profile fields still apply', async () => {
     isTauriAppPlatform.mockReturnValue(true);
     getModelApiKey.mockResolvedValue('   ');
+    reloadEveSidecar.mockResolvedValue({ baseUrl: 'http://127.0.0.1:2', token: 't' });
 
     const { syncEveSidecarApiKey } = await import('@/services/wellread/syncEveSidecarApiKey');
     const result = await syncEveSidecarApiKey({
@@ -102,8 +103,40 @@ describe('syncEveSidecarApiKey', () => {
       ],
     });
 
+    expect(result).toEqual({ baseUrl: 'http://127.0.0.1:2', token: 't' });
+    expect(reloadEveSidecar).toHaveBeenCalledWith({
+      enabled: true,
+      baseURL: 'https://api.example.com/v1',
+      modelId: 'demo',
+      contextWindowTokens: 128_000,
+      apiMode: 'chat',
+      apiKey: '',
+    });
+  });
+
+  it('stops the sidecar when AI is disabled', async () => {
+    isTauriAppPlatform.mockReturnValue(true);
+    reloadEveSidecar.mockResolvedValue(null);
+
+    const { syncEveSidecarApiKey } = await import('@/services/wellread/syncEveSidecarApiKey');
+    const result = await syncEveSidecarApiKey({
+      enabled: false,
+      activeProfileId: 'p1',
+      profiles: [
+        {
+          id: 'p1',
+          name: 'Demo',
+          baseURL: 'https://api.example.com/v1',
+          modelId: 'demo',
+          contextWindowTokens: 128_000,
+          apiMode: 'chat',
+        },
+      ],
+    });
+
     expect(result).toBeNull();
-    expect(reloadEveSidecar).not.toHaveBeenCalled();
+    expect(getModelApiKey).not.toHaveBeenCalled();
+    expect(reloadEveSidecar).toHaveBeenCalledWith({ enabled: false });
   });
 
   it('no-ops outside Tauri', async () => {

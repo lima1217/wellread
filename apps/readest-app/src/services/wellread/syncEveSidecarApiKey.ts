@@ -1,8 +1,7 @@
 /**
- * Cold-start bridge: Rust bootstrap reads ModelConfig from settings.json but
- * cannot read the OS keychain (apiKey is frontend-owned). After settings load,
- * inject the active profile's key so the sidecar is model-ready without
- * requiring a re-save in Settings → AI.
+ * Cold-start bridge: Rust bootstrap does not spawn (cannot read OS keychain).
+ * After settings load, start/reload the sidecar once with the active
+ * ModelProfile + keychain apiKey so cold start is a single process start.
  */
 
 import { isTauriAppPlatform } from '@/services/environment';
@@ -20,10 +19,12 @@ export async function syncEveSidecarApiKey(
 ): Promise<EveSidecarInfo | null> {
   if (!isTauriAppPlatform()) return null;
   const config = mergeModelConfig(modelConfig);
+  if (!config.enabled) {
+    return reloadEveSidecar({ enabled: false });
+  }
   const active = getActiveProfile(config);
   if (!active) return null;
   const apiKey = (await getModelApiKey(active.id)).trim();
-  if (!apiKey) return null;
   const payload = toSidecarModelPayload(config);
   if (!payload) return null;
   return reloadEveSidecar({ ...payload, apiKey });

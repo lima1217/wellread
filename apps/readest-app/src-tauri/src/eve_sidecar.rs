@@ -39,6 +39,9 @@ struct EveSidecarInner {
     child: Option<Child>,
     info: Option<EveSidecarInfo>,
     last_api_key: Option<String>,
+    /// Bumped on each start attempt so a stale health-check finish cannot
+    /// overwrite a newer reload (last writer wins by generation).
+    generation: u64,
 }
 
 pub struct EveSidecarState {
@@ -52,6 +55,7 @@ impl EveSidecarState {
                 child: None,
                 info: None,
                 last_api_key: None,
+                generation: 0,
             }),
         }
     }
@@ -82,6 +86,57 @@ fn random_token() -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// Map `settings.json` → sidecar reload payload.
+///
+/// Supports the multi-ModelProfile schema (`activeProfileId` + `profiles[]`)
+/// and falls back to the legacy flat `{ baseURL, modelId, … }` shape.
+fn parse_model_config_from_value(value: &serde_json::Value) -> ModelConfigPayload {
+    let Some(mc) = value.get("modelConfig") else {
+        return ModelConfigPayload::default();
+    };
+    let enabled = mc.get("enabled").and_then(|v| v.as_bool());
+
+    // Multi-profile schema (current frontend persistence).
+    if let Some(profiles) = mc.get("profiles").and_then(|v| v.as_array()) {
+        let active_id = mc.get("activeProfileId").and_then(|v| v.as_str());
+        let profile = active_id.and_then(|id| {
+            profiles
+                .iter()
+                .find(|p| p.get("id").and_then(|v| v.as_str()) == Some(id))
+        });
+        return match profile {
+            Some(p) => endpoint_payload_from(enabled, p),
+            None => ModelConfigPayload {
+                enabled,
+                ..ModelConfigPayload::default()
+            },
+        };
+    }
+
+    // Legacy flat single-track schema.
+    endpoint_payload_from(enabled, mc)
+}
+
+fn endpoint_payload_from(enabled: Option<bool>, obj: &serde_json::Value) -> ModelConfigPayload {
+    ModelConfigPayload {
+        enabled,
+        base_url: obj
+            .get("baseURL")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        model_id: obj
+            .get("modelId")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        context_window_tokens: obj.get("contextWindowTokens").and_then(|v| v.as_u64()),
+        api_mode: obj
+            .get("apiMode")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        api_key: None,
+    }
+}
+
 fn read_model_config_from_settings(app: &AppHandle) -> ModelConfigPayload {
     let Ok(dir) = app.path().app_config_dir() else {
         return ModelConfigPayload::default();
@@ -93,26 +148,7 @@ fn read_model_config_from_settings(app: &AppHandle) -> ModelConfigPayload {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw) else {
         return ModelConfigPayload::default();
     };
-    let Some(mc) = value.get("modelConfig") else {
-        return ModelConfigPayload::default();
-    };
-    ModelConfigPayload {
-        enabled: mc.get("enabled").and_then(|v| v.as_bool()),
-        base_url: mc
-            .get("baseURL")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        model_id: mc
-            .get("modelId")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        context_window_tokens: mc.get("contextWindowTokens").and_then(|v| v.as_u64()),
-        api_mode: mc
-            .get("apiMode")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        api_key: None,
-    }
+    parse_model_config_from_value(&value)
 }
 
 fn resolve_node_bin(app: &AppHandle) -> PathBuf {
@@ -236,118 +272,149 @@ fn health_ok(url: &str, token: &str) -> bool {
 }
 
 /// Start (or replace) the sidecar; stores child + info in managed state.
+///
+/// Returns `Ok(None)` when AI is disabled (`enabled == Some(false)`): any
+/// running child is stopped and nothing is spawned. Health probing runs
+/// without holding the state mutex so `get_eve_sidecar_info` stays responsive.
 pub fn start_or_restart(
     app: &AppHandle,
     model: ModelConfigPayload,
-) -> Result<EveSidecarInfo, String> {
+) -> Result<Option<EveSidecarInfo>, String> {
     let state = app.state::<EveSidecarState>();
-    let mut inner = state.inner.lock().map_err(|e| e.to_string())?;
-    stop_locked(&mut inner);
 
-    let node = resolve_node_bin(app);
-    let entry = resolve_eve_output(app);
-    if !entry.exists() {
-        return Err(format!("eve sidecar entry missing: {}", entry.display()));
-    }
-    let data_dir = resolve_eve_data_dir(app);
-    std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    // Hold the lock only for stop / env prep / spawn bookkeeping — not for the
+    // up-to-30s health wait below.
+    let (mut child, token, base_url_rx, generation) = {
+        let mut inner = state.inner.lock().map_err(|e| e.to_string())?;
+        stop_locked(&mut inner);
 
-    let token = random_token();
-    let api_key = model
-        .api_key
-        .clone()
-        .or_else(|| inner.last_api_key.clone())
-        .unwrap_or_default();
-    if let Some(key) = &model.api_key {
-        inner.last_api_key = if key.is_empty() {
-            None
-        } else {
-            Some(key.clone())
-        };
-    }
-    let mut cmd = Command::new(&node);
-    cmd.arg(&entry)
-        .env("HOST", "127.0.0.1")
-        .env("NITRO_HOST", "127.0.0.1")
-        .env("PORT", "0")
-        .env("NITRO_PORT", "0")
-        .env("EVE_LOOPBACK_TOKEN", &token)
-        .env("EVE_DATA_DIR", &data_dir)
-        .env(
-            "EVE_MODEL_BASE_URL",
-            model
-                .base_url
-                .clone()
-                .unwrap_or_else(|| "https://api.deepseek.com/v1".into()),
-        )
-        .env(
-            "EVE_MODEL_ID",
-            model
-                .model_id
-                .clone()
-                .unwrap_or_else(|| "deepseek-v4-flash".into()),
-        )
-        .env(
-            "EVE_MODEL_CONTEXT_WINDOW",
-            model.context_window_tokens.unwrap_or(1_000_000).to_string(),
-        )
-        .env(
-            "EVE_MODEL_API_MODE",
-            match model.api_mode.as_deref() {
-                Some("responses") => "responses",
-                _ => "chat",
-            },
-        )
-        .env("EVE_MODEL_API_KEY", api_key)
-        .env("EVE_BOOKS_ROOT", resolve_books_root(app))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        if model.enabled == Some(false) {
+            // Invalidate in-flight health checks from a prior start.
+            inner.generation = inner.generation.wrapping_add(1);
+            return Ok(None);
+        }
 
-    if let Some(parent) = entry.parent() {
-        cmd.current_dir(parent);
-    }
+        let node = resolve_node_bin(app);
+        let entry = resolve_eve_output(app);
+        if !entry.exists() {
+            return Err(format!("eve sidecar entry missing: {}", entry.display()));
+        }
+        let data_dir = resolve_eve_data_dir(app);
+        std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
 
-    if let Some(node_path) = resolve_node_modules(app, &entry) {
-        cmd.env("NODE_PATH", node_path);
-    }
+        let token = random_token();
+        let api_key = model
+            .api_key
+            .clone()
+            .or_else(|| inner.last_api_key.clone())
+            .unwrap_or_default();
+        if let Some(key) = &model.api_key {
+            inner.last_api_key = if key.is_empty() {
+                None
+            } else {
+                Some(key.clone())
+            };
+        }
 
-    let mut child = cmd.spawn().map_err(|e| format!("spawn eve sidecar: {e}"))?;
-    let stdout = child.stdout.take().ok_or("missing sidecar stdout")?;
-    if let Some(stderr) = child.stderr.take() {
+        inner.generation = inner.generation.wrapping_add(1);
+        let generation = inner.generation;
+
+        let mut cmd = Command::new(&node);
+        cmd.arg(&entry)
+            .env("HOST", "127.0.0.1")
+            .env("NITRO_HOST", "127.0.0.1")
+            .env("PORT", "0")
+            .env("NITRO_PORT", "0")
+            .env("EVE_LOOPBACK_TOKEN", &token)
+            .env("EVE_DATA_DIR", &data_dir)
+            .env(
+                "EVE_MODEL_BASE_URL",
+                model
+                    .base_url
+                    .clone()
+                    .unwrap_or_else(|| "https://api.deepseek.com/v1".into()),
+            )
+            .env(
+                "EVE_MODEL_ID",
+                model
+                    .model_id
+                    .clone()
+                    .unwrap_or_else(|| "deepseek-v4-flash".into()),
+            )
+            .env(
+                "EVE_MODEL_CONTEXT_WINDOW",
+                model.context_window_tokens.unwrap_or(1_000_000).to_string(),
+            )
+            .env(
+                "EVE_MODEL_API_MODE",
+                match model.api_mode.as_deref() {
+                    Some("responses") => "responses",
+                    _ => "chat",
+                },
+            )
+            .env("EVE_MODEL_API_KEY", api_key)
+            .env("EVE_BOOKS_ROOT", resolve_books_root(app))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        if let Some(parent) = entry.parent() {
+            cmd.current_dir(parent);
+        }
+
+        if let Some(node_path) = resolve_node_modules(app, &entry) {
+            cmd.env("NODE_PATH", node_path);
+        }
+
+        let mut child = cmd.spawn().map_err(|e| format!("spawn eve sidecar: {e}"))?;
+        let stdout = child.stdout.take().ok_or("missing sidecar stdout")?;
+        if let Some(stderr) = child.stderr.take() {
+            thread::spawn(move || {
+                for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                    log::info!("[eve-sidecar:err] {line}");
+                }
+            });
+        }
+
+        let (tx, rx) = std::sync::mpsc::channel::<Option<String>>();
         thread::spawn(move || {
-            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                log::info!("[eve-sidecar:err] {line}");
-            }
-        });
-    }
-
-    let (tx, rx) = std::sync::mpsc::channel::<Option<String>>();
-    thread::spawn(move || {
-        let mut found = None;
-        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            log::info!("[eve-sidecar] {line}");
-            if found.is_none() {
-                if let Some(url) = parse_listen_url(&line) {
-                    found = Some(url.clone());
-                    let _ = tx.send(Some(url));
+            let mut found = None;
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                log::info!("[eve-sidecar] {line}");
+                if found.is_none() {
+                    if let Some(url) = parse_listen_url(&line) {
+                        found = Some(url.clone());
+                        let _ = tx.send(Some(url));
+                    }
                 }
             }
-        }
-        if found.is_none() {
-            let _ = tx.send(None);
-        }
-    });
+            if found.is_none() {
+                let _ = tx.send(None);
+            }
+        });
 
-    let base_url = rx
-        .recv_timeout(HEALTH_TIMEOUT)
-        .map_err(|_| "timed out waiting for eve listen URL".to_string())?
-        .ok_or_else(|| "eve sidecar exited before printing listen URL".to_string())?;
+        (child, token, rx, generation)
+    };
+
+    let base_url = match base_url_rx.recv_timeout(HEALTH_TIMEOUT) {
+        Ok(Some(url)) => url,
+        Ok(None) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("eve sidecar exited before printing listen URL".to_string());
+        }
+        Err(_) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("timed out waiting for eve listen URL".to_string());
+        }
+    };
 
     let health_url = format!("{base_url}eve/v1");
     let deadline = Instant::now() + HEALTH_TIMEOUT;
     loop {
         if Instant::now() > deadline {
             let _ = child.kill();
+            let _ = child.wait();
             return Err("eve sidecar health check timed out".into());
         }
         if health_ok(&health_url, &token) {
@@ -360,9 +427,17 @@ pub fn start_or_restart(
         base_url: base_url.trim_end_matches('/').to_string(),
         token,
     };
+
+    let mut inner = state.inner.lock().map_err(|e| e.to_string())?;
+    if inner.generation != generation {
+        // A newer reload won; discard this child.
+        let _ = child.kill();
+        let _ = child.wait();
+        return Ok(inner.info.clone());
+    }
     inner.child = Some(child);
     inner.info = Some(info.clone());
-    Ok(info)
+    Ok(Some(info))
 }
 
 pub fn shutdown(app: &AppHandle) {
@@ -385,7 +460,7 @@ pub fn reload_eve_sidecar(
 ) -> Result<Option<EveSidecarInfo>, String> {
     let model = model.unwrap_or_else(|| read_model_config_from_settings(&app));
     match start_or_restart(&app, model) {
-        Ok(info) => Ok(Some(info)),
+        Ok(info) => Ok(info),
         Err(err) => {
             log::error!("reload_eve_sidecar failed: {err}");
             Err(err)
@@ -395,14 +470,20 @@ pub fn reload_eve_sidecar(
 
 pub fn bootstrap(app: &AppHandle) {
     let model = read_model_config_from_settings(app);
-    if let Err(err) = start_or_restart(app, model) {
-        log::warn!("eve sidecar bootstrap skipped: {err}");
+    if model.enabled == Some(false) {
+        log::info!("eve sidecar bootstrap skipped: AI disabled");
+        return;
     }
+    // Do not spawn here. Rust cannot read the OS keychain; the frontend
+    // `syncEveSidecarApiKey` starts the sidecar once after settings load with
+    // the active ModelProfile + apiKey (P0-2: avoid wrong/keyless start then
+    // immediate restart).
+    log::info!("eve sidecar bootstrap deferred to frontend key sync");
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{health_ok, parse_listen_url};
+    use super::{health_ok, parse_listen_url, parse_model_config_from_value};
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::Mutex;
@@ -423,6 +504,90 @@ mod tests {
         let url = parse_listen_url("Listening on http://0.0.0.0:4123").unwrap();
         assert!(url.contains("127.0.0.1"));
         assert!(url.ends_with('/'));
+    }
+
+    #[test]
+    fn parses_legacy_flat_model_config() {
+        let value = serde_json::json!({
+            "modelConfig": {
+                "enabled": true,
+                "baseURL": "https://api.example.com/v1",
+                "modelId": "legacy-model",
+                "contextWindowTokens": 128000,
+                "apiMode": "responses"
+            }
+        });
+        let payload = parse_model_config_from_value(&value);
+        assert_eq!(payload.enabled, Some(true));
+        assert_eq!(
+            payload.base_url.as_deref(),
+            Some("https://api.example.com/v1")
+        );
+        assert_eq!(payload.model_id.as_deref(), Some("legacy-model"));
+        assert_eq!(payload.context_window_tokens, Some(128000));
+        assert_eq!(payload.api_mode.as_deref(), Some("responses"));
+    }
+
+    #[test]
+    fn parses_active_profile_from_multi_profile_schema() {
+        let value = serde_json::json!({
+            "modelConfig": {
+                "enabled": true,
+                "activeProfileId": "openai-work",
+                "profiles": [
+                    {
+                        "id": "deepseek-default",
+                        "name": "DeepSeek",
+                        "baseURL": "https://api.deepseek.com/v1",
+                        "modelId": "deepseek-v4-flash",
+                        "contextWindowTokens": 1000000,
+                        "apiMode": "chat"
+                    },
+                    {
+                        "id": "openai-work",
+                        "name": "OpenAI",
+                        "baseURL": "https://api.openai.com/v1",
+                        "modelId": "gpt-4o",
+                        "contextWindowTokens": 128000,
+                        "apiMode": "responses"
+                    }
+                ]
+            }
+        });
+        let payload = parse_model_config_from_value(&value);
+        assert_eq!(payload.enabled, Some(true));
+        assert_eq!(
+            payload.base_url.as_deref(),
+            Some("https://api.openai.com/v1")
+        );
+        assert_eq!(payload.model_id.as_deref(), Some("gpt-4o"));
+        assert_eq!(payload.context_window_tokens, Some(128000));
+        assert_eq!(payload.api_mode.as_deref(), Some("responses"));
+    }
+
+    #[test]
+    fn multi_profile_missing_active_leaves_endpoint_fields_empty() {
+        let value = serde_json::json!({
+            "modelConfig": {
+                "enabled": false,
+                "activeProfileId": "gone",
+                "profiles": [
+                    {
+                        "id": "deepseek-default",
+                        "baseURL": "https://api.deepseek.com/v1",
+                        "modelId": "deepseek-v4-flash",
+                        "contextWindowTokens": 1000000,
+                        "apiMode": "chat"
+                    }
+                ]
+            }
+        });
+        let payload = parse_model_config_from_value(&value);
+        assert_eq!(payload.enabled, Some(false));
+        assert!(payload.base_url.is_none());
+        assert!(payload.model_id.is_none());
+        assert!(payload.context_window_tokens.is_none());
+        assert!(payload.api_mode.is_none());
     }
 
     #[test]

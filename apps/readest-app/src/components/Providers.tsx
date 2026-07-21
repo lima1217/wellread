@@ -93,8 +93,8 @@ const Providers = ({ children }: { children: React.ReactNode }) => {
           salt: settings.pinCodeSalt,
           biometricUnlockEnabled: !!settings.biometricUnlockEnabled,
         });
-        // Rust bootstrap cannot read keychain; inject apiKey so turns work
-        // after cold start without requiring a Settings → AI re-save.
+        // Rust bootstrap defers spawn; start once here with keychain apiKey +
+        // active ModelProfile so cold start is a single sidecar process.
         await syncEveSidecarApiKey(settings.modelConfig);
         await useEveConnectionStore.getState().refresh();
       });
