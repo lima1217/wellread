@@ -124,7 +124,7 @@ describe('trafficLightStore', () => {
       // y is computed Rust-side from headerHeight + the live close-button
       // frame, so the IPC payload carries height-in-logical-px rather
       // than a precomputed inset. Without an explicit value we fall
-      // back to readest's standard `h-11` (44px).
+      // back to wellread's standard `h-11` (44px).
       mockIsFullscreen.mockResolvedValue(false);
 
       await useTrafficLightStore.getState().setTrafficLightVisibility(true);

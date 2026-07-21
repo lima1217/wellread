@@ -1,6 +1,6 @@
 /**
  * Converter between EPUB CFI and CREngine XPointer
- * Converts between Readest (foliate-js) CFI format and KOReader CREngine XPointer format
+ * Converts between Wellread (foliate-js) CFI format and KOReader CREngine XPointer format
  */
 
 import { BookDoc } from '@/libs/document';
@@ -437,7 +437,7 @@ export class XCFI {
   }
 
   /**
-   * Check if an element is injected by Readest at runtime and should be
+   * Check if an element is injected by Wellread at runtime and should be
    * invisible to XPointer path building / resolution (e.g. skip-link div).
    */
   private static isCfiInert(element: Element): boolean {
@@ -697,7 +697,7 @@ export const sectionIndexForFraction = (fraction: number, boundaries: number[]):
  * files and fragment splitting make CREngine's `DocFragment[N]` drift away from
  * foliate's section `N - 1`, producing a cumulative offset — real reports show
  * `DocFragment[326]` landing on foliate section 274, and the reference case of
- * KOReader chapter 9 opening on Readest chapter 10.
+ * KOReader chapter 9 opening on Wellread chapter 10.
  *
  * Strategy — spine-order table + percentage anchor:
  *  1. `nominalIndex` is CREngine's own 0-based number (`DocFragment[N] - 1`).

@@ -3,7 +3,7 @@
  *
  * Wraps the forked `js-mdict` `MDX` / `MDD` classes via `MDX.create(blob)` /
  * `MDD.create(blob)`. Both factories accept any `Blob` whose `slice(start,
- * end).arrayBuffer()` resolves the bytes — Readest's `NativeFile` (Tauri) and
+ * end).arrayBuffer()` resolves the bytes — Wellread's `NativeFile` (Tauri) and
  * `RemoteFile` (web) qualify, so initialization reads only header + key index
  * and lookups read exactly the slice they need.
  *

@@ -10,7 +10,7 @@ export interface IngestFileDeps {
   settings: SystemSettings;
   isLoggedIn: boolean;
   /**
-   * Pre-resolved absolute path to Readest's own `Books/` directory. When
+   * Pre-resolved absolute path to Wellread's own `Books/` directory. When
    * provided, any source file already living under this prefix is excluded
    * from in-place import (it is, by definition, a hash copy we wrote). The
    * caller is expected to resolve it once per batch via
@@ -31,7 +31,7 @@ export interface IngestFileOptions {
   /** Collection to place the book in. */
   groupId?: string;
   groupName?: string;
-  /** Tag parsed from a Send-to-Readest email subject (`#scifi`). */
+  /** Tag parsed from a Send-to-Wellread email subject (`#scifi`). */
   subjectTag?: string;
   /** Upload to the cloud even when the user has disabled autoUpload. */
   forceUpload?: boolean;
@@ -53,12 +53,12 @@ export interface IngestFileOptions {
  *   - `file` is an absolute path string (not a File / blob / URL / content URI).
  *   - The path lives under one of the user's registered in-place roots
  *     (`settings.externalLibraryFolders`) — directories the user has
- *     explicitly told Readest to read in place. The Readest data location
+ *     explicitly told Wellread to read in place. The Wellread data location
  *     (`customRootDir`) is intentionally NOT an in-place trigger; that
- *     directory is Readest's own home and may freely contain hash copies.
- *   - The path is NOT inside Readest's own managed books directory
+ *     directory is Wellread's own home and may freely contain hash copies.
+ *   - The path is NOT inside Wellread's own managed books directory
  *     (`appBooksPrefix`, e.g. `<AppData>/Books/`). Anything in that subtree
- *     is a hash copy under Readest's control, no point marking it in-place.
+ *     is a hash copy under Wellread's control, no point marking it in-place.
  *     We compare against the actual app data path rather than rejecting any
  *     `<root>/Books/` segment — users routinely have unrelated folders named
  *     `Books` inside their library roots (Baidu Netdisk's default layout,
@@ -113,7 +113,7 @@ function shouldImportInPlace(
   const norm = (p: string) => normalizeFilePathForIndex(p, osPlatform);
   const target = norm(file);
 
-  // If the file already lives inside Readest's own managed books directory
+  // If the file already lives inside Wellread's own managed books directory
   // we never want to "in-place" it: it is, by definition, a hash copy we
   // produced ourselves. Compare against the actual resolved app prefix so
   // unrelated user-owned folders that happen to be named `Books` (very

@@ -1,11 +1,8 @@
-# Readest App Code Layout
+# Wellread app code layout
 
-This note summarizes the runtime boundaries inside `apps/readest-app`, with two goals:
+This note maps runtime boundaries inside `apps/readest-app`: which directories are server-side, client-side, or mixed, and what `apps/readest-app/src/services` owns.
 
-- explain which directories are server-side, client-side, or mixed
-- explain the directory-level role of `apps/readest-app/src/services`
-
-## First: `src-tauri` 
+## `src-tauri` host layer 
 
 `apps/readest-app/src-tauri` is the Tauri native shell layer for all Tauri targets, not just desktop.
 
@@ -223,7 +220,7 @@ This is mostly client-side sync orchestration talking to backend endpoints like 
 
 ### `src/services/send`
 
-“Send to Readest” and content conversion logic.
+“Send to Wellread” and content conversion logic.
 
 - `sendAddress.ts`, `devicePrefs.ts`, `inboxDrainer.ts`
 - `conversion/`: article/page-to-EPUB conversion pipeline, sanitization, TOC building, asset bundling, and worker protocol

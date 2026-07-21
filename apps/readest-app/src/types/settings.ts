@@ -115,7 +115,7 @@ export interface SystemSettings {
   /**
    * Absolute paths the user has registered as "external library folders" —
    * directories managed by the user (or another reader app, e.g. Duokan,
-   * Calibre, Moon+ Reader) that Readest should read in place instead of
+   * Calibre, Moon+ Reader) that Wellread should read in place instead of
    * copying into Books/<hash>/. Each entry must be an absolute path; entries
    * are matched as path-prefix roots when ingesting a file. Device-local
    * (path is meaningful only on this filesystem) and excluded from cloud
@@ -125,7 +125,7 @@ export interface SystemSettings {
   /**
    * Absolute paths of the external library folders the user has opted into
    * auto-import for. On library open and whenever the app regains focus,
-   * Readest re-scans each of these and imports any newly-added book files.
+   * Wellread re-scans each of these and imports any newly-added book files.
    * A subset of {@link externalLibraryFolders} (auto-import requires the
    * folder to be read in place). Set per-folder from the Import-from-Folder
    * dialog. Desktop + Android only. Device-local (paths are meaningful only

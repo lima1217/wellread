@@ -24,7 +24,7 @@ interface PendingShareSave {
 }
 
 /**
- * Handle "Share to Readest" article URLs from the OS share sheet
+ * Handle "Share to Wellread" article URLs from the OS share sheet
  * (Safari, Chrome, etc.). Two paths feed in:
  *
  *   1. Deep-link wake-up (`app-incoming-url` event published by
@@ -33,19 +33,19 @@ interface PendingShareSave {
  *
  *   2. iOS Share-Extension App Group queue — the extension writes
  *      `{url, groupId?, groupName?}` payloads into the shared
- *      NSUserDefaults at `group.com.bilingify.readest`, and the host
+ *      NSUserDefaults at `group.com.bilingify.wellread`, and the host
  *      plugin (NativeBridgePlugin) drains them on foreground by calling
- *      `window.__readestOnShareExtensionPending(saves)`. Same ingest
+ *      `window.__wellreadOnShareExtensionPending(saves)`. Same ingest
  *      pipeline, but the chosen library group is preserved.
  *
- * On iOS we also expose `window.__readestGetGroups()` so the
+ * On iOS we also expose `window.__wellreadGetGroups()` so the
  * Share-Extension picker can show up-to-date library groups, and we
  * post a `{type:'ready'}` to the WKScriptMessageHandler the plugin
  * registered, so the cold-start drain happens even when the extension
  * woke the app up before this hook had mounted.
  *
  * Filter rules — only act on URLs that are:
- *   - http(s) (not file://, content://, readest://, blob:, data:)
+ *   - http(s) (not file://, content://, wellread://, blob:, data:)
  *   - NOT an annotation deep link (those go to useOpenAnnotationLink)
  *
  * Failures surface as toasts. Successful clips show "Saving article…"
@@ -124,10 +124,10 @@ export function useClipUrlIngress() {
       //   - Universal Link (primary):
       //       https://web.readest.com/clip?url=<encoded>
       //   - Custom URL scheme (fallback):
-      //       readest://clip?url=<encoded>
+      //       wellread://clip?url=<encoded>
       const isClipUrl =
-        url.startsWith('readest://clip?') ||
-        url.startsWith('readest://clip/') ||
+        url.startsWith('wellread://clip?') ||
+        url.startsWith('wellread://clip/') ||
         /^https:\/\/web\.readest\.com\/clip(?:[/?].*)?$/i.test(url);
       if (isClipUrl) {
         try {
@@ -167,14 +167,14 @@ export function useClipUrlIngress() {
     if (typeof window === 'undefined') return;
 
     const w = window as unknown as {
-      __readestGetGroups?: () => {
+      __wellreadGetGroups?: () => {
         groups: { id: string; name: string }[];
         defaultGroupName: string;
       };
-      __readestOnShareExtensionPending?: (saves: PendingShareSave[]) => boolean;
+      __wellreadOnShareExtensionPending?: (saves: PendingShareSave[]) => boolean;
       webkit?: {
         messageHandlers?: {
-          readestShareBridge?: { postMessage: (msg: { type: string }) => void };
+          wellreadShareBridge?: { postMessage: (msg: { type: string }) => void };
         };
       };
     };
@@ -183,7 +183,7 @@ export function useClipUrlIngress() {
     // app's i18next catalogue. We pass it the user-locale-translated
     // string for "Default" (the no-group entry) alongside the groups —
     // saves maintaining a parallel iOS .strings file just for one phrase.
-    w.__readestGetGroups = () => {
+    w.__wellreadGetGroups = () => {
       try {
         return {
           groups: useLibraryStore.getState().getGroups(),
@@ -194,7 +194,7 @@ export function useClipUrlIngress() {
       }
     };
 
-    w.__readestOnShareExtensionPending = (saves) => {
+    w.__wellreadOnShareExtensionPending = (saves) => {
       if (!Array.isArray(saves)) return false;
       for (const save of saves) {
         if (!save || typeof save.url !== 'string') continue;
@@ -209,18 +209,18 @@ export function useClipUrlIngress() {
     // Tell the plugin we're mounted so it can drain any pending saves
     // queued before the hook was alive (cold-start path).
     try {
-      w.webkit?.messageHandlers?.readestShareBridge?.postMessage({ type: 'ready' });
+      w.webkit?.messageHandlers?.wellreadShareBridge?.postMessage({ type: 'ready' });
     } catch {
       // Non-iOS or handler not registered — no-op.
     }
 
     return () => {
       const cleanup = window as unknown as {
-        __readestGetGroups?: unknown;
-        __readestOnShareExtensionPending?: unknown;
+        __wellreadGetGroups?: unknown;
+        __wellreadOnShareExtensionPending?: unknown;
       };
-      delete cleanup.__readestGetGroups;
-      delete cleanup.__readestOnShareExtensionPending;
+      delete cleanup.__wellreadGetGroups;
+      delete cleanup.__wellreadOnShareExtensionPending;
     };
   }, [appService, clipAndImport]);
 }

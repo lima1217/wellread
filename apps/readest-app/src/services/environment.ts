@@ -1,24 +1,24 @@
 import { AppService } from '@/types/system';
-import { READEST_NODE_BASE_URL, READEST_WEB_BASE_URL } from './constants';
+import { WELLREAD_NODE_BASE_URL, WELLREAD_WEB_BASE_URL } from './constants';
 import { getRuntimeConfig } from './runtimeConfig';
 
 declare global {
   interface Window {
-    __READEST_CLI_ACCESS?: boolean;
+    __WELLREAD_CLI_ACCESS?: boolean;
   }
 }
 
 export const isTauriAppPlatform = () => process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'tauri';
 export const isWebAppPlatform = () => process.env['NEXT_PUBLIC_APP_PLATFORM'] === 'web';
-export const hasCli = () => window.__READEST_CLI_ACCESS === true;
+export const hasCli = () => window.__WELLREAD_CLI_ACCESS === true;
 export const isPWA = () => window.matchMedia('(display-mode: standalone)').matches;
 export const getBaseUrl = () =>
   getRuntimeConfig()?.apiBaseUrl ??
   process.env['API_BASE_URL'] ??
   process.env['NEXT_PUBLIC_API_BASE_URL'] ??
-  READEST_WEB_BASE_URL;
+  WELLREAD_WEB_BASE_URL;
 export const getNodeBaseUrl = () =>
-  process.env['NEXT_PUBLIC_NODE_BASE_URL'] ?? READEST_NODE_BASE_URL;
+  process.env['NEXT_PUBLIC_NODE_BASE_URL'] ?? WELLREAD_NODE_BASE_URL;
 
 export const isMacPlatform = () =>
   typeof window !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);

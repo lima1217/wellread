@@ -49,7 +49,7 @@ describe('DocumentLoader.open', () => {
   }, 15000);
 
   it('opens a raw .txt by converting it to EPUB in-memory', async () => {
-    // The Android "Open with Readest" (VIEW intent) transient path hands the
+    // The Android "Open with Wellread" (VIEW intent) transient path hands the
     // reader the original .txt file (its filePath points at the content:// URI),
     // unlike the managed library which stores the already-converted EPUB. The
     // loader must therefore be able to open a raw .txt directly; otherwise it

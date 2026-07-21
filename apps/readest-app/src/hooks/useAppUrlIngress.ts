@@ -18,9 +18,9 @@ interface OpenFilesPayload {
 interface SharedIntentPayload {
   urls: string[];
   /**
-   * Android-only. Distinguishes "Open with Readest" (`VIEW` — the user
-   * tapped a file in their file browser and chose Readest) from "Send to
-   * Readest" (`SEND` / `SEND_MULTIPLE` — share-sheet capture). We forward
+   * Android-only. Distinguishes "Open with Wellread" (`VIEW` — the user
+   * tapped a file in their file browser and chose Wellread) from "Send to
+   * Wellread" (`SEND` / `SEND_MULTIPLE` — share-sheet capture). We forward
    * it on the `app-incoming-url` event so consumers can pick the right
    * import strategy: VIEW should open the file directly without writing
    * it to the library, SEND should ingest it like a sync capture.
@@ -34,7 +34,7 @@ interface SharedIntentPayload {
  * Subscribes to every Tauri channel that can deliver a URL on any platform:
  *   - `single-instance` event  — Win/Linux deep link, macOS open-file
  *   - `open-files` event       — macOS in-app open-files
- *   - `shared-intent` plugin   — Android "Share to Readest" intent
+ *   - `shared-intent` plugin   — Android "Share to Wellread" intent
  *   - `onOpenUrl`              — iOS / Android / macOS via Tauri v2
  *
  * Re-broadcasts every URL list as the `app-incoming-url` event. Consumers
@@ -66,7 +66,7 @@ export function useAppUrlIngress() {
     // `unregister()`ed the underlying native plugin listener
     // (NativeBridgePlugin's listeners["shared-intent"] map). Net result:
     // the app ended up with zero shared-intent listeners on the native
-    // side, so any "Open with Readest" intent that arrived AFTER cold
+    // side, so any "Open with Wellread" intent that arrived AFTER cold
     // start was silently dropped (event got queued by our pending-events
     // workaround but, with no future register call, never replayed).
     // Letting the effect re-run on every mount cycle keeps the JS-side

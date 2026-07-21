@@ -106,7 +106,7 @@ describe('JavaScript Execution', () => {
 
   it('should detect the app platform globals', async () => {
     const hasCLIAccess = await browser.execute(() => {
-      return (window as unknown as Record<string, unknown>).__READEST_CLI_ACCESS === true;
+      return (window as unknown as Record<string, unknown>).__WELLREAD_CLI_ACCESS === true;
     });
     expect(hasCLIAccess).toBe(true);
   });

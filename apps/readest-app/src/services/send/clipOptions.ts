@@ -1,7 +1,7 @@
 /**
  * Options handed to the Rust `clip_url` command so the in-webview
  * loading overlay, window title, "Saved" page, and native window
- * background all match Readest's current theme + UI language.
+ * background all match Wellread's current theme + UI language.
  *
  * Each `_()` call is a literal string so the i18next scanner can
  * extract the keys — keep them inline here rather than building from

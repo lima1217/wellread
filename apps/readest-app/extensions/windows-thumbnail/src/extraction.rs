@@ -14,7 +14,7 @@ use zip::ZipArchive;
 
 /// Thumbnail cache directory (per-user)
 static CACHE_DIR: Lazy<Option<std::path::PathBuf>> = Lazy::new(|| {
-    ProjectDirs::from("app", "Readest", "").map(|pd| {
+    ProjectDirs::from("app", "Wellread", "").map(|pd| {
         let dir = pd.cache_dir().join("thumbnails");
         let _ = std::fs::create_dir_all(&dir);
         dir
@@ -380,7 +380,7 @@ pub fn extract_cover_bytes_by_ext(path: &Path, ext: &str) -> Result<Vec<u8>> {
 // Thumbnail creation with overlay
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Create a thumbnail from cover image bytes with Readest icon overlay.
+/// Create a thumbnail from cover image bytes with Wellread icon overlay.
 pub fn create_thumbnail_with_overlay(cover_bytes: &[u8], requested_size: u32) -> Result<Vec<u8>> {
     let img = image::load_from_memory(cover_bytes)?;
     let thumbnail = img.thumbnail(requested_size, requested_size);
@@ -431,7 +431,7 @@ pub fn create_thumbnail_with_overlay(cover_bytes: &[u8], requested_size: u32) ->
     Ok(out)
 }
 
-/// Load the Readest overlay icon.
+/// Load the Wellread overlay icon.
 fn load_overlay_icon() -> Option<DynamicImage> {
     // Try embedded icon
     let icon_bytes = include_bytes!("../../../public/icon.png");

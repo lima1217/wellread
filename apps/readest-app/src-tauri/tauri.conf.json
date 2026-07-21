@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Wellread",
-  "mainBinaryName": "readest",
-  "identifier": "com.bilingify.readest",
+  "mainBinaryName": "Wellread",
+  "identifier": "com.bilingify.wellread",
   "version": "../package.json",
   "build": {
     "frontendDist": "../out",
@@ -31,7 +31,7 @@
             "$APPDATA/**/*",
             "$APPCACHE/**/*",
             "$TEMP/**/*",
-            "**/Readest/**/*"
+            "**/Wellread/**/*"
           ],
           "deny": []
         }
@@ -155,18 +155,15 @@
     "deep-link": {
       "desktop": {
         "schemes": [
-          "readest",
-          "readest-onedrive",
+          "wellread",
+          "wellread-onedrive",
           "com.googleusercontent.apps.209390247301-ctpmep68ppfa56r1b8tr35e4qi4p60kq"
         ]
       }
     },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJFMEQ1QjE2OEU1NEIzNTEKUldSUnMxU09GbHNOdmpEaWFMT1crRFpEV2VORzQ2MklxaFc0M1R0ci9xY2c1bENXS0xhM1R1L2sK",
-      "endpoints": [
-        "https://download.readest.com/releases/latest.json",
-        "https://github.com/readest/readest/releases/latest/download/latest.json"
-      ]
+      "endpoints": ["https://github.com/lima1217/wellread/releases/latest/download/latest.json"]
     },
     "webview-upgrade": {
       "minUpgradeMajor": 121,

@@ -101,16 +101,16 @@ const migrations: Record<SchemaType, MigrationEntry[]> = {
             JOIN (SELECT number as idx FROM numbers) AS N ON idx <= (last_page - first_page + 1)
           );
 
-        CREATE TABLE IF NOT EXISTS readest_page_ext (
+        CREATE TABLE IF NOT EXISTS wellread_page_ext (
           book_hash text NOT NULL, page integer NOT NULL, start_time integer NOT NULL,
           ext text, PRIMARY KEY (book_hash, page, start_time)
         );
 
-        CREATE TABLE IF NOT EXISTS readest_book_ext (
+        CREATE TABLE IF NOT EXISTS wellread_book_ext (
           book_hash text PRIMARY KEY, ext text
         );
 
-        CREATE TABLE IF NOT EXISTS readest_stat_sync_state (
+        CREATE TABLE IF NOT EXISTS wellread_stat_sync_state (
           key text PRIMARY KEY, value integer NOT NULL DEFAULT 0
         );
       `,

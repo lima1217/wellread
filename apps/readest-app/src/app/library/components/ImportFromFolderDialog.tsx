@@ -60,18 +60,18 @@ export interface ImportFromFolderResult {
   /**
    * When `true`, register the directory as an external library folder
    * (`settings.externalLibraryFolders`) and import its books in place
-   * — Readest will read each file straight from its original location
+   * — Wellread will read each file straight from its original location
    * instead of copying it into Books/<hash>/. Sidecars (cover, config,
-   * notes) still live in Readest's data dir. Deleting such a book from
-   * Readest only removes those Readest-side sidecars; the original
+   * notes) still live in Wellread's data dir. Deleting such a book from
+   * Wellread only removes those Wellread-side sidecars; the original
    * source file under the registered folder is left untouched.
-   * Defaults to `false`, which keeps the legacy "copy into Readest"
+   * Defaults to `false`, which keeps the legacy "copy into Wellread"
    * behaviour and leaves the registered folder list untouched.
    */
   readInPlace: boolean;
   /**
    * When `true`, keep this folder watched: on every library open and app
-   * focus, Readest re-scans it and imports any newly-added books. Recorded
+   * focus, Wellread re-scans it and imports any newly-added books. Recorded
    * in `settings.autoImportFolders`. Only meaningful together with
    * {@link readInPlace} (auto-import reads books in place), so it is forced
    * `false` whenever `readInPlace` is off. Defaults to `false`.

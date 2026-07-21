@@ -41,7 +41,7 @@ function createMockFs(): FileSystem {
       atime: null,
       birthtime: null,
     }),
-    getPrefix: vi.fn().mockResolvedValue('Readest/Dictionaries'),
+    getPrefix: vi.fn().mockResolvedValue('Wellread/Dictionaries'),
   };
 }
 

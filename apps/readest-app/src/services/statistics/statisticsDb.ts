@@ -257,7 +257,7 @@ export class StatisticsDb {
 
   async getCursor(key: CursorKey): Promise<number> {
     const rows = await this.db.select<{ value: number }>(
-      `SELECT value FROM readest_stat_sync_state WHERE key = ?`,
+      `SELECT value FROM wellread_stat_sync_state WHERE key = ?`,
       [key],
     );
     return rows[0]?.value ?? 0;
@@ -265,7 +265,7 @@ export class StatisticsDb {
 
   async setCursor(key: CursorKey, value: number): Promise<void> {
     await this.db.execute(
-      `INSERT INTO readest_stat_sync_state (key, value) VALUES (?, ?)
+      `INSERT INTO wellread_stat_sync_state (key, value) VALUES (?, ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       [key, value],
     );

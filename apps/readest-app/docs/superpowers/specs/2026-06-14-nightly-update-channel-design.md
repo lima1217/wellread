@@ -213,7 +213,7 @@ produced exactly as in `release.yml`.
 
 ```
 // src/services/constants.ts
-export const READEST_NIGHTLY_UPDATER_FILE =
+export const WELLREAD_NIGHTLY_UPDATER_FILE =
   'https://download.readest.com/nightly/latest.json';
 ```
 
@@ -221,7 +221,7 @@ export const READEST_NIGHTLY_UPDATER_FILE =
 
 Client:
 - `src/utils/version.ts` — `parseUpdateVersion`, `isUpdateNewer` (TS).
-- `src/services/constants.ts` — `READEST_NIGHTLY_UPDATER_FILE`; default `updateChannel`.
+- `src/services/constants.ts` — `WELLREAD_NIGHTLY_UPDATER_FILE`; default `updateChannel`.
 - `src/types/settings.ts` — `updateChannel`.
 - `src/helpers/updater.ts` — channel-aware check; dual-manifest resolution
   (filter-then-compare); pass resolved winner to the window.

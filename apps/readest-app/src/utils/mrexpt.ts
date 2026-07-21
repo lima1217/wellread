@@ -5,7 +5,7 @@
  * "Moon+ Reader". Each entry encodes a highlight or annotation captured by
  * the user while reading. The same logic was originally implemented in
  * Python (see MultilingualWord/extract_words_from_epub.py) and is ported
- * here so Readest can import the entries as BookNotes.
+ * here so Wellread can import the entries as BookNotes.
  *
  * File layout:
  *   line 0: numeric file header

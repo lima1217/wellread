@@ -35,7 +35,7 @@ type UserQuota = {
   purchase: number;
 };
 
-export const DATA_SUBDIR = 'Readest';
+export const DATA_SUBDIR = 'Wellread';
 export const LOCAL_BOOKS_SUBDIR = `${DATA_SUBDIR}/Books`;
 export const LOCAL_FONTS_SUBDIR = `${DATA_SUBDIR}/Fonts`;
 export const LOCAL_IMAGES_SUBDIR = `${DATA_SUBDIR}/Images`;
@@ -735,12 +735,12 @@ export const CJK_FONTS_PATTENS = new RegExp(
 
 export const BOOK_IDS_SEPARATOR = '+';
 
-export const DOWNLOAD_READEST_URL = 'https://readest.com?utm_source=readest_web';
+export const DOWNLOAD_WELLREAD_URL = 'https://readest.com?utm_source=wellread_web';
 
-export const READEST_WEB_BASE_URL = 'https://web.readest.com';
-export const READEST_NODE_BASE_URL = 'https://node.readest.com';
+export const WELLREAD_WEB_BASE_URL = 'https://web.readest.com';
+export const WELLREAD_NODE_BASE_URL = 'https://node.readest.com';
 
-// Send to Readest — the domain inbound capture emails are addressed to, the
+// Send to Wellread — the domain inbound capture emails are addressed to, the
 // R2 bucket holding raw inbound payloads, and the per-user cap on undrained
 // inbox items (defense against a leaked address).
 export const SEND_EMAIL_DOMAIN = 'readest.com';
@@ -752,23 +752,24 @@ export const SEND_INBOX_PENDING_LIMIT = 50;
 // overhead. Beyond this size a clipped article is almost certainly an
 // over-illustrated page that would never read well in the EPUB anyway.
 export const SEND_INBOX_FILE_MAX_BYTES = 40 * 1024 * 1024;
-const LATEST_DOWNLOAD_BASE_URL = 'https://download.readest.com/releases';
+const LATEST_DOWNLOAD_BASE_URL = 'https://github.com/lima1217/wellread/releases/latest/download';
 
-export const READEST_UPDATER_FILE = `${LATEST_DOWNLOAD_BASE_URL}/latest.json`;
+export const WELLREAD_UPDATER_FILE = `${LATEST_DOWNLOAD_BASE_URL}/latest.json`;
 
-export const READEST_CHANGELOG_FILE = `${LATEST_DOWNLOAD_BASE_URL}/release-notes.json`;
+export const WELLREAD_CHANGELOG_FILE = `${LATEST_DOWNLOAD_BASE_URL}/release-notes.json`;
 
-export const READEST_NIGHTLY_UPDATER_FILE = 'https://download.readest.com/nightly/latest.json';
+export const WELLREAD_NIGHTLY_UPDATER_FILE =
+  'https://github.com/lima1217/wellread/releases/download/nightly/latest.json';
 
 // Public (verification) key, identical to src-tauri/tauri.conf.json `updater.pubkey`.
 // Used to verify nightly artifacts in the custom install flows (portable /
 // AppImage / Android). Safe to embed — it is a public key.
-export const READEST_UPDATER_PUBKEY =
+export const WELLREAD_UPDATER_PUBKEY =
   'dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJFMEQ1QjE2OEU1NEIzNTEKUldSUnMxU09GbHNOdmpEaWFMT1crRFpEV2VORzQ2MklxaFc0M1R0ci9xY2c1bENXS0xhM1R1L2sK';
 
-export const READEST_PUBLIC_STORAGE_BASE_URL = 'https://storage.readest.com';
+export const WELLREAD_PUBLIC_STORAGE_BASE_URL = 'https://storage.readest.com';
 
-export const READEST_OPDS_USER_AGENT = 'Readest/1.0 (OPDS Browser)';
+export const WELLREAD_OPDS_USER_AGENT = 'Wellread/1.0 (OPDS Browser)';
 
 export const SYNC_PROGRESS_INTERVAL_SEC = 3;
 export const SYNC_NOTES_INTERVAL_SEC = 5;

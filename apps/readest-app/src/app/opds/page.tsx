@@ -42,7 +42,7 @@ import {
 } from './utils/opdsReq';
 import { getPublicationDetailHref, parsePublicationDocument } from './utils/opdsPublication';
 import { ImportError } from '@/services/errors';
-import { READEST_OPDS_USER_AGENT } from '@/services/constants';
+import { WELLREAD_OPDS_USER_AGENT } from '@/services/constants';
 import { findBookByOPDSSources, upsertOPDSSourceMapping } from '@/services/opds/sourceMap';
 import { buildPseStreamFileName } from '@/services/opds/pseStream';
 import type { Book } from '@/types/book';
@@ -568,7 +568,7 @@ export default function BrowserPage() {
           const useProxy = needsProxy(url);
           let downloadUrl = useProxy ? getProxiedURL(url, '', true, customHeaders) : url;
           const headers: Record<string, string> = {
-            'User-Agent': READEST_OPDS_USER_AGENT,
+            'User-Agent': WELLREAD_OPDS_USER_AGENT,
             Accept: '*/*',
             ...(!useProxy ? customHeaders : {}),
           };

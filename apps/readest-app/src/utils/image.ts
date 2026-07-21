@@ -54,7 +54,7 @@ export function galleryFileName(filename: string, now = Date.now()): string {
   const d = new Date(lastGalleryStamp);
   const date = `${d.getFullYear()}${pad(d.getMonth() + 1, 2)}${pad(d.getDate(), 2)}`;
   const time = `${pad(d.getHours(), 2)}${pad(d.getMinutes(), 2)}${pad(d.getSeconds(), 2)}`;
-  return `readest-${date}-${time}-${pad(d.getMilliseconds(), 3)}${ext}`;
+  return `wellread-${date}-${time}-${pad(d.getMilliseconds(), 3)}${ext}`;
 }
 
 export async function fetchImageAsBase64(

@@ -30,7 +30,7 @@ Key facts (non-obvious):
   word rather than the exact web font. Latin fonts and user-imported custom
   fonts are unaffected (always mounted). The iframe loads CJK fonts per-doc via
   `mountAdditionalFonts(detail.doc, isCJKLang(...))` regardless of env.
-- RSVP keeps its own font *size* control (localStorage `readest_rsvp_fontsize`);
+- RSVP keeps its own font *size* control (localStorage `wellread_rsvp_fontsize`);
   only face/family were wired up. Font weight is intentionally left as the RSVP
   design (word `font-medium`, ORP char `font-bold`).
 

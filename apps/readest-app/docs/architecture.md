@@ -1,29 +1,25 @@
-# Readest Architecture
+# Wellread architecture
 
-This document gives a system-level view of Readest: how the pieces fit together,
-which side of the wire each piece runs on, and what each module is responsible
-for. It complements [`code-layout.md`](./code-layout.md), which focuses on the
-directory layout. Read this one first if you want to understand the system; read
-that one when you need to find a specific file.
+This page maps how Wellread’s pieces fit together: process boundaries, hosts, and module responsibilities. Pair it with [`code-layout.md`](./code-layout.md) when you need a file path. Start here for the system picture; open that doc when you hunt for a directory.
 
 The diagrams use [Mermaid](https://mermaid.js.org/) and render natively on
 GitHub.
 
 ## 1. High-level picture
 
-Readest is a single TypeScript/React codebase (`apps/readest-app`) compiled into
+Wellread is a single TypeScript/React codebase (`apps/readest-app`) compiled into
 multiple targets:
 
 - a **desktop app** (Windows / macOS / Linux) via Tauri v2
 - a **mobile app** (Android / iOS) via Tauri v2 mobile
 - a **web app** running on Next.js / Cloudflare Workers (OpenNext) at
   [web.readest.com](https://web.readest.com)
-- two **side surfaces**: a "Send to Readest" browser extension
-  (`apps/readest-app/extension/send-to-readest`) and a Windows thumbnail
+- two **side surfaces**: a "Send to Wellread" browser extension
+  (`apps/readest-app/extensions/send-to-readest`) and a Windows thumbnail
   shell extension (`apps/readest-app/extensions/windows-thumbnail`)
 
 The same React UI runs in all targets. What differs is the **host shell** under
-the UI and the **set of services** that the UI binds to at runtime — see
+the UI and the **set of services** that the UI binds to at runtime: see
 section 4.
 
 ```mermaid
@@ -32,11 +28,11 @@ flowchart LR
         Desktop["Desktop app<br/>(Tauri shell + React UI)"]
         Mobile["Mobile app<br/>(Tauri Android/iOS + React UI)"]
         Web["Web app<br/>(Next.js + React UI)"]
-        Ext["Browser extension<br/>(Send to Readest)"]
+        Ext["Browser extension<br/>(Send to Wellread)"]
         WinExt["Windows shell ext<br/>(thumbnail provider)"]
     end
 
-    subgraph Backend["Readest backend (Next.js routes + Cloudflare Worker)"]
+    subgraph Backend["Wellread backend (Next.js routes + Cloudflare Worker)"]
         AppApi["src/app/api/*<br/>(App Router)"]
         PagesApi["src/pages/api/*<br/>(Pages Router)"]
         RuntimeCfg["/runtime-config.js<br/>(server-injected config)"]
@@ -132,7 +128,7 @@ The same `src/services/*` code runs on both sides of the `invoke()` boundary on
 desktop/mobile and on both sides of the `fetch()` boundary on web. Which
 implementation is picked is decided at runtime by `src/services/environment.ts`
 plus the platform-specific `*AppService.ts` (`webAppService`, `nativeAppService`,
-`nodeAppService`) — see section 4.
+`nodeAppService`): see section 4.
 
 `middleware.ts` does two things and only two things: CORS for `/api/*`, and
 `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy:
@@ -142,10 +138,10 @@ order to run the in-browser replica database; without those headers
 `initThreadPool` hangs.
 
 `/runtime-config.js` is a server route that emits
-`window.__READEST_RUNTIME_CONFIG = {...}` as a JavaScript file. It is loaded as
+`window.__WELLREAD_RUNTIME_CONFIG = {...}` as a JavaScript file. It is loaded as
 a `<script>` tag from `app/layout.tsx` and `pages/_document.tsx`. This is what
 lets a single Docker image be rebranded with a different Supabase project, S3
-endpoint, or quota at deploy time without rebuilding — see commit
+endpoint, or quota at deploy time without rebuilding: see commit
 `9ad43aa8` and the `docker/` directory.
 
 ## 3. Frontend architecture
@@ -167,7 +163,7 @@ flowchart TB
     Library["app/library<br/>(grid, import, sort, OPDS shelf)"]
     Reader["app/reader<br/>(views + tooling)"]
     Auth["app/auth<br/>(Supabase auth UI)"]
-    Send["app/send<br/>(send-to-Readest inbox)"]
+    Send["app/send<br/>(send-to-Wellread inbox)"]
     User["app/user<br/>(account, subscription, settings)"]
     Updater["app/updater"]
     Offline["app/offline"]
@@ -232,7 +228,7 @@ customDictionaryStore / customFontStore /
 
 EPUB / MOBI / KF8 / FB2 / CBZ / TXT / PDF parsing and rendering is **not**
 hand-rolled in this repo. The reader sits on top of `packages/foliate-js`, a
-forked copy of the Foliate JS engine. Readest's reader code in `app/reader` and
+forked copy of the Foliate JS engine. Wellread's reader code in `app/reader` and
 the adapters under `src/services/annotation`, `src/services/nav`,
 `src/services/transformers`, and `src/services/rsvp` wrap that engine and add
 features (annotations sync, navigation, content transforms, vertical/Warichu
@@ -287,7 +283,7 @@ The same pattern repeats for the database layer in `src/services/database`:
 via the `tauri-plugin-turso` plugin), and `nodeDatabaseService` (Node, used by
 tests). All three share `migrate.ts` and `migrations/*`.
 
-This is why most domain code in `src/services` looks platform-agnostic — the
+This is why most domain code in `src/services` looks platform-agnostic: the
 platform difference has been pushed to a small number of seams.
 
 ## 5. Backend (Next.js routes)
@@ -311,7 +307,7 @@ storage/list.ts          -> list user's objects
 storage/delete.ts        -> delete a single object
 storage/purge.ts         -> bulk wipe (account deletion path)
 storage/stats.ts         -> per-user usage/quotas
-send/inbox.ts            -> "Send to Readest" inbox listing
+send/inbox.ts            -> "Send to Wellread" inbox listing
 send/inbox/*             -> inbox item operations
 send/address.ts          -> per-user inbox address resolver
 send/fetch-url.ts        -> server-side URL fetcher for "send a link"
@@ -349,7 +345,7 @@ share/*                  -> share-link landing + read-only render
 ### 5.3 Workers
 
 `apps/readest-app/workers/send-email` is a separate Cloudflare Worker
-(deployed independently from the main app) responsible for the "Send to Readest
+(deployed independently from the main app) responsible for the "Send to Wellread
 by email" path. It receives mail, normalizes attachments, and drops items into
 the user's inbox so that the in-app `Send` page can pick them up via the
 `/api/send/inbox` endpoints.
@@ -357,8 +353,8 @@ the user's inbox so that the in-app `Send` page can pick them up via the
 ### 5.4 Runtime config
 
 `src/app/runtime-config.js/route.ts` is a server route that builds a small JSON
-object — `supabaseUrl`, `supabaseAnonKey`, `apiBaseUrl`, `objectStorageType`,
-`storageFixedQuota` — from `process.env` at request
+object (`supabaseUrl`, `supabaseAnonKey`, `apiBaseUrl`, `objectStorageType`,
+`storageFixedQuota`) from `process.env` at request
 time and serializes it as a JS payload. The client reads it through
 `getRuntimeConfig()` in `src/services/runtimeConfig.ts` (browser) or
 `getServerRuntimeConfig()` (server). This is the mechanism that makes the same
@@ -462,13 +458,13 @@ punctuation normalization, whitespace collapsing, proofread suggestions,
 sanitization, footnote rewriting, style injection, traditional/simplified
 Chinese conversion (via `simplecc-wasm`), and Warichu (Japanese ruby/rubi)
 layout. These are reused by the reader, by RSVP, and by the
-"Send to Readest" article-to-EPUB conversion.
+"Send to Wellread" article-to-EPUB conversion.
 
-### 6.11 Send to Readest
+### 6.11 Send to Wellread
 
 End-to-end pipeline:
 
-1. The browser extension (`apps/readest-app/extension/send-to-readest`) or the
+1. The browser extension (`apps/readest-app/extensions/send-to-readest`) or the
    email-to-inbox path (`workers/send-email`) submits a URL or article HTML.
 2. `src/services/send/conversion/*` sanitizes the content and converts it to
    EPUB (sanitization, TOC building, asset bundling, worker protocol).
@@ -499,19 +495,19 @@ Everything else is delegated to **Tauri plugins**, mostly bundled in
   `cli`, `deep-link`, `haptics`, `log`, `updater`, `websocket`, `oauth`,
   `persisted-scope`, `device-info`, `sharekit`
 - in-tree custom plugins:
-  - `tauri-plugin-native-bridge` — Android-side bridges (directory picker
+  - `tauri-plugin-native-bridge`: Android-side bridges (directory picker
     callback, open external URL, etc.)
-  - `tauri-plugin-native-tts` — native text-to-speech
-  - `tauri-plugin-turso` — embedded Turso/libSQL database for the native
+  - `tauri-plugin-native-tts`: native text-to-speech
+  - `tauri-plugin-turso`: embedded Turso/libSQL database for the native
     targets, mirrored by the WASM build used in the browser
-  - `tauri-plugin-webview-upgrade` — webview update flow on platforms where
+  - `tauri-plugin-webview-upgrade`: webview update flow on platforms where
     that matters
 
 A subtle but important detail in `lib.rs`: `allow_paths_in_scopes` is the
 frontend-callable shim that extends both `fs_scope` and `asset_protocol_scope`
 **only for paths the Tauri dialog plugin (or persisted-scope on restart)
-already granted**. Without that gate, any frontend code path — including a
-hypothetical XSS through book content, OPDS HTML, or a compromised dependency —
+already granted**. Without that gate, any frontend code path (including a
+hypothetical XSS through book content, OPDS HTML, or a compromised dependency)
 could grant itself read access to the user's home directory through the asset
 protocol. The gate constrains the command to user-picked paths only.
 

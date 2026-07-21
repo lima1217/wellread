@@ -1,6 +1,6 @@
 import type { HlcSnapshot } from '@/libs/crdt';
 
-export const HLC_LOCAL_STORAGE_KEY = 'readest_replica_hlc';
+export const HLC_LOCAL_STORAGE_KEY = 'wellread_replica_hlc';
 
 export interface HlcSnapshotStore {
   load(): HlcSnapshot | null;

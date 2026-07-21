@@ -55,9 +55,9 @@ vi.mock('@/utils/version', async () => {
 
 vi.mock('@/services/constants', () => ({
   CHECK_UPDATE_INTERVAL_SEC: 86400,
-  READEST_UPDATER_FILE: 'https://example.com/latest.json',
-  READEST_CHANGELOG_FILE: 'https://example.com/release-notes.json',
-  READEST_NIGHTLY_UPDATER_FILE: 'https://example.com/nightly/latest.json',
+  WELLREAD_UPDATER_FILE: 'https://example.com/latest.json',
+  WELLREAD_CHANGELOG_FILE: 'https://example.com/release-notes.json',
+  WELLREAD_NIGHTLY_UPDATER_FILE: 'https://example.com/nightly/latest.json',
 }));
 
 import {

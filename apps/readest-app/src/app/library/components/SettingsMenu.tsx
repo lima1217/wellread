@@ -4,7 +4,7 @@ import { PiGear } from 'react-icons/pi';
 import { PiSun, PiMoon } from 'react-icons/pi';
 import { TbSunMoon } from 'react-icons/tb';
 import { isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
-import { DOWNLOAD_READEST_URL } from '@/services/constants';
+import { DOWNLOAD_WELLREAD_URL } from '@/services/constants';
 import { setBackupDialogVisible } from '@/app/library/components/BackupWindow';
 import { setCacheManagerDialogVisible } from '@/app/library/components/CacheManagerWindow';
 import { useEnv } from '@/context/EnvContext';
@@ -84,7 +84,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
   };
 
   const downloadReadest = () => {
-    window.open(DOWNLOAD_READEST_URL, '_blank');
+    window.open(DOWNLOAD_WELLREAD_URL, '_blank');
     setIsDropdownOpen?.(false);
   };
 

@@ -596,7 +596,7 @@ const actionItems = [
   {
     id: 'action.about',
     labelKey: _('About Wellread'),
-    keywords: ['about', 'readest', 'version', 'info'],
+    keywords: ['about', 'wellread', 'version', 'info'],
   },
 ];
 

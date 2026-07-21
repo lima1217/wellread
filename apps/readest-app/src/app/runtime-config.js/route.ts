@@ -8,7 +8,7 @@ export function GET() {
     .replace(/</g, '\\u003c')
     .replace(/\u2028/g, '\\u2028')
     .replace(/\u2029/g, '\\u2029');
-  const script = `window.__READEST_RUNTIME_CONFIG=${serializedConfig};`;
+  const script = `window.__WELLREAD_RUNTIME_CONFIG=${serializedConfig};`;
   return new NextResponse(script, {
     headers: {
       'Content-Type': 'application/javascript; charset=utf-8',

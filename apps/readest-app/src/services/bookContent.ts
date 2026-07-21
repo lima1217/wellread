@@ -52,7 +52,7 @@ export async function resolveBookContentSource(
   }
 
   if (book.filePath) {
-    // Android "Open with Readest" hands us a content:// URI as the
+    // Android "Open with Wellread" hands us a content:// URI as the
     // book.filePath (e.g. content://media/external/file/1322). Tauri's
     // fs.exists() doesn't understand content URIs and returns false,
     // which would route us to `missing` here even though the URI is

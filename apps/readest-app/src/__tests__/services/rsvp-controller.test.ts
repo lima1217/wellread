@@ -2,7 +2,7 @@ import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { RSVPController } from '@/services/rsvp/RSVPController';
 import { FoliateView } from '@/types/view';
 
-const POSITION_KEY = 'readest_rsvp_pos_test';
+const POSITION_KEY = 'wellread_rsvp_pos_test';
 
 function makeTextNode(text: string): Text {
   return { nodeType: Node.TEXT_NODE, textContent: text } as unknown as Text;
@@ -405,7 +405,7 @@ describe('RSVPController', () => {
       const controller = new RSVPController(view, 'test-book-abc123');
       controller.setCjkCharMode(true);
 
-      expect(localStorage.getItem('readest_rsvp_cjk_char_mode')).toBe('1');
+      expect(localStorage.getItem('wellread_rsvp_cjk_char_mode')).toBe('1');
     });
 
     test('keeps the focus character off trailing punctuation in char mode', () => {
@@ -421,7 +421,7 @@ describe('RSVPController', () => {
     });
 
     test('char mode is restored from localStorage on construction', () => {
-      localStorage.setItem('readest_rsvp_cjk_char_mode', '1');
+      localStorage.setItem('wellread_rsvp_cjk_char_mode', '1');
       const view = createMockView(0, [makeDoc('我喜欢阅读')]);
       const controller = new RSVPController(view, 'test-book-abc123');
       controller.start();
@@ -438,7 +438,7 @@ describe('RSVPController', () => {
   });
 
   describe('start delay (#4478)', () => {
-    const START_DELAY_KEY = 'readest_rsvp_start_delay';
+    const START_DELAY_KEY = 'wellread_rsvp_start_delay';
 
     beforeEach(() => {
       localStorage.removeItem(START_DELAY_KEY);

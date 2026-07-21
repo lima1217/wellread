@@ -152,7 +152,7 @@ fn read_model_config_from_settings(app: &AppHandle) -> ModelConfigPayload {
 }
 
 fn resolve_node_bin(app: &AppHandle) -> PathBuf {
-    let triple = env!("READEST_TARGET");
+    let triple = env!("WELLREAD_TARGET");
     let sidecar_name = format!("node-{triple}");
 
     // Production: Tauri copies externalBin next to the main executable as `node`
@@ -229,12 +229,12 @@ fn resolve_eve_data_dir(app: &AppHandle) -> PathBuf {
         .join("eve")
 }
 
-/// Books library root — mirrors LOCAL_BOOKS_SUBDIR (`Readest/Books`) under app data.
+/// Books library root — mirrors LOCAL_BOOKS_SUBDIR (`Wellread/Books`) under app data.
 fn resolve_books_root(app: &AppHandle) -> PathBuf {
     app.path()
         .app_data_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
-        .join("Readest")
+        .join("Wellread")
         .join("Books")
 }
 

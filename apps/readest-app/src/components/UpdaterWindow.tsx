@@ -20,9 +20,9 @@ import { join } from '@tauri-apps/api/path';
 import { setLastShownReleaseNotesVersion } from '@/helpers/updater';
 import type { ResolvedNightlyUpdate } from '@/helpers/updater';
 import {
-  READEST_UPDATER_FILE,
-  READEST_CHANGELOG_FILE,
-  READEST_UPDATER_PUBKEY,
+  WELLREAD_UPDATER_FILE,
+  WELLREAD_CHANGELOG_FILE,
+  WELLREAD_UPDATER_PUBKEY,
 } from '@/services/constants';
 import Dialog from '@/components/Dialog';
 import Link from './Link';
@@ -115,7 +115,7 @@ export const UpdaterContent = ({
     const checkAndroidUpdate = async () => {
       if (!appService) return;
       const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
-      const response = await fetch(READEST_UPDATER_FILE);
+      const response = await fetch(WELLREAD_UPDATER_FILE);
       const data = await response.json();
       if (semver.gt(data.version, currentVersion)) {
         const OS_ARCH = osArch();
@@ -123,7 +123,7 @@ export const UpdaterContent = ({
         const arch = OS_ARCH === 'aarch64' ? 'arm64' : 'universal';
         const downloadUrl = data.platforms[platformKey]?.url as string;
         const apkFilePath = await appService.resolveFilePath(
-          `Readest_${data.version}_${arch}.apk`,
+          `Wellread_${data.version}_${arch}.apk`,
           'Cache',
         );
         setUpdate({
@@ -205,7 +205,7 @@ export const UpdaterContent = ({
     const checkWindowsPortableUpdate = async () => {
       if (!appService) return;
       const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
-      const response = await fetch(READEST_UPDATER_FILE);
+      const response = await fetch(WELLREAD_UPDATER_FILE);
       const data = await response.json();
       if (semver.gt(data.version, currentVersion)) {
         const OS_ARCH = osArch();
@@ -214,7 +214,7 @@ export const UpdaterContent = ({
         const arch = OS_ARCH === 'x86_64' ? 'x64' : 'arm64';
         const downloadUrl = data.platforms[platformKey]?.url as string;
         const execDir = await invoke<string>('get_executable_dir');
-        const exeFileName = `Readest_${data.version}_${arch}-portable.exe`;
+        const exeFileName = `Wellread_${data.version}_${arch}-portable.exe`;
         const exeFilePath = await join(execDir, exeFileName);
         setUpdate({
           currentVersion,
@@ -225,7 +225,7 @@ export const UpdaterContent = ({
             await downloadWithProgress(downloadUrl, exeFilePath, onEvent);
             try {
               console.log('Launching new executable:', exeFilePath);
-              const command = Command.create('start-readest', ['/C', 'start', '', exeFilePath]);
+              const command = Command.create('start-wellread', ['/C', 'start', '', exeFilePath]);
               await command.spawn();
               console.log('New executable launched, exiting current app...');
               setTimeout(async () => {
@@ -241,7 +241,7 @@ export const UpdaterContent = ({
     const checkAppImageUpdate = async () => {
       if (!appService) return;
       const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
-      const response = await fetch(READEST_UPDATER_FILE);
+      const response = await fetch(WELLREAD_UPDATER_FILE);
       const data = await response.json();
       if (semver.gt(data.version, currentVersion)) {
         const OS_ARCH = osArch();
@@ -249,7 +249,7 @@ export const UpdaterContent = ({
           OS_ARCH === 'x86_64' ? 'linux-x86_64-appimage' : 'linux-aarch64-appimage';
         const arch = OS_ARCH === 'x86_64' ? 'x86_64' : 'aarch64';
         const downloadUrl = data.platforms[platformKey]?.url as string;
-        const appImageFileName = `Readest_${data.version}_${arch}.AppImage`;
+        const appImageFileName = `Wellread_${data.version}_${arch}.AppImage`;
         const appImageFilePath = await join(await desktopDir(), appImageFileName);
         setUpdate({
           currentVersion,
@@ -312,7 +312,7 @@ export const UpdaterContent = ({
           return;
         }
         // Windows-portable / Linux-AppImage / Android: download, verify, install.
-        const fileName = n.url.split('/').pop() || `Readest_${n.version}`;
+        const fileName = n.url.split('/').pop() || `Wellread_${n.version}`;
         let filePath: string;
         if (n.platformKey.includes('portable')) {
           // Windows portable: write into the executable dir so the new exe
@@ -323,7 +323,7 @@ export const UpdaterContent = ({
           filePath = await appService!.resolveFilePath(fileName, 'Cache');
         }
         await downloadWithProgress(n.url, filePath, onEvent);
-        const ok = await verifyUpdateSignature(filePath, n.signature, READEST_UPDATER_PUBKEY);
+        const ok = await verifyUpdateSignature(filePath, n.signature, WELLREAD_UPDATER_PUBKEY);
         if (!ok) {
           console.error('Nightly signature verification failed; aborting install');
           throw new Error('Signature verification failed');
@@ -341,7 +341,7 @@ export const UpdaterContent = ({
           }, 500);
         } else {
           // windows portable
-          const command = Command.create('start-readest', ['/C', 'start', '', filePath]);
+          const command = Command.create('start-wellread', ['/C', 'start', '', filePath]);
           await command.spawn();
           setTimeout(async () => {
             await exit(0);
@@ -398,7 +398,7 @@ export const UpdaterContent = ({
     const fetchChangelogs = async (fromVersion: string): Promise<Changelog[]> => {
       try {
         const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
-        const res = await fetch(READEST_CHANGELOG_FILE);
+        const res = await fetch(WELLREAD_CHANGELOG_FILE);
         const data: ReleaseNotes = await res.json();
         const releases = data.releases;
 
@@ -582,7 +582,7 @@ export const UpdaterContent = ({
 
                     {appService?.isAndroidApp && (
                       <Link
-                        href='https://play.google.com/store/apps/details?id=com.bilingify.readest'
+                        href='https://play.google.com/store/apps/details?id=com.bilingify.wellread'
                         target='_blank'
                         rel='noopener noreferrer'
                         className='btn btn-primary btn-sm'

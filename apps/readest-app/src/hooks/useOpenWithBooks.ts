@@ -10,11 +10,11 @@ import { partialMD5 } from '@/utils/md5';
 import { shouldOpenTransient } from '@/helpers/openWith';
 
 /**
- * Handle "Open with Readest" file imports. Consumes the `app-incoming-url`
+ * Handle "Open with Wellread" file imports. Consumes the `app-incoming-url`
  * event published by `useAppUrlIngress`, filters URLs that look like a file
  * (file://, content://, or plain path), and routes them to the library.
  *
- * Non-file URL shapes (https, readest://, data:, blob:) are skipped here
+ * Non-file URL shapes (https, wellread://, data:, blob:) are skipped here
  * — other consumers (e.g. `useOpenAnnotationLink`) act on those.
  *
  * Mount this hook alongside `useAppUrlIngress` so the ingress dispatcher is
@@ -23,7 +23,7 @@ import { shouldOpenTransient } from '@/helpers/openWith';
  * Two routing modes by `action`, gated by the `autoImportBooksOnOpen` setting
  * (see `shouldOpenTransient`):
  *
- *   `'VIEW'` with auto-import OFF (Android only — user picked Readest from the
+ *   `'VIEW'` with auto-import OFF (Android only — user picked Wellread from the
  *   system "Open with" chooser for an epub/pdf): open the file as a transient
  *   book without importing it. We first hash the file ourselves and check the
  *   in-memory library:
@@ -40,7 +40,7 @@ import { shouldOpenTransient } from '@/helpers/openWith';
  *   capture), and `'VIEW'` with auto-import ON: push the URLs through
  *   `window.OPEN_WITH_FILES` so `library/page.tsx::processOpenWithFiles`
  *   does a full ingest + cloud upload — the file lands in the library and
- *   syncs, which is what a "Send to Readest" share (and an opt-in "Open
+ *   syncs, which is what a "Send to Wellread" share (and an opt-in "Open
  *   with" import) is meant to honour.
  */
 export function useOpenWithBooks() {
@@ -64,7 +64,7 @@ export function useOpenWithBooks() {
         if (url.startsWith('file://')) {
           url = appService?.isIOSApp ? decodeURI(url) : decodeURI(url.replace('file://', ''));
         }
-        if (!/^(https?:|data:|blob:|readest:)/i.test(url)) {
+        if (!/^(https?:|data:|blob:|wellread:)/i.test(url)) {
           filePaths.push(url);
         }
       }

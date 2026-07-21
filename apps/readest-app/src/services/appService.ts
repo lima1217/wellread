@@ -71,7 +71,7 @@ export abstract class BaseAppService implements AppService {
   supportsCanvasContext2DFilter = true;
   supportsViewTransitionsAPI = false;
   supportsViewTransitionGroup = false;
-  distChannel = 'readest' as DistChannel;
+  distChannel = 'wellread' as DistChannel;
   storefrontRegionCode: string | null = null;
   isOnlineCatalogsAccessible = true;
 

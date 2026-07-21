@@ -7,7 +7,7 @@ describe('isStoragePermissionError', () => {
       isStoragePermissionError(
         new Error(
           'Failed to save library.json: failed to open file at path: ' +
-            '/storage/emulated/0/Readest/Books/library.json.bak with error: ' +
+            '/storage/emulated/0/Wellread/Books/library.json.bak with error: ' +
             'Permission denied (os error 13)',
         ),
       ),

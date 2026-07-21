@@ -93,7 +93,7 @@ const CONVERTIBLE_EXT: Record<string, 'docx' | 'rtf' | 'html' | 'txt'> = {
 };
 
 /**
- * If a file is a document Readest can't read natively, convert it to EPUB;
+ * If a file is a document Wellread can't read natively, convert it to EPUB;
  * otherwise return it unchanged. Shared by the `/send` page and the inbox
  * drainer so both channels convert identically.
  */

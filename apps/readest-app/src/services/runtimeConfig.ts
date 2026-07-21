@@ -1,17 +1,17 @@
-export interface ReadestRuntimeConfig {
+export interface WellreadRuntimeConfig {
   apiBaseUrl?: string;
 }
 
 declare global {
   interface Window {
-    __READEST_RUNTIME_CONFIG?: ReadestRuntimeConfig;
+    __WELLREAD_RUNTIME_CONFIG?: WellreadRuntimeConfig;
   }
 }
 
 export const getRuntimeConfig = () =>
-  typeof window === 'undefined' ? undefined : window.__READEST_RUNTIME_CONFIG;
+  typeof window === 'undefined' ? undefined : window.__WELLREAD_RUNTIME_CONFIG;
 
-export const getServerRuntimeConfig = (): ReadestRuntimeConfig => ({
+export const getServerRuntimeConfig = (): WellreadRuntimeConfig => ({
   apiBaseUrl:
     process.env['API_BASE_URL'] ??
     process.env['NEXT_PUBLIC_API_BASE_URL'] ??

@@ -20,8 +20,8 @@
         { "path": "**/.readest-test-sandbox-tauri/**" },
         { "path": "**/__tests__" },
         { "path": "**/__tests__/**" },
-        { "path": "**/Readest" },
-        { "path": "**/Readest/**" }
+        { "path": "**/Wellread" },
+        { "path": "**/Wellread/**" }
       ]
     },
     "os:default",

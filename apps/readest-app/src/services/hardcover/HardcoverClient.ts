@@ -621,7 +621,7 @@ export class HardcoverClient {
       (note) => (note.type === 'annotation' || note.type === 'excerpt') && !note.deletedAt,
     );
 
-    // Readest can keep both an excerpt (quote) and an annotation (quote + note)
+    // Wellread can keep both an excerpt (quote) and an annotation (quote + note)
     // for the same highlight. We normalize EPUB CFI range offsets so the same
     // range with small trailing offset differences still dedupes, while keeping
     // the rest of the range path intact.

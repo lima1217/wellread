@@ -1,6 +1,6 @@
-## Readest Design Language
+## Wellread design language
 
-Readest's UI is **Adwaita-aligned**, **e-ink-first**, **cross-platform-aware**. This doc is the
+Wellread's UI is **Adwaita-aligned**, **e-ink-first**, **cross-platform-aware**. This doc is the
 reference for that language: principles, vocabulary, anti-patterns. New work should read it
 before reaching for daisyui defaults; existing work is gradually migrating toward it.
 
@@ -11,11 +11,10 @@ components don't fully match it yet (especially older buttons and ad-hoc panels)
 is that **new code uses these conventions** and **migrations land opportunistically** as
 features get touched.
 
----
 
 ### 1. Identity & lineage
 
-Readest's visual language descends from **Adwaita / libadwaita** — GNOME's design system —
+Wellread's visual language descends from **Adwaita / libadwaita**, GNOME's design system,
 adapted for a cross-platform Tauri + Next.js app that also runs on iOS, Android, web, and
 e-ink readers.
 
@@ -24,7 +23,7 @@ What we take from Adwaita:
 - **Content first, chrome recedes.** The reading surface is the product. Settings, toolbars,
   popups never compete with the page.
 - **Boldly minimal.** Restraint over density. Whitespace is structural.
-- **Surface hierarchy** — window → view → card — three explicit elevation tiers, no shadow
+- **Surface hierarchy**: window → view → card: three explicit elevation tiers, no shadow
   gymnastics.
 - **Color discipline.** Brand color is rare, reserved for key actions. Neutral palette
   carries the weight.
@@ -37,16 +36,15 @@ What we take from Adwaita:
 - **Switches over checkboxes** for boolean settings.
 - **Subtle motion.** Short, ease-out, never bouncy.
 
-What's Readest-specific:
+What's Wellread-specific:
 
 - **E-ink as a first-class mode.** Every surface flips to flat 1px contrast borders under
   `[data-eink='true']`. Adwaita is desktop-GNOME-only; we ship to e-ink readers and the
   visual language has to survive there.
-- **Cross-platform reality.** Readest runs on macOS, Windows, Linux, iOS, Android, web. The
+- **Cross-platform reality.** Wellread runs on macOS, Windows, Linux, iOS, Android, web. The
   identity stays Adwaita; platform grace notes (radii, target sizes) follow host
   conventions where they matter.
 
----
 
 ### 2. Principles
 
@@ -66,7 +64,7 @@ detached card siblings of the dictionary list above it because they share
 
 #### 2.2 Brand color is reserved for CTAs
 
-Brand `primary` is reserved for true **call-to-action** moments — the actions the product
+Brand `primary` is reserved for true **call-to-action** moments: the actions the product
 invites the user to take. A surface's primary action is usually not a CTA: Save, Confirm,
 Connect just complete what the user already started, and use the theme-neutral
 `btn-contrast` (§4.1) instead of brand color.
@@ -75,7 +73,7 @@ Connect just complete what the user already started, and use the theme-neutral
 - "Save" in an edit dialog is the surface's primary action, not a CTA. **`btn-contrast`,
   zero brand color.**
 - "Import a Book" in onboarding is a true CTA. **One brand color (`btn-primary`).**
-- "Add Web Search" extends a list — it's not the surface's primary action. **Neutral.**
+- "Add Web Search" extends a list: it's not the surface's primary action. **Neutral.**
 
 #### 2.3 Two-step depth
 
@@ -101,7 +99,7 @@ gimmicky under Adwaita's calm rhythm.
 
 Every custom-styled bordered surface gets the `eink-bordered` class. Every primary action
 gets `btn-contrast` (already e-ink-correct) or, for true CTAs, `btn-primary` (which has
-dedicated eink rules). Don't rely on color or shadow alone for hierarchy — eink screens
+dedicated eink rules). Don't rely on color or shadow alone for hierarchy: eink screens
 have neither.
 
 If you can't toggle Settings → Misc → Eink and still tell which button is the CTA, the
@@ -115,8 +113,8 @@ where the focus state IS the affordance.
 
 #### 2.8 RTL: always use logical properties (REQUIRED)
 
-Readest ships with RTL languages enabled. **Never use direction-bound Tailwind
-utilities** when a logical equivalent exists — the visual edges flip in RTL,
+Wellread ships with RTL languages enabled. **Never use direction-bound Tailwind
+utilities** when a logical equivalent exists: the visual edges flip in RTL,
 the logical ones don't.
 
 | Don't use                          | Use instead                        |
@@ -127,7 +125,7 @@ the logical ones don't.
 | `border-l` / `border-r`            | `border-s` / `border-e`            |
 | `rounded-l-*` / `rounded-r-*`      | `rounded-s-*` / `rounded-e-*`      |
 | `left-*` / `right-*` (positioning) | `start-*` / `end-*`                |
-| `justify-start` / `justify-end`    | (these ARE direction-aware) — keep |
+| `justify-start` / `justify-end`    | (these ARE direction-aware): keep |
 
 The `flex-row` direction is automatically reversed in RTL by the browser, so
 you usually don't need to do anything for `flex` / `gap`. Only **explicit
@@ -135,21 +133,21 @@ edges** (padding, margin, borders, radius, absolute positioning) need
 logical properties.
 
 **Quick scan when reviewing a diff:** grep for `\b(pl|pr|ml|mr|left-|right-|text-left|text-right|border-l|border-r|rounded-l|rounded-r)-` in changed files. Any hit that isn't a deliberate LTR-only
-case (rare — usually only icon glyphs that have a fixed orientation) should
+case (rare: usually only icon glyphs that have a fixed orientation) should
 be flipped to the logical equivalent.
 
 #### 2.9 Every panel and sub-page starts with title + description (REQUIRED)
 
 Every settings panel and every sub-page must open with:
 
-1. **A title** — the panel name. Style: `text-lg font-semibold tracking-tight`. In a
+1. **A title**: the panel name. Style: `text-lg font-semibold tracking-tight`. In a
    top-level panel this is an `<h2>`; in a sub-page this is the `parentLabel /
 currentLabel` breadcrumb in `SubPageHeader` (which uses the same typography so the
    word stays anchored visually as the user navigates in/out).
-2. **A one-line description** — a short sentence under the title explaining what this
+2. **A one-line description**: a short sentence under the title explaining what this
    surface does or how it fits in the user's workflow. Style: `text-sm
 text-base-content/70 leading-relaxed`. Skip it only when the surface is so trivial
-   the breadcrumb already says everything (rare — when in doubt, write one).
+   the breadcrumb already says everything (rare: when in doubt, write one).
 
 Why: orientation, visual rhythm, and Adwaita parity (`AdwPreferencesPage` always has
 both). The same vertical opening across every surface makes the system feel cohesive
@@ -157,7 +155,7 @@ and gives users a predictable place to learn what a screen does.
 
 **Canonical components.** The `<SubPageHeader>` primitive in
 `src/components/settings/SubPageHeader.tsx` accepts a `description?: React.ReactNode`
-prop that renders the description in the canonical style — sub-pages should pass it
+prop that renders the description in the canonical style: sub-pages should pass it
 there rather than rolling their own `<p>` below the header. Top-level panels currently
 inline the title + description; if a third or fourth panel needs the same pattern,
 extract a `<PanelHeader>` primitive following the same shape.
@@ -177,12 +175,11 @@ extract a `<PanelHeader>` primitive following the same shape.
 <div className='w-full'>
   <h2 className='mb-1.5 text-lg font-semibold tracking-tight'>{_('Integrations')}</h2>
   <p className='text-base-content/70 text-sm leading-relaxed'>
-    {_('Connect Readest to external services for sync, highlights, and catalogs.')}
+    {_('Connect Wellread to external services for sync, highlights, and catalogs.')}
   </p>
 </div>
 ```
 
----
 
 ### 3. Surface hierarchy
 
@@ -204,9 +201,9 @@ Border treatment:
 
 Corner radius:
 
-- **Card / View**: `rounded-lg` (8px) — Readest's house radius. Adwaita uses 9px; 8px is
+- **Card / View**: `rounded-lg` (8px): Wellread's house radius. Adwaita uses 9px; 8px is
   close enough and matches Tailwind's scale.
-- **Modal / Sheet**: `modal-box` default (~1rem / 16px) — bigger surfaces get bigger radii.
+- **Modal / Sheet**: `modal-box` default (~1rem / 16px): bigger surfaces get bigger radii.
 - **Pills / Chips**: `rounded-full`.
 - **Inputs / small buttons**: `rounded-md` (6px) or `rounded-lg` (8px).
 
@@ -216,7 +213,6 @@ When a control extends a card (an "add row" affordance, a footer button bar atta
 list), it inherits the card's surface treatment: same `bg-base-100`, same
 `border-base-200`, same `rounded-lg`. It is the card grown by one row.
 
----
 
 ### 4. Action vocabulary
 
@@ -226,7 +222,7 @@ Seven archetypes. Pick by **role**, not by **appearance**.
 
 The default solid primary button: theme-neutral `base-content` background with a
 `base-100` label (`.btn-contrast` in `globals.css`). Use it for the primary action of a
-surface — Save, Confirm, Connect, Apply, dialog submits. **Most primary buttons should
+surface: Save, Confirm, Connect, Apply, dialog submits. **Most primary buttons should
 be this archetype**, not `btn-primary`.
 
 ```tsx
@@ -242,9 +238,9 @@ already e-ink-correct (a solid `base-content` fill needs no inversion).
 
 #### 4.2 Accent CTA
 
-The brand-colored button. Reserved for true **call-to-action** moments — actions the
+The brand-colored button. Reserved for true **call-to-action** moments: actions the
 product invites the user to take: "Sign In", "Import a Book" in onboarding, upgrade
-prompts. **One per surface, max**, and most surfaces have none — if the button merely
+prompts. **One per surface, max**, and most surfaces have none: if the button merely
 completes what the user already started, use `btn-contrast` (§4.1).
 
 ```tsx
@@ -293,8 +289,8 @@ The window controls in `SettingsDialog.tsx` (search, menu, close) use this arche
 
 #### 4.6 Destructive
 
-Delete, remove, irreversible. Adwaita uses `destructive-action`. Readest uses red
-sparingly — usually only the icon, not the whole button.
+Delete, remove, irreversible. Adwaita uses `destructive-action`. Wellread uses red
+sparingly: usually only the icon, not the whole button.
 
 ```tsx
 // Icon-only delete X in delete mode:
@@ -303,11 +299,11 @@ className = 'btn btn-ghost btn-sm shrink-0 px-1';
 ```
 
 For destructive **dialogs** (confirmation modals), the confirm button can be `btn-error`,
-but only in the modal — never on the main surface.
+but only in the modal: never on the main surface.
 
 #### 4.7 ListExtension
 
-A Readest-named archetype for "add another row to the list above" affordances. The two
+A Wellread-named archetype for "add another row to the list above" affordances. The two
 buttons at the bottom of `CustomDictionaries.tsx` are the canonical example.
 
 Anatomy:
@@ -351,7 +347,6 @@ Anatomy:
 Use this for: "Import Dictionary", "Add Web Search", "Add Custom Theme", any "+ add new
 to this list" pattern. **Do not** use `btn-outline btn-primary` for these.
 
----
 
 ### 5. Boxed list anatomy
 
@@ -411,12 +406,12 @@ subtitle, and the badge + toggle + edit/delete buttons stack as suffixes.
 
 #### Row variants
 
-- **ActionRow** — title + suffix is a single button or chevron. Tap anywhere navigates.
-- **SwitchRow** — title + suffix is a toggle. Tap anywhere toggles.
-- **ComboRow** — title + suffix is a dropdown/select.
-- **ExpanderRow** — chevron suffix; tap expands to reveal nested rows.
+- **ActionRow**: title + suffix is a single button or chevron. Tap anywhere navigates.
+- **SwitchRow**: title + suffix is a toggle. Tap anywhere toggles.
+- **ComboRow**: title + suffix is a dropdown/select.
+- **ExpanderRow**: chevron suffix; tap expands to reveal nested rows.
 
-These names come from libadwaita and apply 1:1 to Readest's lists. Use the names in code
+These names come from libadwaita and apply 1:1 to Wellread's lists. Use the names in code
 comments and PR descriptions.
 
 #### Spacing
@@ -428,18 +423,18 @@ comments and PR descriptions.
 #### Disabled rows
 
 Disabled rows fade the title to `text-base-content/60` and disable the suffix control. The
-row itself stays at full opacity — only the **content** dims, not the row.
+row itself stays at full opacity: only the **content** dims, not the row.
 
 #### Toggle size
 
 | Daisyui class                   | Use case                                                                                                              |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `toggle` (default, h-5 / ~20px) | **Settings panel boxed-list rows** — `<SettingsSwitchRow>` uses this. Visible weight matches the 56px `min-h-14` row. |
-| `toggle-sm` (h-4 / ~16px)       | Inline secondary switches in tighter contexts — e.g. dictionary list rows in `CustomDictionaries`.                    |
-| `toggle-xs` (h-3 / ~12px)       | Compact metadata toggles inside cards — e.g. OPDS catalog "Auto-download".                                            |
+| `toggle` (default, h-5 / ~20px) | **Settings panel boxed-list rows**: `<SettingsSwitchRow>` uses this. Visible weight matches the 56px `min-h-14` row. |
+| `toggle-sm` (h-4 / ~16px)       | Inline secondary switches in tighter contexts: e.g. dictionary list rows in `CustomDictionaries`.                    |
+| `toggle-xs` (h-3 / ~12px)       | Compact metadata toggles inside cards: e.g. OPDS catalog "Auto-download".                                            |
 
 The `<SettingsSwitchRow>` primitive bakes in the default `toggle`. **Don't override
-to `toggle-sm` inside boxed-list rows** — it looks orphaned in the row's vertical
+to `toggle-sm` inside boxed-list rows**: it looks orphaned in the row's vertical
 breathing room. Use the smaller sizes only when the row itself is shorter than 56px.
 
 #### Typography inherits from `.settings-content`
@@ -455,18 +450,18 @@ in `.settings-content`, which is defined in `src/styles/globals.css` as:
 @media (max-width: 768px) {
   .dropdown-content,
   .settings-content {
-    font-size: 16px; /* mobile bump — high-DPI phones need bigger body text */
+    font-size: 16px; /* mobile bump: high-DPI phones need bigger body text */
   }
 }
 ```
 
 **Don't hardcode `text-sm` on row labels, NavigationRow titles, or panel
-descriptions** — that locks the text to 14px on every viewport and kills
+descriptions**: that locks the text to 14px on every viewport and kills
 the mobile bump. Instead:
 
 - **Primary labels** (SettingsRow label, NavigationRow title, SubPageHeader
   description, ad-hoc row labels in panels and integration forms): no
-  font-size class — inherits 14/16 from the wrapper. Use `<SettingLabel>`
+  font-size class: inherits 14/16 from the wrapper. Use `<SettingLabel>`
   rather than inlining a `<span>`; it adds `font-medium` for cased scripts
   and drops the weight for caseless scripts (CJK / Arabic / Hebrew / Indic
   / Thai / Tibetan), since those bold poorly at body size and `font-medium`
@@ -476,13 +471,13 @@ the mobile bump. Instead:
   body, BoxedList description): use `text-[0.85em]` so it stays
   proportional (≈12px desktop, ≈13.6px mobile). A **`SettingsRow`
   description is clamped to a single line** (`line-clamp-1`, ellipsis on
-  overflow) by the primitive — keep it short enough to read on one line at
+  overflow) by the primitive: keep it short enough to read on one line at
   mobile width; it is a hint, not a paragraph. Move anything longer into a
   `<Tips>` block below the list.
 - **Form controls** (`<input>`, `<select>`): browsers don't inherit
   font-size onto form elements, so add the `settings-content` class
   _directly on the element_ to re-apply the 14/16 cascade. The legacy
-  NumberInput already does this — match its pattern.
+  NumberInput already does this: match its pattern.
 - **Section headers** (`BoxedList` uppercase title): use `text-[0.85em]
 font-semibold uppercase tracking-wider`. The em-relative size keeps it
   proportional with the `.settings-content` cascade. **Caseless-script
@@ -493,7 +488,7 @@ font-semibold uppercase tracking-wider`. The em-relative size keeps it
   helper lives in `src/utils/misc.ts`; the underlying `isCaselessLang`
   predicate lists every covered language code in `src/utils/lang.ts`.
 
-Why this matters: Tailwind's `text-xs` / `text-sm` are rem-based — they
+Why this matters: Tailwind's `text-xs` / `text-sm` are rem-based: they
 ignore the parent's `font-size` because rem is rooted at the document.
 The `.settings-content` cascade is in `px`, so any child that picks a
 Tailwind size literally tunes itself to the desktop default and never
@@ -504,23 +499,23 @@ distance.
 #### Uniform row height
 
 Settings rows in a boxed list MUST all be the same visual height. Use
-`min-h-14 items-center` (56px) on each row container — toggle, select, and
+`min-h-14 items-center` (56px) on each row container: toggle, select, and
 input rows then center their controls vertically inside identical boxes.
-**Don't use `py-3`** — content-driven padding produces uneven heights
+**Don't use `py-3`**: content-driven padding produces uneven heights
 because toggles, selects (`h-9`), and inputs (`h-9`) have different
 intrinsic sizes.
 
 ```tsx
-// ✓ Right — no text-sm; label inherits .settings-content (14/16)
+// ✓ Right: no text-sm; label inherits .settings-content (14/16)
 <label className='flex min-h-14 items-center justify-between px-4'>
   <span className='font-medium'>{_('Sync Enabled')}</span>
   <input type='checkbox' className='toggle' ... />
 </label>
 
-// ✗ Wrong — toggle row will be 48px, select rows 60px
+// ✗ Wrong: toggle row will be 48px, select rows 60px
 <label className='flex items-center justify-between px-4 py-3'>...</label>
 
-// ✗ Wrong — text-sm hardcodes 14px even on mobile (kills the bump)
+// ✗ Wrong: text-sm hardcodes 14px even on mobile (kills the bump)
 <span className='text-sm font-medium'>{_('Sync Enabled')}</span>
 ```
 
@@ -533,13 +528,13 @@ sits on the row.
 - **Selects:** drop `select-bordered` and `eink-bordered`. Add
   `!bg-transparent !bg-none !appearance-none` to suppress daisyui's
   background chevron and native arrow. Render a real `<MdArrowDropDown>`
-  icon at the cell's trailing edge for the affordance — see "End-aligned
+  icon at the cell's trailing edge for the affordance: see "End-aligned
   values" below.
 - **Inputs:** drop `input-bordered` and `eink-bordered`. Add `!bg-transparent`
   with `hover:!bg-base-200/60 focus:!bg-base-200/60` so the field still
   signals interactability. Use `text-end` and `!pe-0` so the value sits
   flush against the row's trailing edge.
-- **Toggles:** untouched — they're already chromeless.
+- **Toggles:** untouched: they're already chromeless.
 
 This is the iOS Settings / Adwaita PreferencesGroup convention: list
 chrome belongs to the container, not its children.
@@ -548,17 +543,17 @@ chrome belongs to the container, not its children.
 
 The selected value of a select/input MUST end-align (`text-end`). The
 **visible right edge** of every row's value (toggle, chevron icon, input
-text) MUST land at the same X — the row's trailing padding.
+text) MUST land at the same X: the row's trailing padding.
 
 The trap: daisyui's select renders its chevron via background-image at
 `calc(100% - 1rem) center`, which floats the glyph 16px _inside_ the
 select's right edge. So if the toggle in row 1 ends at the row's `pe-4`
-edge, the chevron in row 2 ends 16px before that — visibly misaligned.
+edge, the chevron in row 2 ends 16px before that: visibly misaligned.
 
 **Fix:** suppress daisyui's bg-image chevron and render an explicit icon at
 the cell's trailing edge. The select's own daisyui focus chrome (outline +
 box-shadow + ring) is suppressed; **no focus ring** on controls inside the
-boxed list — focus state is signaled by a subtle wrapper bg-shift instead
+boxed list: focus state is signaled by a subtle wrapper bg-shift instead
 (hover and focus-within both lift to `bg-base-200/60`). Rings would compete
 with the card's own border and double-stack with adjacent rows.
 
@@ -578,14 +573,14 @@ with the card's own border and double-stack with adjacent rows.
 > `border-width: 1px` + `border-color` (transparent at rest, `var(--bc)` on
 > focus), plus `outline`, `box-shadow`, and `ring` chrome on focus. To make
 > the control truly chromeless inside a boxed list, you need to kill all
-> four properties. Missing any of them — especially `border-0` — leaves a
+> four properties. Missing any of them: especially `border-0`: leaves a
 > visible focus border leaking through.
 
 The `<MdArrowDropDown>` icon's trailing edge now lives at the same X as the
 toggle's trailing edge in adjacent rows, because both are flush with the
 row's `pe-4` padding.
 
-For inputs, no wrapper is needed — the input is one element, so put the
+For inputs, no wrapper is needed: the input is one element, so put the
 hover/focus bg directly on it. Suppress daisyui's own focus chrome the
 same way:
 
@@ -597,10 +592,9 @@ same way:
 > for standalone custom buttons (Submit, Cancel, ListExtension, etc.). In a
 > boxed list, the row already provides strong visual containment via the
 > card border + dividers, and stacking a per-control ring inside that
-> creates double chrome. The bg-shift IS the focus indicator — keyboard
+> creates double chrome. The bg-shift IS the focus indicator: keyboard
 > users still get clear feedback; the surface stays calm.
 
----
 
 ### 6. Header bars, dialogs, popups, sheets
 
@@ -611,12 +605,12 @@ The dialog/page header. Adwaita's AdwHeaderBar.
 - **48–56px tall** (`h-12` to `h-14`).
 - **Center-aligned title** in `font-semibold text-base`.
 - **Leading slot**: back chevron (mobile) or empty (desktop).
-- **Trailing slot**: window controls — search (pill ghost), menu (pill ghost),
+- **Trailing slot**: window controls: search (pill ghost), menu (pill ghost),
   close (pill ghost circle with `bg-base-300/65`).
 - No bottom border; rely on tab/divider that follows.
 
 `SettingsDialog.tsx`'s mobile header is the canonical example. The desktop header is
-slightly different — tabs sit in the same row as window controls, no center title — but
+slightly different: tabs sit in the same row as window controls, no center title: but
 it's the same archetype adapted for screen real estate.
 
 #### Dialog (modal)
@@ -650,7 +644,7 @@ For dictionary lookups, annotation editors, and other anchored overlays. Uses th
 #### Sheet (mobile bottom)
 
 Reserved for mobile contextual menus and full-screen secondary panels. Uses the dialog's
-`snapHeight` prop. Adwaita doesn't have a native sheet but Readest's mobile pattern is
+`snapHeight` prop. Adwaita doesn't have a native sheet but Wellread's mobile pattern is
 the closest analog.
 
 - Always full-width.
@@ -661,7 +655,7 @@ the closest analog.
 #### Stacking order (z-index scale)
 
 Full-screen and body-portaled overlays share **one global stacking scale**. Keep it
-compact — never reach for four-digit z-indexes. Every layer must clear the desktop
+compact: never reach for four-digit z-indexes. Every layer must clear the desktop
 rounded-window page frame (`.window-border`, `z-99` in `globals.css`), then layer:
 
 | z-index | Layer | Where |
@@ -676,12 +670,11 @@ rounded-window page frame (`.window-border`, `z-99` in `globals.css`), then laye
 
 The non-obvious invariant: **`ModalPortal` (120) must stay above `SettingsDialog`
 (110)** so a modal opened _from inside_ Settings (e.g. Add OPDS Catalog) isn't buried.
-This bites only on mobile — desktop traps `SettingsDialog` inside the `z-99`
+This bites only on mobile: desktop traps `SettingsDialog` inside the `z-99`
 `.window-border` stacking context, so the body-portaled modal already wins there.
 The ordering is locked by `src/__tests__/styles/zIndexScale.test.ts`; update both
 together.
 
----
 
 ### 7. Motion + a11y
 
@@ -695,10 +688,10 @@ together.
   cleanly and Adwaita's identity is calm.
 
 ```tsx
-// Good — hover:bg-base-200 with transition-colors
+// Good: hover:bg-base-200 with transition-colors
 className = 'transition-colors duration-150 hover:bg-base-200';
 
-// Bad — scale on hover
+// Bad: scale on hover
 className = 'transition-transform hover:scale-105';
 ```
 
@@ -727,7 +720,7 @@ prefixes.
 - **Recommended**: 40px (`btn`) on touch surfaces.
 - **Mobile**: 44px+ for taps that aren't fail-safe (delete, navigate-away).
 - The `touch-target` class in globals.css extends a small visual control's hit area to
-  44px without changing its rendered size — use it on icon-sized buttons in mobile UIs.
+  44px without changing its rendered size: use it on icon-sized buttons in mobile UIs.
 
 #### Color contrast
 
@@ -735,7 +728,7 @@ prefixes.
 - Large text: WCAG AA Large (3:1) minimum.
 - Interactive text on hover state: still passes contrast on the new background.
 - Theme palette is generated from `(bg, fg, primary)`; the tinycolor pipeline keeps
-  contrast within range, but custom themes can break this — Settings → Color flags
+  contrast within range, but custom themes can break this: Settings → Color flags
   low-contrast custom themes.
 
 #### Keyboard
@@ -747,7 +740,6 @@ prefixes.
 - Arrow keys for grouped controls (radio-like tab strips, sortable lists). dnd-kit's
   `KeyboardSensor` is wired for sortable lists.
 
----
 
 ### 8. E-ink overlay (cross-cutting)
 
@@ -791,11 +783,10 @@ Verification checklist before shipping a new UI:
 - Hover scale / translate (they look broken on slow refresh).
 - Animations longer than ~200ms (visible refresh artifacts).
 
----
 
 ### 9. Cross-platform grace notes
 
-Readest ships on **macOS, Windows, Linux, iOS, Android, web**. Adwaita is desktop-GNOME-
+Wellread ships on **macOS, Windows, Linux, iOS, Android, web**. Adwaita is desktop-GNOME-
 native; we adapt where the host OS has strong conventions, but never at the cost of
 identity.
 
@@ -812,7 +803,7 @@ identity.
 #### Android
 
 - Material 3 conventions that conflict with Adwaita (FABs, elevation shadows, ripple
-  inks): **don't** copy them. Readest's identity is Adwaita; the user is reading on
+  inks): **don't** copy them. Wellread's identity is Adwaita; the user is reading on
   Android, not in Android.
 - Touch targets bumped to 48px for primary actions (Material's recommended target).
 - Back-gesture-aware UIs: ensure swipe-from-edge doesn't conflict with horizontal swipe
@@ -820,14 +811,14 @@ identity.
 
 #### Linux
 
-- Native Adwaita territory. Readest can match host theme for window chrome (Tauri
-  decorations) but should keep its own internal palette for the reading surface — book
+- Native Adwaita territory. Wellread can match host theme for window chrome (Tauri
+  decorations) but should keep its own internal palette for the reading surface: book
   themes (sepia, gruvbox, etc.) are user choices, not OS choices.
 
 #### macOS / Windows
 
 - Window controls (close/minimize/maximize) are platform-native via Tauri.
-- Title bar height matches platform convention; internal layout follows Readest's
+- Title bar height matches platform convention; internal layout follows Wellread's
   Adwaita palette.
 
 #### Web
@@ -842,7 +833,6 @@ identity.
 - All rules in §8 apply.
 - This is a **first-class** target, not a fallback.
 
----
 
 ### 10. Anti-patterns
 
@@ -949,7 +939,7 @@ vocabulary so the button signals its weight in the surface hierarchy.
 <div className="bg-base-100 border-base-200">
 ```
 
-Why: hard-coded colors don't theme. Readest has 11 themes plus user-defined custom themes.
+Why: hard-coded colors don't theme. Wellread has 11 themes plus user-defined custom themes.
 Always use the daisyui semantic tokens.
 
 #### 10.8 Mixing `btn` sizes within a surface
@@ -972,7 +962,6 @@ Always use the daisyui semantic tokens.
 
 Why: visual rhythm. Mixed sizes feel like the surface is unfinished.
 
----
 
 ### 11. Quick reference
 
@@ -980,7 +969,7 @@ When designing a new surface, walk this checklist:
 
 1. **What's the surface tier?** Window / View / Card. (§3)
 2. **What's the corner radius?** Match the tier. (§3)
-3. **Is there a primary action?** If yes, ONE solid primary — `btn-contrast` by default,
+3. **Is there a primary action?** If yes, ONE solid primary: `btn-contrast` by default,
    `btn-primary` only for a true CTA. If no, all flats. (§4.1, §4.2, §4.4)
 4. **Are there list extensions?** Use the ListExtension archetype, not `btn-outline btn-primary`. (§4.7)
 5. **Is it a list?** Use the BoxedList chassis with ActionRow / SwitchRow / ComboRow / ExpanderRow rows. (§5)
@@ -992,26 +981,24 @@ When designing a new surface, walk this checklist:
    custom buttons. (§7)
 10. **Will it work on the smallest theme + e-ink?** Toggle Sepia + Eink, retest.
 
----
 
 ### 12. Glossary
 
-- **Adwaita / libadwaita**: GNOME's design system and widget toolkit. Source of Readest's
+- **Adwaita / libadwaita**: GNOME's design system and widget toolkit. Source of Wellread's
   visual lineage.
 - **AdwActionRow / AdwSwitchRow / AdwComboRow / AdwExpanderRow**: libadwaita's row
-  primitives. Readest mirrors these conceptually with custom React components.
+  primitives. Wellread mirrors these conceptually with custom React components.
 - **AdwBoxedList**: libadwaita's named container for grouped action rows.
 - **AdwBanner**: top-of-window inline alert (persistent).
 - **AdwToast**: bottom slide-in transient alert.
 - **Window / View / Card**: surface tiers (§3).
 - **btn-contrast**: theme-neutral solid primary button (`base-content` bg, `base-100`
   label) defined in `globals.css`; the default for surface-primary actions (§4.1).
-- **ListExtension**: Readest-named archetype for "+ add new row" buttons (§4.7).
+- **ListExtension**: Wellread-named archetype for "+ add new row" buttons (§4.7).
 - **eink-bordered**: utility class in `globals.css` that gives a surface its e-ink-mode
   contrast border. Opt-in.
 - **Pill ghost**: circular icon button, `btn-ghost btn-circle`.
 
----
 
 ### 13. Maintenance
 

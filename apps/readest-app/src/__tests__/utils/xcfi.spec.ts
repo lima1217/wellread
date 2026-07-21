@@ -552,7 +552,7 @@ describe('CFIToXPointerConverter', () => {
       const koXp = '/body/DocFragment[11]/body/div/div/div/p/text().10';
       const cfi = converter.xPointerToCFI(koXp);
 
-      // Verify the same CFI is produced when starting from a Readest-generated range
+      // Verify the same CFI is produced when starting from a Wellread-generated range
       const range = doc.createRange();
       const textNode = p.firstChild!;
       range.setStart(textNode, 10);

@@ -41,7 +41,7 @@ pub fn setup_macos_menu(app: &AppHandle) -> tauri::Result<()> {
             .text("privacy_policy", "Privacy Policy")
             .separator()
             .text("report_issue", "Report An Issue...")
-            .text("readest_help", "Readest Help")
+            .text("wellread_help", "Wellread Help")
             .build()?,
     )?;
 
@@ -60,7 +60,7 @@ pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
         let _ = opener.open_url("https://readest.com/privacy-policy", None::<&str>);
     } else if event.id() == "report_issue" {
         let _ = opener.open_url("https://github.com/readest/readest/issues", None::<&str>);
-    } else if event.id() == "readest_help" {
+    } else if event.id() == "wellread_help" {
         let _ = opener.open_url("https://readest.com/support", None::<&str>);
     }
 }

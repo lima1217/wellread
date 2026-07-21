@@ -83,7 +83,7 @@ export const mergeImportedBookNotes = (
 export interface MrexptConversionOptions {
   /**
    * Color used for plain highlights (Moon+ Reader's "highlight" color
-   * doesn't map cleanly to Readest, so we pick a default).
+   * doesn't map cleanly to Wellread, so we pick a default).
    */
   highlightColor?: HighlightColor;
   /** Highlight style applied to all generated notes. */

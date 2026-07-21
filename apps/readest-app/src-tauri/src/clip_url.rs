@@ -7,7 +7,7 @@
 //
 // Bridge from webview → Rust:
 //
-//   The first attempt used a custom `readest-clip://` URI scheme + `fetch`.
+//   The first attempt used a custom `wellread-clip://` URI scheme + `fetch`.
 //   WebKit treats custom (non-https) schemes as *insecure content* when
 //   called from an https origin and blocks them — that's not a CSP rule we
 //   can relax. Browsers DO treat `http://127.0.0.1` as a potentially-
@@ -51,7 +51,7 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
 /// Localised strings and theme colours supplied by the JS caller. Defaults
-/// are English / Readest's dark palette so a caller that omits a field
+/// are English / Wellread's dark palette so a caller that omits a field
 /// (tests, future Rust-only callers) still gets readable text and chrome.
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
@@ -71,10 +71,10 @@ impl ClipOptions {
     fn window_title(&self) -> &str {
         self.window_title
             .as_deref()
-            .unwrap_or("Saving to your Readest library…")
+            .unwrap_or("Saving to your Wellread library…")
     }
     fn overlay_title(&self) -> &str {
-        self.overlay_title.as_deref().unwrap_or("Saving to Readest")
+        self.overlay_title.as_deref().unwrap_or("Saving to Wellread")
     }
     fn loading_status(&self) -> &str {
         self.loading_status.as_deref().unwrap_or("Loading article…")
@@ -85,7 +85,7 @@ impl ClipOptions {
             .unwrap_or("Capturing article…")
     }
     fn saved_title(&self) -> &str {
-        self.saved_title.as_deref().unwrap_or("Saved to Readest")
+        self.saved_title.as_deref().unwrap_or("Saved to Wellread")
     }
     fn background(&self) -> &str {
         self.background.as_deref().unwrap_or("#1f2024")
@@ -386,10 +386,10 @@ fn loading_overlay_script(
           var BG = {bg_json};
           var FG = {fg_json};
           function install() {{
-            if (document.getElementById('__readest_overlay__')) return;
+            if (document.getElementById('__wellread_overlay__')) return;
             if (!document.documentElement) return;
             var ov = document.createElement('div');
-            ov.id = '__readest_overlay__';
+            ov.id = '__wellread_overlay__';
             ov.setAttribute('aria-live', 'polite');
             ov.style.cssText = [
               'position:fixed','inset:0',
@@ -405,17 +405,17 @@ fn loading_overlay_script(
             spin.style.cssText = 'width:36px;height:36px;border:3px solid color-mix(in srgb,' +
               ' ' + FG + ' 18%, transparent);' +
               'border-top-color:color-mix(in srgb,' + FG + ' 85%, transparent);' +
-              'border-radius:50%;animation:__readest_spin__ 0.8s linear infinite';
+              'border-radius:50%;animation:__wellread_spin__ 0.8s linear infinite';
             var title = document.createElement('div');
             title.style.cssText = 'font-size:15px;font-weight:600';
             title.textContent = TITLE;
             var status = document.createElement('div');
-            status.id = '__readest_status__';
+            status.id = '__wellread_status__';
             status.style.cssText = 'font-size:13px;opacity:0.7;max-width:340px;' +
               'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
             status.textContent = STATUS;
             var style = document.createElement('style');
-            style.textContent = '@keyframes __readest_spin__{{to{{transform:rotate(360deg)}}}}';
+            style.textContent = '@keyframes __wellread_spin__{{to{{transform:rotate(360deg)}}}}';
             ov.appendChild(spin);
             ov.appendChild(title);
             ov.appendChild(status);
@@ -433,8 +433,8 @@ fn loading_overlay_script(
             }}
             install();
           }}, 200);
-          window.__readest_setStatus__ = function(text) {{
-            var el = document.getElementById('__readest_status__');
+          window.__wellread_setStatus__ = function(text) {{
+            var el = document.getElementById('__wellread_status__');
             if (el) el.textContent = text;
           }};
         }})();
@@ -527,7 +527,7 @@ pub async fn clip_url(
     let init_script = format!(
         r#"
         (function() {{
-          console.log('[readest-clip] init script running');
+          console.log('[wellread-clip] init script running');
           var PORT = {port};
           var TOKEN = {token_json};
           var CAPTURING_STATUS = {capturing_status_json};
@@ -537,11 +537,11 @@ pub async fn clip_url(
             if (sent) return;
             sent = true;
             try {{
-              if (window.__readest_setStatus__) {{
-                window.__readest_setStatus__(CAPTURING_STATUS);
+              if (window.__wellread_setStatus__) {{
+                window.__wellread_setStatus__(CAPTURING_STATUS);
               }}
               var html = document.documentElement.outerHTML;
-              console.log('[readest-clip] capturing reason=' + reason +
+              console.log('[wellread-clip] capturing reason=' + reason +
                 ' bytes=' + html.length);
               // Transfer the HTML through the navigation URL itself —
               // top-level navigation isn't governed by CSP `connect-src`
@@ -565,7 +565,7 @@ pub async fn clip_url(
               var sep = TARGET.indexOf('?') >= 0 ? '&' : '?';
               window.location.assign(TARGET + sep + 'd=' + b64);
             }} catch (e) {{
-              console.warn('[readest-clip] navigate threw:', e && e.message);
+              console.warn('[wellread-clip] navigate threw:', e && e.message);
             }}
           }}
           // Capture after the load event + a generous settle so JS
@@ -596,7 +596,7 @@ pub async fn clip_url(
     // its JS timers to keep firing — the public Tauri API can't reach
     // the private NSWindow flags that would hide it without freezing
     // scripts. The window IS going to be on screen briefly. Match the
-    // chrome style Readest's main/reader windows use so it doesn't read
+    // chrome style Wellread's main/reader windows use so it doesn't read
     // as a foreign popup: on macOS the standard window frame with an
     // overlay (transparent) title bar; on other desktops, decorationless
     // with a drop shadow. The loading overlay (injected via initialization

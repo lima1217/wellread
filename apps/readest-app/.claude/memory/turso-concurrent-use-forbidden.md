@@ -15,7 +15,7 @@ Sentry READEST-1 (Android, `tauri.localhost/reader`): unhandled promise rejectio
 
 **Gotchas.**
 - `DbConnection` is module-private (`mod wrapper` not `pub`), so the test must live INSIDE `wrapper.rs`, not `tests/`.
-- Plugin tests are NOT in the repo gate: `pnpm test:rust`/`fmt:check`/`clippy:check` are all `-p Readest` only. Run plugin checks explicitly: `cargo test/clippy --manifest-path src-tauri/plugins/tauri-plugin-turso/Cargo.toml` (clippy needs `--no-deps` — the vendored `tauri-runtime-wry` fork emits warnings that `-D warnings` would otherwise promote to errors). Shared cargo target is `/Users/chrox/dev/readest/target`, not `src-tauri/target`.
+- Plugin tests are NOT in the repo gate: `pnpm test:rust`/`fmt:check`/`clippy:check` are all `-p Wellread` only. Run plugin checks explicitly: `cargo test/clippy --manifest-path src-tauri/plugins/tauri-plugin-turso/Cargo.toml` (clippy needs `--no-deps` — the vendored `tauri-runtime-wry` fork emits warnings that `-D warnings` would otherwise promote to errors). Shared cargo target is `/Users/chrox/dev/readest/target`, not `src-tauri/target`.
 - Pre-existing fmt debt in the plugin: `cargo fmt --check` flags `decode.rs` import ordering (unrelated; left untouched).
 
 See [[sentry-crash-reporting-4914.md]] (this is the first real issue it caught) and [[bug-patterns]].

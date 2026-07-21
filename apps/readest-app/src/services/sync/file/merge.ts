@@ -8,7 +8,7 @@ export interface RemoteBookConfig {
   config: Partial<BookConfig>;
   booknotes: BookNote[];
   writerDeviceId: string;
-  writerVersion: 'readest-webdav-1';
+  writerVersion: 'wellread-webdav-1';
   updatedAt: number;
 }
 

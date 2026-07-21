@@ -51,7 +51,7 @@
         <string>Viewer</string>
         <key>LSItemContentTypes</key>
         <array>
-          <string>com.readest.fb2</string>
+          <string>com.wellread.fb2</string>
         </array>
       </dict>
 
@@ -64,7 +64,7 @@
         <string>Viewer</string>
         <key>LSItemContentTypes</key>
         <array>
-          <string>com.readest.cbz</string>
+          <string>com.wellread.cbz</string>
         </array>
       </dict>
 
@@ -155,7 +155,7 @@
 
       <dict>
         <key>UTTypeIdentifier</key>
-        <string>com.readest.fb2</string>
+        <string>com.wellread.fb2</string>
         <key>UTTypeDescription</key>
         <string>FB2 Document</string>
         <key>UTTypeConformsTo</key>
@@ -175,7 +175,7 @@
 
       <dict>
         <key>UTTypeIdentifier</key>
-        <string>com.readest.cbz</string>
+        <string>com.wellread.cbz</string>
         <key>UTTypeDescription</key>
         <string>CBZ Archive</string>
         <key>UTTypeConformsTo</key>
@@ -281,7 +281,7 @@
 
       <dict>
         <key>UTTypeIdentifier</key>
-        <string>com.readest.fb2</string>
+        <string>com.wellread.fb2</string>
         <key>UTTypeDescription</key>
         <string>FB2 Document</string>
         <key>UTTypeConformsTo</key>
@@ -301,7 +301,7 @@
 
       <dict>
         <key>UTTypeIdentifier</key>
-        <string>com.readest.cbz</string>
+        <string>com.wellread.cbz</string>
         <key>UTTypeDescription</key>
         <string>CBZ Archive</string>
         <key>UTTypeConformsTo</key>

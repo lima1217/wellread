@@ -26,7 +26,7 @@ export function getFoliateDataPath(dataDir: string, identifier: string): string 
   return `${dataDir}/com.github.johnfactotum.Foliate/${encodeURIComponent(identifier)}.json`;
 }
 
-/** Map a Foliate color string to Readest highlight style and color. */
+/** Map a Foliate color string to Wellread highlight style and color. */
 export function mapFoliateColor(color: string | undefined): {
   style: HighlightStyle;
   color: HighlightColor;

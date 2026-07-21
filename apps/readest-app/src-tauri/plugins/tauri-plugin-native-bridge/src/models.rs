@@ -35,7 +35,7 @@ pub struct SaveImageToGalleryRequest {
     /// Display name for the saved image, e.g. `image.png`.
     pub file_name: String,
     pub mime_type: String,
-    /// Subfolder under the system Pictures collection. Defaults to `Readest`.
+    /// Subfolder under the system Pictures collection. Defaults to `Wellread`.
     pub album_name: Option<String>,
 }
 

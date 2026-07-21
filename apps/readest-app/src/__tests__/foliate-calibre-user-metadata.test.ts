@@ -1,7 +1,7 @@
 // Feature test for surfacing Calibre custom columns (readest#4811).
 //
 // Calibre embeds its per-library custom columns ("user metadata") into the
-// OPF when polishing / sending books, and the Readest calibre plugin embeds
+// OPF when polishing / sending books, and the Wellread calibre plugin embeds
 // them on push. Two encodings exist (see calibre's opf2.py / opf3.py):
 //
 //   OPF 2: one <meta name="calibre:user_metadata:#label" content="{json}"/>

@@ -126,7 +126,7 @@ const BooknoteItem: React.FC<BooknoteItemProps> = ({ bookKey, item, isNearest, o
     const url = buildAnnotationUrl({ bookHash, noteId: item.id, cfi: item.cfi }, linkType);
     const linkLabel = item.page
       ? _('Page: {{number}}', { number: item.page })
-      : _('Open in Readest');
+      : _('Open in Wellread');
     const markdown = buildAnnotationCopyMarkdown({
       text: item.text,
       note: item.note,

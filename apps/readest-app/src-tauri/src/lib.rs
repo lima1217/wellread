@@ -237,7 +237,7 @@ fn get_executable_dir() -> String {
 // Pure decision for whether the in-app updater should be hidden. Kept
 // dependency-free so it can be unit tested for every platform combination.
 //
-// - `env_disable`: READEST_DISABLE_UPDATER is set (explicit opt-out).
+// - `env_disable`: WELLREAD_DISABLE_UPDATER is set (explicit opt-out).
 // - Linux only: Tauri's updater can self-update AppImage bundles *only*, so
 //   deb/rpm/pacman (`!is_appimage`) and Flatpak installs are updated by the
 //   system package manager and must not show the in-app updater.
@@ -253,7 +253,7 @@ fn compute_updater_disabled(
 
 #[cfg(desktop)]
 fn updater_disabled() -> bool {
-    let env_disable = std::env::var("READEST_DISABLE_UPDATER").is_ok();
+    let env_disable = std::env::var("WELLREAD_DISABLE_UPDATER").is_ok();
     #[cfg(target_os = "linux")]
     {
         let is_flatpak =
@@ -358,7 +358,7 @@ pub fn run() {
                 app.emit("single-instance", SingleInstancePayload { args: argv, cwd })
                     .unwrap();
             })
-            .dbus_id("com.bilingify.readest".to_owned())
+            .dbus_id("com.bilingify.wellread".to_owned())
             .build(),
     );
 
@@ -460,7 +460,7 @@ pub fn run() {
             let is_appimage = false;
 
             // The in-app updater is hidden for installs it can't actually update
-            // (Linux deb/rpm/pacman and Flatpak) and when READEST_DISABLE_UPDATER
+            // (Linux deb/rpm/pacman and Flatpak) and when WELLREAD_DISABLE_UPDATER
             // is set. This mirrors the `is_updater_disabled` command that
             // `NativeAppService.init()` reads authoritatively; the injected global
             // below is only a best-effort fast path.
@@ -471,10 +471,10 @@ pub fn run() {
 
             let init_script = format!(
                 r#"
-                    if ({is_eink}) window.__READEST_IS_EINK = true;
-                    if ({cli_access}) window.__READEST_CLI_ACCESS = true;
-                    if ({is_appimage}) window.__READEST_IS_APPIMAGE = true;
-                    if ({updater_disabled}) window.__READEST_UPDATER_DISABLED = true;
+                    if ({is_eink}) window.__WELLREAD_IS_EINK = true;
+                    if ({cli_access}) window.__WELLREAD_CLI_ACCESS = true;
+                    if ({is_appimage}) window.__WELLREAD_IS_APPIMAGE = true;
+                    if ({updater_disabled}) window.__WELLREAD_UPDATER_DISABLED = true;
                     window.addEventListener('DOMContentLoaded', function() {{
                         document.documentElement.classList.add('edge-to-edge');
                         const isTauriLocal = window.location.protocol === 'tauri:' ||
@@ -665,7 +665,7 @@ mod tests {
 
     #[test]
     fn env_opt_out_disables_on_any_desktop() {
-        // READEST_DISABLE_UPDATER is an explicit opt-out on every desktop OS.
+        // WELLREAD_DISABLE_UPDATER is an explicit opt-out on every desktop OS.
         assert!(compute_updater_disabled(true, false, false, false));
         assert!(compute_updater_disabled(true, true, false, true));
     }

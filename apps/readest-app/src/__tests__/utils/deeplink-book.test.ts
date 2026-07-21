@@ -3,7 +3,7 @@ import { parseBookDeepLink } from '@/utils/deeplink';
 
 describe('parseBookDeepLink', () => {
   it('parses the custom-scheme book-open form', () => {
-    expect(parseBookDeepLink('readest://book/abc123')).toEqual({ bookHash: 'abc123' });
+    expect(parseBookDeepLink('wellread://book/abc123')).toEqual({ bookHash: 'abc123' });
   });
   it('parses the web form', () => {
     expect(parseBookDeepLink('https://web.readest.com/o/book/abc123')).toEqual({
@@ -11,13 +11,15 @@ describe('parseBookDeepLink', () => {
     });
   });
   it('ignores autoplay query params', () => {
-    expect(parseBookDeepLink('readest://book/abc123?autoplay=foo')).toEqual({ bookHash: 'abc123' });
+    expect(parseBookDeepLink('wellread://book/abc123?autoplay=foo')).toEqual({
+      bookHash: 'abc123',
+    });
   });
   it('does NOT match the annotation form', () => {
-    expect(parseBookDeepLink('readest://book/abc123/annotation/n1')).toBeNull();
+    expect(parseBookDeepLink('wellread://book/abc123/annotation/n1')).toBeNull();
   });
   it('ignores unrelated urls', () => {
-    expect(parseBookDeepLink('readest://share/tok')).toBeNull();
+    expect(parseBookDeepLink('wellread://share/tok')).toBeNull();
     expect(parseBookDeepLink('not a url')).toBeNull();
   });
 });

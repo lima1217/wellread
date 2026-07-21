@@ -6,7 +6,7 @@ import { getFileExtFromMimeType } from '@/libs/document';
 import { needsProxy, getProxiedURL, probeAuth, probeFilename } from '@/app/opds/utils/opdsReq';
 import { resolveURL, parseMediaType, getFileExtFromPath } from '@/app/opds/utils/opdsUtils';
 import { normalizeOPDSCustomHeaders } from '@/app/opds/utils/customHeaders';
-import { READEST_OPDS_USER_AGENT } from '@/services/constants';
+import { WELLREAD_OPDS_USER_AGENT } from '@/services/constants';
 import { checkFeedForNewItems } from './feedChecker';
 import {
   loadSubscriptionState,
@@ -36,7 +36,7 @@ async function downloadAndImport(
 
   let downloadUrl = useProxy ? getProxiedURL(url, '', true, customHeaders) : url;
   const headers: Record<string, string> = {
-    'User-Agent': READEST_OPDS_USER_AGENT,
+    'User-Agent': WELLREAD_OPDS_USER_AGENT,
     Accept: '*/*',
     ...(!useProxy ? customHeaders : {}),
   };

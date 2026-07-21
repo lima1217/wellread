@@ -2,8 +2,8 @@ import { describe, test, expect, beforeEach, vi } from 'vitest';
 
 // ── Mocks for constants ──────────────────────────────────────────
 vi.mock('@/services/constants', () => ({
-  READEST_WEB_BASE_URL: 'https://web.readest.com',
-  READEST_NODE_BASE_URL: 'https://node.readest.com',
+  WELLREAD_WEB_BASE_URL: 'https://web.readest.com',
+  WELLREAD_NODE_BASE_URL: 'https://node.readest.com',
 }));
 
 // We need to reset modules between tests to pick up env var changes,
@@ -18,8 +18,8 @@ beforeEach(() => {
   Object.keys(env).forEach((key) => delete env[key]);
   Object.assign(env, originalEnv);
   // Clean up any window globals we set
-  delete (window as unknown as Record<string, unknown>)['__READEST_CLI_ACCESS'];
-  delete (window as unknown as Record<string, unknown>)['__READEST_RUNTIME_CONFIG'];
+  delete (window as unknown as Record<string, unknown>)['__WELLREAD_CLI_ACCESS'];
+  delete (window as unknown as Record<string, unknown>)['__WELLREAD_RUNTIME_CONFIG'];
 });
 
 describe('environment', () => {
@@ -67,19 +67,19 @@ describe('environment', () => {
 
   // ── hasCli ─────────────────────────────────────────────────────
   describe('hasCli', () => {
-    test('returns true when __READEST_CLI_ACCESS is true', async () => {
-      window.__READEST_CLI_ACCESS = true;
+    test('returns true when __WELLREAD_CLI_ACCESS is true', async () => {
+      window.__WELLREAD_CLI_ACCESS = true;
       const { hasCli } = await import('@/services/environment');
       expect(hasCli()).toBe(true);
     });
 
-    test('returns false when __READEST_CLI_ACCESS is not set', async () => {
+    test('returns false when __WELLREAD_CLI_ACCESS is not set', async () => {
       const { hasCli } = await import('@/services/environment');
       expect(hasCli()).toBe(false);
     });
 
-    test('returns false when __READEST_CLI_ACCESS is explicitly false', async () => {
-      window.__READEST_CLI_ACCESS = false;
+    test('returns false when __WELLREAD_CLI_ACCESS is explicitly false', async () => {
+      window.__WELLREAD_CLI_ACCESS = false;
       const { hasCli } = await import('@/services/environment');
       expect(hasCli()).toBe(false);
     });
@@ -108,7 +108,7 @@ describe('environment', () => {
   // ── getBaseUrl ─────────────────────────────────────────────────
   describe('getBaseUrl', () => {
     test('returns runtime-configured apiBaseUrl when set', async () => {
-      window.__READEST_RUNTIME_CONFIG = {
+      window.__WELLREAD_RUNTIME_CONFIG = {
         apiBaseUrl: 'https://runtime-api.example.com',
       };
       env['NEXT_PUBLIC_API_BASE_URL'] = 'https://custom-api.example.com';
@@ -129,7 +129,7 @@ describe('environment', () => {
       expect(getBaseUrl()).toBe('https://custom-api.example.com');
     });
 
-    test('falls back to READEST_WEB_BASE_URL when env var not set', async () => {
+    test('falls back to WELLREAD_WEB_BASE_URL when env var not set', async () => {
       delete env['NEXT_PUBLIC_API_BASE_URL'];
       const { getBaseUrl } = await import('@/services/environment');
       expect(getBaseUrl()).toBe('https://web.readest.com');
@@ -144,7 +144,7 @@ describe('environment', () => {
       expect(getNodeBaseUrl()).toBe('https://custom-node.example.com');
     });
 
-    test('falls back to READEST_NODE_BASE_URL when env var not set', async () => {
+    test('falls back to WELLREAD_NODE_BASE_URL when env var not set', async () => {
       delete env['NEXT_PUBLIC_NODE_BASE_URL'];
       const { getNodeBaseUrl } = await import('@/services/environment');
       expect(getNodeBaseUrl()).toBe('https://node.readest.com');

@@ -148,7 +148,7 @@ The stats type carries **two self-contained record sets** (mirroring KOReader's 
 
 Readest may later want per-event data KOReader's page-based schema can't represent (chapter/section attribution, words-read → wpm, originating device). The bridge being the **sync API, not a shared file**, makes this additive: KOReader reads only its own `statistics.sqlite3` (written by the koplugin in KOReader's exact schema), so it never sees Readest extras. v1 **builds the seam and captures nothing** — the extension columns/tables exist but stay NULL/empty until a later phase wires up the stats UI.
 
-- **Local:** enrichment lives in **separate `readest_*` extension tables** (e.g. `readest_page_ext(book_hash, page, start_time, …)`, `readest_book_ext(book_hash, …)`) keyed by the same identity. KOReader's `book` / `page_stat_data` tables stay **byte-identical** (a literal file export stays valid too).
+- **Local:** enrichment lives in **separate `readest_*` extension tables** (e.g. `wellread_page_ext(book_hash, page, start_time, …)`, `wellread_book_ext(book_hash, …)`) keyed by the same identity. KOReader's `book` / `page_stat_data` tables stay **byte-identical** (a literal file export stays valid too).
 - **Wire:** a nullable **`ext jsonb`** column on `stat_pages` / `stat_books`. Readest reads/writes it; the koplugin **leaves it NULL and ignores incoming `ext`**.
 - **Compatibility invariants:** (1) the koplugin maps only KOReader-schema fields; (2) those round-trip losslessly. Enrichment is therefore **lossless Readest↔Readest** and **dropped only at the KOReader boundary** (inherent — KOReader's schema can't hold it).
 

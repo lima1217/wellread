@@ -1,4 +1,4 @@
-name = "readest-web"
+name = "wellread-web"
 main = ".open-next/worker.js"
 compatibility_date = "2026-04-10"
 compatibility_flags = ["nodejs_compat"]
@@ -35,4 +35,4 @@ binding = "ASSETS"
 
 [[r2_buckets]]
 binding = "NEXT_INC_CACHE_R2_BUCKET"
-bucket_name = "readest-next-inc-cache"
+bucket_name = "wellread-next-inc-cache"

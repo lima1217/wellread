@@ -56,7 +56,7 @@ export const handleA11yNavigation = (
   // events, so we cannot detect it; instead, when NVDA enters the landmark its
   // virtual cursor lands on this link first. The user presses Enter to jump to
   // their actual reading position.
-  const skipLinkId = 'readest-skip-link-last-pos';
+  const skipLinkId = 'wellread-skip-link-last-pos';
   if (document.body && !document.getElementById(skipLinkId)) {
     const skipLink = document.createElement('div');
     skipLink.id = skipLinkId;
@@ -79,7 +79,7 @@ export const handleA11yNavigation = (
     });
     document.body.prepend(skipLink);
   }
-  const skipNextSectionLinkId = 'readest-skip-link-next-section';
+  const skipNextSectionLinkId = 'wellread-skip-link-next-section';
   if (document.body && !document.getElementById(skipNextSectionLinkId)) {
     // Use a <span>, not a <div>: this link is nested inside the section's last
     // content element (see findSectionEndHost below). The paragraph-layout rule

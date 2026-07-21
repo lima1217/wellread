@@ -16,9 +16,9 @@ describe('OPDS feed parsing', () => {
     // navigation, causing books to show as "Untitled".
     const copypartyRootFeed = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-    <title>Readest-Test</title>
+    <title>Wellread-Test</title>
     <link rel="search"
-    href="/copyparty/books/Readest-Test?opds&amp;osd"
+    href="/copyparty/books/Wellread-Test?opds&amp;osd"
     type="application/opensearchdescription+xml"/>
     <entry>
         <title>Sub/</title>
@@ -63,7 +63,7 @@ describe('OPDS feed parsing', () => {
       const subFeed = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
     <link rel="search"
-    href="/copyparty/books/Readest-Test/Sub?opds&amp;osd"
+    href="/copyparty/books/Wellread-Test/Sub?opds&amp;osd"
     type="application/opensearchdescription+xml"/>
     <entry>
         <title>Children of the Fleet - Orson Scott Card.epub</title>

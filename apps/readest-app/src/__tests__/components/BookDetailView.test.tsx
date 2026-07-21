@@ -159,7 +159,7 @@ describe('BookDetailView delete dropdown (purge folded into the confirm alert)',
 
 describe('BookDetailView file path row', () => {
   // book.filePath is only set for in-place imports (and OS-handed paths like
-  // Android "Open with Readest"). Hash-copy imports leave it undefined, so
+  // Android "Open with Wellread"). Hash-copy imports leave it undefined, so
   // surfacing it lets users tell the two storage modes apart at a glance.
   it('shows the actual file path when book.filePath is set', () => {
     const filePath = '/Users/me/Library/Books/sample.epub';

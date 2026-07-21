@@ -1,9 +1,9 @@
 # End-to-end tests
 
-Readest has two end-to-end lanes. They cover different layers and are run
+Wellread has two end-to-end lanes. They cover different layers and are run
 separately.
 
-## Web lane — Playwright
+## Web lane (Playwright)
 
 Drives the Next.js **web** build (`pnpm dev-web`) in a real browser. Fast, no
 Rust build required. Tests run unauthenticated against a fresh browser
@@ -25,7 +25,7 @@ Layout:
 | --------------------------------- | ------------------------------------------------------ |
 | `playwright.config.ts` (app root) | Runner config, projects, web server.                   |
 | `e2e/tests/`                      | Specs (`*.spec.ts`).                                   |
-| `e2e/pages/`                      | Page Object Model — actions/queries, no assertions.    |
+| `e2e/pages/`                      | Page Object Model: actions/queries, no assertions.    |
 | `e2e/fixtures/`                   | Shared fixtures; `fixtures/books/` holds sample books. |
 
 Page objects expose locators and actions; assertions stay in the specs so
@@ -36,7 +36,7 @@ The demo-book auto-import (`useDemoBooks`) is suppressed by the base fixture
 so the library is deterministic; authenticated/sync flows are out of scope
 for this lane until a test account is provisioned.
 
-## Tauri lane — WebdriverIO
+## Tauri lane (WebdriverIO)
 
 Drives the actual **Tauri** desktop shell via `tauri-driver`. Use this for
 coverage that depends on the native build (Rust integration, window

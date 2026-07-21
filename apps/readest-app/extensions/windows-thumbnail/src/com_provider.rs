@@ -1,9 +1,9 @@
-/// Windows COM Thumbnail Provider for Readest
+/// Windows COM Thumbnail Provider for Wellread
 ///
 /// Implements IThumbnailProvider and IInitializeWithItem for Windows Shell integration.
 /// This allows Windows Explorer to show book covers as thumbnails for eBook files.
 ///
-/// **Important**: Thumbnails are only shown when Readest.exe is the default application
+/// **Important**: Thumbnails are only shown when Wellread.exe is the default application
 /// for the file type.
 ///
 /// ## CLSID: {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
@@ -36,11 +36,11 @@ use windows_core::{implement, Ref};
 use super::cached_thumbnail_for_path;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CLSID for Readest Thumbnail Provider
+// CLSID for Wellread Thumbnail Provider
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// CLSID: {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
-pub const CLSID_READEST_THUMBNAIL: GUID = GUID::from_u128(0xA1B2C3D4_E5F6_7890_ABCD_EF1234567890);
+pub const CLSID_WELLREAD_THUMBNAIL: GUID = GUID::from_u128(0xA1B2C3D4_E5F6_7890_ABCD_EF1234567890);
 
 /// Supported file extensions
 pub const SUPPORTED_EXTENSIONS: &[&str] = &[
@@ -75,8 +75,8 @@ fn get_dll_module() -> Option<HMODULE> {
 // File Association Check
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Check if Readest.exe is the default application for a given file extension.
-fn is_readest_default_for_extension(ext: &str) -> bool {
+/// Check if Wellread.exe is the default application for a given file extension.
+fn is_wellread_default_for_extension(ext: &str) -> bool {
     let ext_wide: Vec<u16> = ext.encode_utf16().chain(std::iter::once(0)).collect();
     let mut buffer = [0u16; 260];
     let mut buffer_size = buffer.len() as u32;
@@ -94,7 +94,7 @@ fn is_readest_default_for_extension(ext: &str) -> bool {
         if result.is_ok() {
             let len = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
             let path = String::from_utf16_lossy(&buffer[..len]).to_lowercase();
-            return path.contains("readest");
+            return path.contains("wellread");
         }
     }
 
@@ -102,10 +102,10 @@ fn is_readest_default_for_extension(ext: &str) -> bool {
 }
 
 /// Check if Readest is the default app for a specific file path.
-fn is_readest_default_for_file(path: &PathBuf) -> bool {
+fn is_wellread_default_for_file(path: &PathBuf) -> bool {
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         let ext_with_dot = format!(".{}", ext.to_lowercase());
-        return is_readest_default_for_extension(&ext_with_dot);
+        return is_wellread_default_for_extension(&ext_with_dot);
     }
     false
 }
@@ -185,7 +185,7 @@ impl IInitializeWithItem_Impl for ThumbnailProvider_Impl {
 
             CoTaskMemFree(Some(path_pwstr.0 as *const c_void));
 
-            let is_default = is_readest_default_for_file(&path);
+            let is_default = is_wellread_default_for_file(&path);
             self.should_provide.set(is_default);
 
             if !is_default {
@@ -355,7 +355,7 @@ pub unsafe extern "system" fn DllGetClassObject(
     }
     *ppv = std::ptr::null_mut();
 
-    if *rclsid != CLSID_READEST_THUMBNAIL {
+    if *rclsid != CLSID_WELLREAD_THUMBNAIL {
         return E_NOINTERFACE;
     }
     if *riid != IClassFactory::IID && *riid != IUnknown::IID {
@@ -400,17 +400,17 @@ fn get_dll_path() -> Option<String> {
 fn clsid_string() -> String {
     format!(
         "{{{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
-        CLSID_READEST_THUMBNAIL.data1,
-        CLSID_READEST_THUMBNAIL.data2,
-        CLSID_READEST_THUMBNAIL.data3,
-        CLSID_READEST_THUMBNAIL.data4[0],
-        CLSID_READEST_THUMBNAIL.data4[1],
-        CLSID_READEST_THUMBNAIL.data4[2],
-        CLSID_READEST_THUMBNAIL.data4[3],
-        CLSID_READEST_THUMBNAIL.data4[4],
-        CLSID_READEST_THUMBNAIL.data4[5],
-        CLSID_READEST_THUMBNAIL.data4[6],
-        CLSID_READEST_THUMBNAIL.data4[7]
+        CLSID_WELLREAD_THUMBNAIL.data1,
+        CLSID_WELLREAD_THUMBNAIL.data2,
+        CLSID_WELLREAD_THUMBNAIL.data3,
+        CLSID_WELLREAD_THUMBNAIL.data4[0],
+        CLSID_WELLREAD_THUMBNAIL.data4[1],
+        CLSID_WELLREAD_THUMBNAIL.data4[2],
+        CLSID_WELLREAD_THUMBNAIL.data4[3],
+        CLSID_WELLREAD_THUMBNAIL.data4[4],
+        CLSID_WELLREAD_THUMBNAIL.data4[5],
+        CLSID_WELLREAD_THUMBNAIL.data4[6],
+        CLSID_WELLREAD_THUMBNAIL.data4[7]
     )
 }
 
@@ -456,7 +456,7 @@ unsafe fn register_server_impl() -> Result<(), HRESULT> {
 
     // CLSID key
     let clsid_key = create_reg_key(HKEY_CLASSES_ROOT, &format!("CLSID\\{}", clsid))?;
-    set_reg_value(clsid_key, "", "Readest Thumbnail Provider")?;
+    set_reg_value(clsid_key, "", "Wellread Thumbnail Provider")?;
 
     // CRITICAL: DisableProcessIsolation = 1
     let disable_isolation_name = to_wide("DisableProcessIsolation");

@@ -315,7 +315,7 @@ describe('RSVPOverlay — CJK reading options', () => {
   });
 
   test('renders a single centered span when Highlight Word is enabled', () => {
-    localStorage.setItem('readest_rsvp_cjk_highlight_word', '1');
+    localStorage.setItem('wellread_rsvp_cjk_highlight_word', '1');
     const state = buildState({
       words: [{ text: '喜欢', orpIndex: 1, pauseMultiplier: 1 }],
       currentIndex: 0,
@@ -330,7 +330,7 @@ describe('RSVPOverlay — CJK reading options', () => {
   });
 
   test('keeps the focus-letter layout for Latin words even with Highlight Word enabled', () => {
-    localStorage.setItem('readest_rsvp_cjk_highlight_word', '1');
+    localStorage.setItem('wellread_rsvp_cjk_highlight_word', '1');
     const state = buildState({
       words: [{ text: 'hello', orpIndex: 1, pauseMultiplier: 1 }],
       currentIndex: 0,

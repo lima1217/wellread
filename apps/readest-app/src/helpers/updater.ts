@@ -10,9 +10,9 @@ import { isTauriAppPlatform } from '@/services/environment';
 import { getAppVersion, isUpdateNewer } from '@/utils/version';
 import {
   CHECK_UPDATE_INTERVAL_SEC,
-  READEST_CHANGELOG_FILE,
-  READEST_UPDATER_FILE,
-  READEST_NIGHTLY_UPDATER_FILE,
+  WELLREAD_CHANGELOG_FILE,
+  WELLREAD_UPDATER_FILE,
+  WELLREAD_NIGHTLY_UPDATER_FILE,
 } from '@/services/constants';
 
 const LAST_CHECK_KEY = 'lastAppUpdateCheck';
@@ -105,12 +105,12 @@ export const resolveNightlyUpdate = async (
   fetchFn: FetchFn,
 ): Promise<ResolvedNightlyUpdate | null> => {
   const [nightly, stable] = await Promise.all([
-    fetchManifest(fetchFn, READEST_NIGHTLY_UPDATER_FILE),
-    fetchManifest(fetchFn, READEST_UPDATER_FILE),
+    fetchManifest(fetchFn, WELLREAD_NIGHTLY_UPDATER_FILE),
+    fetchManifest(fetchFn, WELLREAD_UPDATER_FILE),
   ]);
   const sources: Array<[UpdateManifest | null, string]> = [
-    [nightly, READEST_NIGHTLY_UPDATER_FILE],
-    [stable, READEST_UPDATER_FILE],
+    [nightly, WELLREAD_NIGHTLY_UPDATER_FILE],
+    [stable, WELLREAD_UPDATER_FILE],
   ];
   const candidates: ResolvedNightlyUpdate[] = [];
   for (const [manifest, endpoint] of sources) {
@@ -155,7 +155,7 @@ export const checkForAppUpdates = async (
         OS_TYPE,
         osArch(),
         Boolean(process.env['NEXT_PUBLIC_PORTABLE_APP']),
-        Boolean((window as { __READEST_IS_APPIMAGE?: boolean }).__READEST_IS_APPIMAGE),
+        Boolean((window as { __WELLREAD_IS_APPIMAGE?: boolean }).__WELLREAD_IS_APPIMAGE),
       );
       if (!platformKey) return false;
       const resolved = await resolveNightlyUpdate(getAppVersion(), platformKey, fetch);
@@ -178,7 +178,7 @@ export const checkForAppUpdates = async (
       return !!update;
     } else if (OS_TYPE === 'android') {
       try {
-        const response = await fetch(READEST_UPDATER_FILE, { connectTimeout: 5000 });
+        const response = await fetch(WELLREAD_UPDATER_FILE, { connectTimeout: 5000 });
         const data = await response.json();
         const isNewer = semver.gt(data.version, getAppVersion());
         if (
@@ -223,7 +223,7 @@ export const checkAppReleaseNotes = async (isAutoCheck = true) => {
   if ((lastShownVersion && semver.gt(currentVersion, lastShownVersion)) || !isAutoCheck) {
     try {
       const fetchFunc = isTauriAppPlatform() ? fetch : window.fetch;
-      const res = await fetchFunc(READEST_CHANGELOG_FILE);
+      const res = await fetchFunc(WELLREAD_CHANGELOG_FILE);
       if (res.ok) {
         setUpdaterWindowVisible(true, currentVersion, lastShownVersion, false);
         return true;

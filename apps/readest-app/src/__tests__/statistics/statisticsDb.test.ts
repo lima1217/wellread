@@ -27,9 +27,9 @@ describe('statistics migration', () => {
     expect(names).toContain('page_stat_data');
     expect(names).toContain('numbers');
     expect(names).toContain('page_stat'); // the rescaling view
-    expect(names).toContain('readest_page_ext');
-    expect(names).toContain('readest_book_ext');
-    expect(names).toContain('readest_stat_sync_state');
+    expect(names).toContain('wellread_page_ext');
+    expect(names).toContain('wellread_book_ext');
+    expect(names).toContain('wellread_stat_sync_state');
   });
 
   it('is idempotent when the page_stat view already exists (READEST-13)', async () => {

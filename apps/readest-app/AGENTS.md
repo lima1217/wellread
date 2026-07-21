@@ -1,8 +1,8 @@
-## Project Overview
+## Project overview
 
-Readest is a cross-platform ebook reader built as a **Next.js 16 + Tauri v2** hybrid app. It's part of a pnpm monorepo at `/apps/readest-app/`. The app runs on web (CloudFlare Workers), desktop (macOS/Windows/Linux via Tauri), and mobile (iOS/Android via Tauri).
+Wellread is a cross-platform ebook reader built as a Next.js 16 + Tauri v2 hybrid app. Package code lives at `apps/readest-app` (`@wellread/wellread-app`). Targets: web (Cloudflare Workers), desktop (macOS / Windows / Linux via Tauri), and mobile (iOS / Android via Tauri).
 
-## Common Commands
+## Common commands
 
 ```bash
 # Development

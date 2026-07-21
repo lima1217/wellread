@@ -21,7 +21,7 @@ static mut TRAFFIC_LIGHT_HEADER_HEIGHT: f64 = DEFAULT_HEADER_HEIGHT;
 static NATURAL_BUTTON_ORIGIN_Y: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
 
 /// Fallback header height (logical px) when the frontend has not yet
-/// reported one. Matches readest's standard `h-11` header so the
+/// reported one. Matches wellread's standard `h-11` header so the
 /// initial paint before React mounts is close to correct.
 const DEFAULT_HEADER_HEIGHT: f64 = 44.0;
 

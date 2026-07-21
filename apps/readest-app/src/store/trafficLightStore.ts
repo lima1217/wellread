@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { AppService } from '@/types/system';
 
-// Matches readest's standard `h-11` header (44px). Used as a fallback
+// Matches wellread's standard `h-11` header (44px). Used as a fallback
 // when a caller flips visibility without supplying its own measured
 // height — e.g. the initial `useTrafficLight()` mount on pages whose
 // header height is fixed.

@@ -18,7 +18,7 @@ export type OsPlatform = 'android' | 'ios' | 'macos' | 'windows' | 'linux' | 'un
 export type BaseDir = | 'Books' | 'Settings' | 'Data' | 'Fonts' | 'Images' | 'Dictionaries' | 'Log' | 'Cache' | 'Temp' | 'None';
 export type DeleteAction = 'cloud' | 'local' | 'both' | 'purge';
 export type SelectDirectoryMode = 'read' | 'write';
-export type DistChannel = 'readest' | 'playstore' | 'appstore' | 'unknown';
+export type DistChannel = 'wellread' | 'playstore' | 'appstore' | 'unknown';
 
 export type ResolvedPath = {
   baseDir: number;

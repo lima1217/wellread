@@ -214,7 +214,7 @@ fn extract_epub_cover_full_sync(file_path: &str) -> Result<RawCoverImage, String
 //     it once in the WebView is cheap; what was expensive was *finding* it
 //     and unzipping it.
 //   - Encryption isn't handled here (yet). Encrypted EPUBs fall back to the
-//     foliate-js path; in practice Readest's EPUBs aren't encrypted.
+//     foliate-js path; in practice Wellread's EPUBs aren't encrypted.
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Serialize)]
@@ -1067,7 +1067,7 @@ mod tests {
         //   i = 0:  rawShift = 1024, start = min(11, 1024) = 11 -> break
         // So the resulting hash is md5("hello world").
         let dir = std::env::temp_dir();
-        let path = dir.join("readest-epub-parser-test.bin");
+        let path = dir.join("wellread-epub-parser-test.bin");
         std::fs::write(&path, b"hello world").unwrap();
         let hash = compute_partial_md5(&path).unwrap();
         // Pre-computed: md5("hello world") = 5eb63bbbe01eeed093cb22bb8f5acdc3
@@ -1268,7 +1268,7 @@ mod tests {
         // and (assuming the file is shorter than 16 KiB) i = 2 sees
         // start=16384 >= file.size and breaks. Verify Rust matches that.
         let dir = std::env::temp_dir();
-        let path = dir.join("readest-epub-parser-test-medium.bin");
+        let path = dir.join("wellread-epub-parser-test-medium.bin");
         let mut data = Vec::with_capacity(2048);
         for i in 0..2048u32 {
             data.push((i & 0xff) as u8);

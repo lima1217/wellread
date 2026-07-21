@@ -14,7 +14,7 @@ export const SCROLL_WRAPPER_FIT_CLASS = 'scroll-wrapper-fit';
 // scroll itself (its box reports no overflow) — it's wrapped instead.
 const SCROLLABLE_SELECTOR = `.${SCROLL_WRAPPER_CLASS}`;
 const SCROLL_WRAPPER_TOLERANCE_PX = 4;
-const SCROLL_WRAPPER_TOUCH_SCROLL_FLAG = 'data-readest-scroll-wrapper-touch-scroll';
+const SCROLL_WRAPPER_TOUCH_SCROLL_FLAG = 'data-wellread-scroll-wrapper-touch-scroll';
 
 const canScrollX = (el: Element) => el.scrollWidth - el.clientWidth > SCROLL_WRAPPER_TOLERANCE_PX;
 const canScrollY = (el: Element) => el.scrollHeight - el.clientHeight > SCROLL_WRAPPER_TOLERANCE_PX;
@@ -70,7 +70,7 @@ export const shouldTableScrollConsumeWheel = (
 };
 
 /**
- * Capture-phase touch + wheel routing so foliate's paginator and readest's wheel
+ * Capture-phase touch + wheel routing so foliate's paginator and wellread's wheel
  * pagination do not steal scrolls over a scroll box. Attached once per iframe document.
  */
 export const applyTableTouchScroll = (document: Document) => {

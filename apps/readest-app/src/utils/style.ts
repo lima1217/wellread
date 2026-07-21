@@ -480,7 +480,7 @@ const getPageLayoutStyles = (
   img.has-text-siblings {
     ${vertical ? 'width: 1em;' : 'height: 1em;'}
   }
-  /* Baseline is only Readest's default: applyImageStyle adds this class when the
+  /* Baseline is only Wellread's default: applyImageStyle adds this class when the
      book leaves vertical-align at its initial value, so an author-set value
      (e.g. a CJK glyph-substitution image nudged with vertical-align: -0.15em)
      keeps winning. See #4866. */
@@ -1066,9 +1066,9 @@ export const transformStylesheet = (css: string, vw: number, vh: number, vertica
     .replace(/([\s;])-ms-user-select\s*:\s*none/gi, '$1-ms-user-select: unset')
     .replace(/([\s;])-o-user-select\s*:\s*none/gi, '$1-o-user-select: unset')
     .replace(/([\s;])user-select\s*:\s*none/gi, '$1user-select: unset')
-    .replace(/(font-family\s*:[^;]*?)\bsans-serif\b/gi, '$1READEST_SS_PLACEHOLDER')
+    .replace(/(font-family\s*:[^;]*?)\bsans-serif\b/gi, '$1WELLREAD_SS_PLACEHOLDER')
     .replace(/(font-family\s*:[^;]*?)\bserif\b(?!-)/gi, '$1var(--serif, serif)')
-    .replace(/READEST_SS_PLACEHOLDER/g, 'var(--sans-serif, sans-serif)')
+    .replace(/WELLREAD_SS_PLACEHOLDER/g, 'var(--sans-serif, sans-serif)')
     .replace(/(font-family\s*:[^;]*?)\bmonospace\b/gi, '$1var(--monospace, monospace)')
     .replace(/([\s;])font-weight\s*:\s*normal/gi, '$1font-weight: var(--font-weight)')
     .replace(/([\s;])color\s*:\s*black/gi, '$1color: var(--theme-fg-color)')
@@ -1155,7 +1155,7 @@ export const applyImageStyle = (document: Document) => {
       );
       inlineWithText = hasTextSiblings && isInline;
       if (inlineWithText) {
-        // Only supply Readest's baseline default when the book leaves
+        // Only supply Wellread's baseline default when the book leaves
         // vertical-align at its initial value; an author-set value (e.g. a CJK
         // glyph-substitution image nudged with `vertical-align: -0.15em`) must
         // win. Empty string covers environments that report unset props as ''.

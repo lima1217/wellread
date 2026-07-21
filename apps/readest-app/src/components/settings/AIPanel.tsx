@@ -434,53 +434,57 @@ const AIPanel: React.FC = () => {
                 )}
               </div>
             )}
-            <div className='flex flex-wrap items-center justify-end gap-2'>
-              {!isActive && (
+            <div className='flex flex-wrap items-center gap-2'>
+              <div className='me-auto flex flex-wrap items-center gap-2'>
+                {!isActive && (
+                  <button
+                    type='button'
+                    className={clsx('btn btn-ghost btn-sm', actionBtnClass)}
+                    disabled={saving}
+                    onClick={() => void handleSetActive(editingProfileId)}
+                  >
+                    {_('Set Active')}
+                  </button>
+                )}
+                <button
+                  type='button'
+                  className={clsx('btn btn-ghost btn-sm text-error', actionBtnClass)}
+                  disabled={saving}
+                  onClick={() => void handleDelete()}
+                >
+                  {_('Delete')}
+                </button>
+              </div>
+              <div className='flex flex-wrap items-center justify-end gap-2'>
+                <button
+                  type='button'
+                  className={clsx('btn btn-ghost btn-sm', actionBtnClass)}
+                  disabled={connectionStatus === 'testing'}
+                  onClick={() => void handleTestConnection()}
+                >
+                  {connectionStatus === 'testing' ? (
+                    <PiSpinner className='h-4 w-4 animate-spin' />
+                  ) : null}
+                  {_('Test Connection')}
+                </button>
                 <button
                   type='button'
                   className={clsx('btn btn-ghost btn-sm', actionBtnClass)}
                   disabled={saving}
-                  onClick={() => void handleSetActive(editingProfileId)}
+                  onClick={() => void handleResetDeepSeek()}
                 >
-                  {_('Set Active')}
+                  {_('Restore DeepSeek Defaults')}
                 </button>
-              )}
-              <button
-                type='button'
-                className={clsx('btn btn-ghost btn-sm text-error', actionBtnClass)}
-                disabled={saving}
-                onClick={() => void handleDelete()}
-              >
-                {_('Delete')}
-              </button>
-              <button
-                type='button'
-                className={clsx('btn btn-ghost btn-sm', actionBtnClass)}
-                disabled={connectionStatus === 'testing'}
-                onClick={() => void handleTestConnection()}
-              >
-                {connectionStatus === 'testing' ? (
-                  <PiSpinner className='h-4 w-4 animate-spin' />
-                ) : null}
-                {_('Test Connection')}
-              </button>
-              <button
-                type='button'
-                className={clsx('btn btn-ghost btn-sm', actionBtnClass)}
-                disabled={saving}
-                onClick={() => void handleResetDeepSeek()}
-              >
-                {_('Restore DeepSeek Defaults')}
-              </button>
-              <button
-                type='button'
-                className={clsx('btn btn-contrast btn-sm gap-1.5', actionBtnClass)}
-                disabled={saving}
-                onClick={() => void handleSaveDetail()}
-              >
-                {saving ? <PiSpinner className='h-4 w-4 animate-spin' /> : null}
-                {_('Save')}
-              </button>
+                <button
+                  type='button'
+                  className={clsx('btn btn-contrast btn-sm gap-1.5', actionBtnClass)}
+                  disabled={saving}
+                  onClick={() => void handleSaveDetail()}
+                >
+                  {saving ? <PiSpinner className='h-4 w-4 animate-spin' /> : null}
+                  {_('Save')}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -19,7 +19,7 @@
 | `src/utils/version.ts` | `parseUpdateVersion`, `isUpdateNewer` (pure, TS side of the rule) | Modify |
 | `src/__tests__/utils/version.test.ts` | Comparator matrix tests | Create |
 | `src/types/settings.ts` | `updateChannel` field | Modify |
-| `src/services/constants.ts` | default `updateChannel`, `READEST_NIGHTLY_UPDATER_FILE`, `READEST_UPDATER_PUBKEY` | Modify |
+| `src/services/constants.ts` | default `updateChannel`, `WELLREAD_NIGHTLY_UPDATER_FILE`, `WELLREAD_UPDATER_PUBKEY` | Modify |
 | `src/helpers/updater.ts` | channel-aware check + `resolveNightlyUpdate` + `getNightlyPlatformKey` | Modify |
 | `src/__tests__/helpers/updater.test.ts` | nightly resolution + routing tests | Modify |
 | `src/utils/bridge.ts` | `verifyUpdateSignature`, `installNightlyUpdate` JS wrappers | Modify |
@@ -253,7 +253,7 @@ mod nightly_update;
 
 - [ ] **Step 4: Run the Rust test**
 
-Run: `pnpm test:rust` (i.e. `cargo test -p Readest --lib nightly_update`)
+Run: `pnpm test:rust` (i.e. `cargo test -p Wellread --lib nightly_update`)
 Expected: PASS — `nightly_update::tests::matrix`.
 
 - [ ] **Step 5: Commit**
@@ -291,15 +291,15 @@ In `src/services/constants.ts`, in `DEFAULT_SYSTEM_SETTINGS`, immediately after 
 
 - [ ] **Step 3: Add the nightly endpoint + pubkey constants**
 
-In `src/services/constants.ts`, after the existing `READEST_UPDATER_FILE` / `READEST_CHANGELOG_FILE` block (~line 798), add:
+In `src/services/constants.ts`, after the existing `WELLREAD_UPDATER_FILE` / `WELLREAD_CHANGELOG_FILE` block (~line 798), add:
 
 ```typescript
-export const READEST_NIGHTLY_UPDATER_FILE = 'https://download.readest.com/nightly/latest.json';
+export const WELLREAD_NIGHTLY_UPDATER_FILE = 'https://download.readest.com/nightly/latest.json';
 
 // Public (verification) key, identical to src-tauri/tauri.conf.json `updater.pubkey`.
 // Used to verify nightly artifacts in the custom install flows (portable /
 // AppImage / Android). Safe to embed — it is a public key.
-export const READEST_UPDATER_PUBKEY =
+export const WELLREAD_UPDATER_PUBKEY =
   'dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJFMEQ1QjE2OEU1NEIzNTEKUldSUnMxU09GbHNOdmpEaWFMT1crRFpEV2VORzQ2MklxaFc0M1R0ci9xY2c1bENXS0xhM1R1L2sK';
 ```
 
@@ -395,9 +395,9 @@ vi.mock('@/utils/version', async () => {
 
 vi.mock('@/services/constants', () => ({
   CHECK_UPDATE_INTERVAL_SEC: 86400,
-  READEST_UPDATER_FILE: 'https://example.com/latest.json',
-  READEST_CHANGELOG_FILE: 'https://example.com/release-notes.json',
-  READEST_NIGHTLY_UPDATER_FILE: 'https://example.com/nightly/latest.json',
+  WELLREAD_UPDATER_FILE: 'https://example.com/latest.json',
+  WELLREAD_CHANGELOG_FILE: 'https://example.com/release-notes.json',
+  WELLREAD_NIGHTLY_UPDATER_FILE: 'https://example.com/nightly/latest.json',
 }));
 ```
 
@@ -497,9 +497,9 @@ In `src/helpers/updater.ts`, update the imports at the top:
 import { getAppVersion, isUpdateNewer } from '@/utils/version';
 import {
   CHECK_UPDATE_INTERVAL_SEC,
-  READEST_CHANGELOG_FILE,
-  READEST_UPDATER_FILE,
-  READEST_NIGHTLY_UPDATER_FILE,
+  WELLREAD_CHANGELOG_FILE,
+  WELLREAD_UPDATER_FILE,
+  WELLREAD_NIGHTLY_UPDATER_FILE,
 } from '@/services/constants';
 ```
 
@@ -568,12 +568,12 @@ export const resolveNightlyUpdate = async (
   fetchFn: FetchFn,
 ): Promise<ResolvedNightlyUpdate | null> => {
   const [nightly, stable] = await Promise.all([
-    fetchManifest(fetchFn, READEST_NIGHTLY_UPDATER_FILE),
-    fetchManifest(fetchFn, READEST_UPDATER_FILE),
+    fetchManifest(fetchFn, WELLREAD_NIGHTLY_UPDATER_FILE),
+    fetchManifest(fetchFn, WELLREAD_UPDATER_FILE),
   ]);
   const sources: Array<[UpdateManifest | null, string]> = [
-    [nightly, READEST_NIGHTLY_UPDATER_FILE],
-    [stable, READEST_UPDATER_FILE],
+    [nightly, WELLREAD_NIGHTLY_UPDATER_FILE],
+    [stable, WELLREAD_UPDATER_FILE],
   ];
   const candidates: ResolvedNightlyUpdate[] = [];
   for (const [manifest, endpoint] of sources) {
@@ -690,8 +690,8 @@ export const checkForAppUpdates = async (
     const platformKey = getNightlyPlatformKey(
       OS_TYPE,
       osArch(),
-      Boolean((window as { __READEST_IS_PORTABLE?: boolean }).__READEST_IS_PORTABLE),
-      Boolean((window as { __READEST_IS_APPIMAGE?: boolean }).__READEST_IS_APPIMAGE),
+      Boolean((window as { __WELLREAD_IS_PORTABLE?: boolean }).__WELLREAD_IS_PORTABLE),
+      Boolean((window as { __WELLREAD_IS_APPIMAGE?: boolean }).__WELLREAD_IS_APPIMAGE),
     );
     if (!platformKey) return false;
     const resolved = await resolveNightlyUpdate(getAppVersion(), platformKey, tauriFetch as never);
@@ -708,7 +708,7 @@ export const checkForAppUpdates = async (
 
 Keep the rest of the stable branch (`macos/windows/linux` + `android`) exactly as it is today.
 
-Note on the portable flag: confirm the global used to detect the portable build (search `__READEST_IS_PORTABLE` / `isPortableApp` in `src/services/nativeAppService.ts`). If the portable build is detected via a different global, use that one. The AppImage global `__READEST_IS_APPIMAGE` is confirmed in `nativeAppService.ts:554`.
+Note on the portable flag: confirm the global used to detect the portable build (search `__WELLREAD_IS_PORTABLE` / `isPortableApp` in `src/services/nativeAppService.ts`). If the portable build is detected via a different global, use that one. The AppImage global `__WELLREAD_IS_APPIMAGE` is confirmed in `nativeAppService.ts:554`.
 
 - [ ] **Step 4: Update the callers**
 
@@ -995,7 +995,7 @@ In `src/components/UpdaterWindow.tsx`, change `setUpdaterWindowVisible` to accep
 ```typescript
 import type { ResolvedNightlyUpdate } from '@/helpers/updater';
 import { verifyUpdateSignature, installNightlyUpdate, installPackage } from '@/utils/bridge';
-import { READEST_UPDATER_PUBKEY } from '@/services/constants';
+import { WELLREAD_UPDATER_PUBKEY } from '@/services/constants';
 
 export const setUpdaterWindowVisible = (
   visible: boolean,
@@ -1053,10 +1053,10 @@ const buildNightlyUpdate = (n: ResolvedNightlyUpdate): GenericUpdate => ({
       return;
     }
     // Windows-portable / Linux-AppImage / Android: download, verify, install.
-    const fileName = n.url.split('/').pop() || `Readest_${n.version}`;
+    const fileName = n.url.split('/').pop() || `Wellread_${n.version}`;
     const filePath = await appService!.resolveFilePath(fileName, 'Cache');
     await downloadWithProgress(n.url, filePath, onEvent);
-    const ok = await verifyUpdateSignature(filePath, n.signature, READEST_UPDATER_PUBKEY);
+    const ok = await verifyUpdateSignature(filePath, n.signature, WELLREAD_UPDATER_PUBKEY);
     if (!ok) {
       console.error('Nightly signature verification failed; aborting install');
       throw new Error('Signature verification failed');
@@ -1072,7 +1072,7 @@ const buildNightlyUpdate = (n: ResolvedNightlyUpdate): GenericUpdate => ({
       setTimeout(async () => { await exit(0); }, 500);
     } else {
       // windows portable
-      const command = Command.create('start-readest', ['/C', 'start', '', filePath]);
+      const command = Command.create('start-wellread', ['/C', 'start', '', filePath]);
       await command.spawn();
       setTimeout(async () => { await exit(0); }, 500);
     }
@@ -1210,7 +1210,7 @@ jobs:
       - name: install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
       - name: setup vendors
-        run: pnpm --filter @readest/readest-app setup-vendors
+        run: pnpm --filter @wellread/wellread-app setup-vendors
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
@@ -1276,11 +1276,11 @@ jobs:
           popd
           apk_path=src-tauri/gen/android/app/build/outputs/apk/universal/release
           pnpm tauri android build
-          cp ${apk_path}/app-universal-release.apk Readest_${version}_universal.apk
+          cp ${apk_path}/app-universal-release.apk Wellread_${version}_universal.apk
           pnpm tauri android build -t aarch64
-          cp ${apk_path}/app-universal-release.apk Readest_${version}_arm64.apk
-          pnpm tauri signer sign Readest_${version}_universal.apk
-          pnpm tauri signer sign Readest_${version}_arm64.apk
+          cp ${apk_path}/app-universal-release.apk Wellread_${version}_arm64.apk
+          pnpm tauri signer sign Wellread_${version}_universal.apk
+          pnpm tauri signer sign Wellread_${version}_arm64.apk
 
       - name: build desktop
         if: matrix.config.release != 'android'
@@ -1409,4 +1409,4 @@ Run: `pnpm tauri dev`, enable Settings → "Nightly Builds (Unstable)", trigger 
 ## Self-review notes
 
 - **Spec coverage:** comparator (A1/A2), setting + toggle (B1/B2), isolated dual-manifest check with filter-then-compare (C1/C2), single-source decision passed to the window (C2/D4), sig verification everywhere — Tauri-built-in for mac/NSIS + minisign command for portable/AppImage/Android (D1/D2/D4), macOS `.app.tar.gz` auto-replace via Tauri updater (D2/D4), CI R2-only with version-patch-after-checkout + fragment assembly + atomic promote + prune + failure alert (E1), friendly version + error UI states (D4). Android versionCode left Tauri-derived per the owner's correction (no task needed).
-- **Known verification points** (flagged inline, not placeholders): the `tauri-plugin-updater` 2.10.1 `UpdaterBuilder`/`download_and_install` signatures (D2), the `updater.pubkey` base64 decode shape for minisign (D1), the exact portable-build global (`__READEST_IS_PORTABLE`) in C2, and the per-leg artifact glob/fragment shell in E1.
+- **Known verification points** (flagged inline, not placeholders): the `tauri-plugin-updater` 2.10.1 `UpdaterBuilder`/`download_and_install` signatures (D2), the `updater.pubkey` base64 decode shape for minisign (D1), the exact portable-build global (`__WELLREAD_IS_PORTABLE`) in C2, and the per-leg artifact glob/fragment shell in E1.

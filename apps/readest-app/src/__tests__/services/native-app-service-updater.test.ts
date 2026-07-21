@@ -87,7 +87,7 @@ describe('NativeAppService updater gating (issue #4874)', () => {
   beforeEach(() => {
     invokeMock.mockClear();
     updaterDisabled = false;
-    delete (window as { __READEST_UPDATER_DISABLED?: boolean }).__READEST_UPDATER_DISABLED;
+    delete (window as { __WELLREAD_UPDATER_DISABLED?: boolean }).__WELLREAD_UPDATER_DISABLED;
   });
 
   test('disables the in-app updater when Rust reports it is disabled', async () => {

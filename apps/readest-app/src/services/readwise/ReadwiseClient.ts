@@ -5,7 +5,7 @@ import { isTauriAppPlatform } from '@/services/environment';
 import { buildAnnotationWebUrl } from '@/utils/deeplink';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 
-const READEST_TO_READWISE_COLOR: Record<HighlightColor, string> = {
+const WELLREAD_TO_READWISE_COLOR: Record<HighlightColor, string> = {
   red: 'pink',
   yellow: 'yellow',
   green: 'green',
@@ -73,7 +73,7 @@ export class ReadwiseClient {
       title: book.title,
       author: book.author,
       ...(isPublicUrl(book.coverImageUrl) ? { image_url: book.coverImageUrl } : {}),
-      source_type: 'readest',
+      source_type: 'wellread',
       category: 'books',
       note: note.note || undefined,
       location: note.page,
@@ -84,7 +84,7 @@ export class ReadwiseClient {
         noteId: note.id,
         cfi: note.cfi,
       }),
-      color: note.color ? (READEST_TO_READWISE_COLOR[note.color] ?? 'yellow') : 'yellow',
+      color: note.color ? (WELLREAD_TO_READWISE_COLOR[note.color] ?? 'yellow') : 'yellow',
     }));
 
     try {

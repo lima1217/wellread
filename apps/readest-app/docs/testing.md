@@ -1,6 +1,6 @@
 # Testing
 
-Readest uses three test tiers, all powered by [Vitest](https://vitest.dev/).
+Wellread uses three Vitest tiers: unit (jsdom), browser (Chromium), and Tauri (WebView IPC). Pick the tier that matches the APIs under test.
 
 ## Unit Tests (`pnpm test`)
 
@@ -84,7 +84,7 @@ The `invoke()` helper accesses `window.top.__TAURI_INTERNALS__` (Vitest runs in 
 
 ## Android Device E2E (`pnpm test:android`)
 
-Drives the **installed Readest app** on an adb-connected Android device or
+Drives the **installed Wellread app** on an adb-connected Android device or
 emulator: gestures are injected with `adb shell input`, and the app's state is
 probed through the WebView's **Chrome DevTools Protocol** (forwarded from the
 `webview_devtools_remote_<pid>` abstract socket). This is the only lane that

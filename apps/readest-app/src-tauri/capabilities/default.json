@@ -30,7 +30,7 @@
       "identifier": "fs:scope-appdata-recursive",
       "allow": [
         {
-          "path": "$APPDATA/Readest/**/*"
+          "path": "$APPDATA/Wellread/**/*"
         }
       ],
       "deny": []
@@ -55,10 +55,10 @@
       "identifier": "fs:scope",
       "allow": [
         {
-          "path": "**/Readest"
+          "path": "**/Wellread"
         },
         {
-          "path": "**/Readest/**/*"
+          "path": "**/Wellread/**/*"
         },
         {
           "path": "**/com.github.johnfactotum.Foliate/**/*"
@@ -139,14 +139,14 @@
       "identifier": "shell:allow-spawn",
       "allow": [
         {
-          "name": "start-readest",
+          "name": "start-wellread",
           "cmd": "cmd",
           "args": [
             "/C",
             "start",
             "",
             {
-              "validator": "^.*Readest(.*)\\.exe$"
+              "validator": "^.*Wellread(.*)\\.exe$"
             }
           ]
         },
@@ -156,7 +156,7 @@
           "args": [
             "+x",
             {
-              "validator": "^.*Readest(.*)\\.AppImage$"
+              "validator": "^.*Wellread(.*)\\.AppImage$"
             }
           ]
         },
@@ -165,7 +165,7 @@
           "cmd": "setsid",
           "args": [
             {
-              "validator": "^.*Readest(.*)\\.AppImage$"
+              "validator": "^.*Wellread(.*)\\.AppImage$"
             }
           ]
         }

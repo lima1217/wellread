@@ -35,7 +35,7 @@ describe('transformBookNoteToDB with xpointer fields', () => {
     expect(dbNote.cfi).toBe('epubcfi(/6/4!/4/2/1:0)');
   });
 
-  it('handles missing xpointer fields (Readest-only note)', () => {
+  it('handles missing xpointer fields (Wellread-only note)', () => {
     const note: BookNote = {
       bookHash: 'abc123',
       id: 'note2',

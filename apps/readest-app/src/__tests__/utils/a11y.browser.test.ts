@@ -9,7 +9,7 @@ import { handleA11yNavigation } from '@/utils/a11y';
 // This needs the real :has() engine, so it runs as a browser test.
 const PARAGRAPH_SELECTOR = 'p, blockquote, dd, div:not(:has(*:not(b, a, em, i, strong, u, span)))';
 
-const NEXT_SECTION_ID = 'readest-skip-link-next-section';
+const NEXT_SECTION_ID = 'wellread-skip-link-next-section';
 
 const makeOptions = () => ({
   skipToLastPosCallback: () => {},

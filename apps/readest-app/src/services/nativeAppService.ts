@@ -57,9 +57,9 @@ import {
 
 declare global {
   interface Window {
-    __READEST_IS_EINK?: boolean;
-    __READEST_IS_APPIMAGE?: boolean;
-    __READEST_UPDATER_DISABLED?: boolean;
+    __WELLREAD_IS_EINK?: boolean;
+    __WELLREAD_IS_APPIMAGE?: boolean;
+    __WELLREAD_UPDATER_DISABLED?: boolean;
   }
 }
 
@@ -562,7 +562,7 @@ export const nativeFileSystem: FileSystem = {
   },
 };
 
-const DIST_CHANNEL = (process.env['NEXT_PUBLIC_DIST_CHANNEL'] || 'readest') as DistChannel;
+const DIST_CHANNEL = (process.env['NEXT_PUBLIC_DIST_CHANNEL'] || 'wellread') as DistChannel;
 
 export class NativeAppService extends BaseAppService {
   fs = nativeFileSystem;
@@ -576,8 +576,8 @@ export class NativeAppService extends BaseAppService {
   override isWindowsApp = OS_TYPE === 'windows';
   override isMobileApp = ['android', 'ios'].includes(OS_TYPE);
   override isDesktopApp = ['macos', 'windows', 'linux'].includes(OS_TYPE);
-  override isAppImage = Boolean(window.__READEST_IS_APPIMAGE);
-  override isEink = Boolean(window.__READEST_IS_EINK);
+  override isAppImage = Boolean(window.__WELLREAD_IS_APPIMAGE);
+  override isEink = Boolean(window.__WELLREAD_IS_EINK);
   override hasTrafficLight = OS_TYPE === 'macos';
   override hasWindow = !(OS_TYPE === 'ios' || OS_TYPE === 'android');
   override hasWindowBar = !(OS_TYPE === 'ios' || OS_TYPE === 'android');
@@ -591,7 +591,7 @@ export class NativeAppService extends BaseAppService {
   override hasUpdater =
     OS_TYPE !== 'ios' &&
     !process.env['NEXT_PUBLIC_DISABLE_UPDATER'] &&
-    !window.__READEST_UPDATER_DISABLED;
+    !window.__WELLREAD_UPDATER_DISABLED;
   // orientation lock is not supported on iPad
   override hasOrientationLock =
     (OS_TYPE === 'ios' && getOSPlatform() === 'ios') || OS_TYPE === 'android';
@@ -625,9 +625,9 @@ export class NativeAppService extends BaseAppService {
   override async init() {
     const execDir = await invoke<string>('get_executable_dir');
     this.execDir = execDir;
-    // Ask Rust whether the in-app updater must stay hidden (READEST_DISABLE_UPDATER,
+    // Ask Rust whether the in-app updater must stay hidden (WELLREAD_DISABLE_UPDATER,
     // Flatpak, or a Linux deb/rpm/pacman install that Tauri can't self-update). The
-    // command is the reliable source of truth; the `__READEST_UPDATER_DISABLED`
+    // command is the reliable source of truth; the `__WELLREAD_UPDATER_DISABLED`
     // init-script global isn't dependable on every Linux/WebKitGTK setup (#4874).
     if (this.isDesktopApp) {
       try {

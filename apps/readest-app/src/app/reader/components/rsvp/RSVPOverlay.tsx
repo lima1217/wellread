@@ -69,10 +69,10 @@ const ContextWord = React.memo(function ContextWord({
 const FONT_SIZE_OPTIONS = [1.25, 1.5, 1.875, 2.25, 3, 3.75, 4.25, 5, 6, 8];
 const DEFAULT_FONT_SIZE_INDEX = 4;
 const ORP_COLOR_OPTIONS = ['', '#EF4444', '#3B82F6', '#22C55E', '#F97316', '#A855F7'];
-const STORAGE_KEY_FONT_SIZE = 'readest_rsvp_fontsize';
-const STORAGE_KEY_ORP_COLOR = 'readest_rsvp_orp_color';
-const STORAGE_KEY_CONTEXT = 'readest_rsvp_context';
-const STORAGE_KEY_HIGHLIGHT_WORD = 'readest_rsvp_cjk_highlight_word';
+const STORAGE_KEY_FONT_SIZE = 'wellread_rsvp_fontsize';
+const STORAGE_KEY_ORP_COLOR = 'wellread_rsvp_orp_color';
+const STORAGE_KEY_CONTEXT = 'wellread_rsvp_context';
+const STORAGE_KEY_HIGHLIGHT_WORD = 'wellread_rsvp_cjk_highlight_word';
 
 // Context panel windowing — long sections (e.g. AZW3 chapters with 40k+ words)
 // would otherwise render tens of thousands of <span> elements and freeze the UI

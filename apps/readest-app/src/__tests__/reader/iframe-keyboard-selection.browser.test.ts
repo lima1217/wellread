@@ -33,7 +33,7 @@ afterEach(() => {
 
 describe('extendSelectionFromContents (#4728)', () => {
   test('Shift+ArrowRight extends the selection by a character', () => {
-    const { doc, win } = renderSection('<p>Hello world from Readest</p>');
+    const { doc, win } = renderSection('<p>Hello world from Wellread</p>');
     const sel = selectRange(win, doc.querySelector('p')!.firstChild!, 0, 5); // "Hello"
 
     const handled = extendSelectionFromContents(
@@ -48,7 +48,7 @@ describe('extendSelectionFromContents (#4728)', () => {
   });
 
   test('Ctrl+Shift+ArrowRight extends the selection by a word', () => {
-    const { doc, win } = renderSection('<p>Hello world from Readest</p>');
+    const { doc, win } = renderSection('<p>Hello world from Wellread</p>');
     const sel = selectRange(win, doc.querySelector('p')!.firstChild!, 0, 5); // "Hello"
 
     extendSelectionFromContents(
@@ -62,7 +62,7 @@ describe('extendSelectionFromContents (#4728)', () => {
   });
 
   test('Alt(Option)+Shift+ArrowRight extends by a word (macOS modifier)', () => {
-    const { doc, win } = renderSection('<p>Hello world from Readest</p>');
+    const { doc, win } = renderSection('<p>Hello world from Wellread</p>');
     const sel = selectRange(win, doc.querySelector('p')!.firstChild!, 0, 5);
 
     extendSelectionFromContents(
@@ -75,7 +75,7 @@ describe('extendSelectionFromContents (#4728)', () => {
   });
 
   test('Shift+ArrowLeft moves the active edge back by a character', () => {
-    const { doc, win } = renderSection('<p>Hello world from Readest</p>');
+    const { doc, win } = renderSection('<p>Hello world from Wellread</p>');
     const sel = selectRange(win, doc.querySelector('p')!.firstChild!, 0, 5); // "Hello"
 
     extendSelectionFromContents([{ doc }], { key: 'ArrowLeft', shiftKey: true }, true);
@@ -84,7 +84,7 @@ describe('extendSelectionFromContents (#4728)', () => {
   });
 
   test('with extend=false it reports the selection but does not modify it', () => {
-    const { doc, win } = renderSection('<p>Hello world from Readest</p>');
+    const { doc, win } = renderSection('<p>Hello world from Wellread</p>');
     const sel = selectRange(win, doc.querySelector('p')!.firstChild!, 0, 5);
 
     // Mirrors the iframe-focused case: the browser already extended natively, so
@@ -100,7 +100,7 @@ describe('extendSelectionFromContents (#4728)', () => {
   });
 
   test('returns false when no selection is active so navigation still works', () => {
-    const { doc, win } = renderSection('<p>Hello world from Readest</p>');
+    const { doc, win } = renderSection('<p>Hello world from Wellread</p>');
     win.getSelection()!.removeAllRanges();
 
     const handled = extendSelectionFromContents(
@@ -113,7 +113,7 @@ describe('extendSelectionFromContents (#4728)', () => {
   });
 
   test('returns false when Meta/Cmd is held (reserved for native line selection)', () => {
-    const { doc, win } = renderSection('<p>Hello world from Readest</p>');
+    const { doc, win } = renderSection('<p>Hello world from Wellread</p>');
     const sel = selectRange(win, doc.querySelector('p')!.firstChild!, 0, 5);
 
     const handled = extendSelectionFromContents(

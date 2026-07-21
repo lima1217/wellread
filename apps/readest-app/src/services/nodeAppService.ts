@@ -16,7 +16,7 @@ import {
   LOCAL_IMAGES_SUBDIR,
 } from './constants';
 
-const APP_NAME = 'Readest';
+const APP_NAME = 'Wellread';
 
 // System directory getters matching Tauri's appDataDir, appConfigDir, etc.
 function getAppDataDir(): string {

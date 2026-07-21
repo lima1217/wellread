@@ -126,7 +126,7 @@ describe('NativeAppService.saveImageToGallery', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     saveImageToGalleryMock.mockResolvedValue({
       success: false,
-      error: 'Failed to build unique file: /storage/emulated/0/Pictures/Readest image.png',
+      error: 'Failed to build unique file: /storage/emulated/0/Pictures/Wellread image.png',
     });
 
     const saved = await service.saveImageToGallery('image.png', pngBytes(), 'image/png');
@@ -136,7 +136,7 @@ describe('NativeAppService.saveImageToGallery', () => {
     // undiagnosable from a bug report.
     expect(consoleError).toHaveBeenCalledWith(
       expect.stringContaining('Failed to save image to gallery'),
-      'Failed to build unique file: /storage/emulated/0/Pictures/Readest image.png',
+      'Failed to build unique file: /storage/emulated/0/Pictures/Wellread image.png',
     );
   });
 });

@@ -139,9 +139,9 @@ describe('statistics migration', () => {
     expect(names).toContain('page_stat_data');
     expect(names).toContain('numbers');
     expect(names).toContain('page_stat'); // the rescaling view
-    expect(names).toContain('readest_page_ext');
-    expect(names).toContain('readest_book_ext');
-    expect(names).toContain('readest_stat_sync_state');
+    expect(names).toContain('wellread_page_ext');
+    expect(names).toContain('wellread_book_ext');
+    expect(names).toContain('wellread_stat_sync_state');
   });
 
   it('seeds the numbers helper table 1..1000', async () => {
@@ -223,16 +223,16 @@ In `src/services/database/migrations/index.ts`, add a new key to the `migrations
             JOIN (SELECT number as idx FROM numbers) AS N ON idx <= (last_page - first_page + 1)
           );
 
-        CREATE TABLE IF NOT EXISTS readest_page_ext (
+        CREATE TABLE IF NOT EXISTS wellread_page_ext (
           book_hash text NOT NULL, page integer NOT NULL, start_time integer NOT NULL,
           ext text, PRIMARY KEY (book_hash, page, start_time)
         );
 
-        CREATE TABLE IF NOT EXISTS readest_book_ext (
+        CREATE TABLE IF NOT EXISTS wellread_book_ext (
           book_hash text PRIMARY KEY, ext text
         );
 
-        CREATE TABLE IF NOT EXISTS readest_stat_sync_state (
+        CREATE TABLE IF NOT EXISTS wellread_stat_sync_state (
           key text PRIMARY KEY, value integer NOT NULL DEFAULT 0
         );
       `,
@@ -458,7 +458,7 @@ export class StatisticsDb {
 
   async getCursor(key: CursorKey): Promise<number> {
     const rows = await this.db.select<{ value: number }>(
-      `SELECT value FROM readest_stat_sync_state WHERE key = ?`,
+      `SELECT value FROM wellread_stat_sync_state WHERE key = ?`,
       [key],
     );
     return rows[0]?.value ?? 0;
@@ -466,7 +466,7 @@ export class StatisticsDb {
 
   async setCursor(key: CursorKey, value: number): Promise<void> {
     await this.db.execute(
-      `INSERT INTO readest_stat_sync_state (key, value) VALUES (?, ?)
+      `INSERT INTO wellread_stat_sync_state (key, value) VALUES (?, ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       [key, value],
     );

@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { IoAlertCircleOutline, IoBookOutline, IoOpenOutline } from 'react-icons/io5';
-import { DOWNLOAD_READEST_URL, READEST_WEB_BASE_URL } from '@/services/constants';
+import { DOWNLOAD_WELLREAD_URL, WELLREAD_WEB_BASE_URL } from '@/services/constants';
 import { useTranslation } from '@/hooks/useTranslation';
 import { buildAnnotationAppUrl } from '@/utils/deeplink';
 import { BrandHeader } from '@/components/landing/BrandHeader';
@@ -25,13 +25,13 @@ const detectPlatform = (): Platform => {
   return 'desktop';
 };
 
-const ANDROID_PACKAGE = 'com.bilingify.readest';
+const ANDROID_PACKAGE = 'com.bilingify.wellread';
 const FALLBACK_TIMEOUT_MS = 1500;
 const DESKTOP_FALLBACK_DELAY_MS = 1000;
 
 const buildIntentUrl = (path: string, fallbackUrl: string) => {
   const cleanPath = path.replace(/^\//, '');
-  return `intent://${cleanPath}#Intent;scheme=readest;package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(fallbackUrl)};end`;
+  return `intent://${cleanPath}#Intent;scheme=wellread;package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(fallbackUrl)};end`;
 };
 
 const buildWebReaderUrl = (bookHash: string, cfi: string | null): string => {
@@ -69,7 +69,7 @@ const OpenAnnotationLanding = () => {
     const path = `book/${bookHash}/annotation/${noteId}${cfi ? `?cfi=${encodeURIComponent(cfi)}` : ''}`;
 
     if (platform === 'android-chromium') {
-      const absoluteFallback = `${READEST_WEB_BASE_URL}${webReaderUrl}`;
+      const absoluteFallback = `${WELLREAD_WEB_BASE_URL}${webReaderUrl}`;
       window.location.replace(buildIntentUrl(path, absoluteFallback));
       return;
     }
@@ -186,7 +186,7 @@ const OpenAnnotationLanding = () => {
           <p className='text-base-content/60 mt-3 text-center text-xs'>
             {_("Don't have Wellread?")}{' '}
             <a
-              href={DOWNLOAD_READEST_URL}
+              href={DOWNLOAD_WELLREAD_URL}
               target='_blank'
               rel='noopener'
               className='text-primary font-medium hover:underline'

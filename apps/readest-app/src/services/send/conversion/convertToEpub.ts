@@ -552,7 +552,7 @@ export async function convertPageToEpub(html: string, url: string): Promise<Conv
 }
 
 /**
- * Convert a document Readest cannot open natively into an EPUB. Runs entirely
+ * Convert a document Wellread cannot open natively into an EPUB. Runs entirely
  * client-side (browser or Tauri webview) — meant to be called inside a Web
  * Worker so the heavy parsing never blocks the UI thread.
  */

@@ -16,12 +16,12 @@ const DEFAULT_CJK_CHAR_MODE = false;
 const DEFAULT_START_DELAY_SECONDS = 3;
 const START_DELAY_OPTIONS = [0, 1, 2, 3];
 
-const STORAGE_KEY_PREFIX = 'readest_rsvp_wpm_';
-const PUNCTUATION_PAUSE_KEY_PREFIX = 'readest_rsvp_pause_';
-const POSITION_KEY_PREFIX = 'readest_rsvp_pos_';
-const SPLIT_HYPHENS_KEY = 'readest_rsvp_split_hyphens';
-const CJK_CHAR_MODE_KEY = 'readest_rsvp_cjk_char_mode';
-const START_DELAY_KEY = 'readest_rsvp_start_delay';
+const STORAGE_KEY_PREFIX = 'wellread_rsvp_wpm_';
+const PUNCTUATION_PAUSE_KEY_PREFIX = 'wellread_rsvp_pause_';
+const POSITION_KEY_PREFIX = 'wellread_rsvp_pos_';
+const SPLIT_HYPHENS_KEY = 'wellread_rsvp_split_hyphens';
+const CJK_CHAR_MODE_KEY = 'wellread_rsvp_cjk_char_mode';
+const START_DELAY_KEY = 'wellread_rsvp_start_delay';
 
 // Section-only CFI (no '!') sorts before any word CFI in that section.
 const stripCfiPath = (cfi: string): string => cfi.replace(/!.*\)$/, ')');

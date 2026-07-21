@@ -1,5 +1,5 @@
 /**
- * UpdaterContent — the "What's New in Readest" changelog.
+ * UpdaterContent — the "What's New in Wellread" changelog.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
@@ -39,9 +39,9 @@ vi.mock('@/helpers/updater', () => ({
 }));
 
 vi.mock('@/services/constants', () => ({
-  READEST_UPDATER_FILE: 'https://example.com/latest.json',
-  READEST_CHANGELOG_FILE: 'https://example.com/release-notes.json',
-  READEST_UPDATER_PUBKEY: 'pk',
+  WELLREAD_UPDATER_FILE: 'https://example.com/latest.json',
+  WELLREAD_CHANGELOG_FILE: 'https://example.com/release-notes.json',
+  WELLREAD_UPDATER_PUBKEY: 'pk',
 }));
 
 // ── Tauri / heavy modules pulled in by UpdaterWindow's top-level imports ──

@@ -2,7 +2,7 @@ use std::{env, fs, path::PathBuf, process::Command};
 
 fn main() {
     println!(
-        "cargo:rustc-env=READEST_TARGET={}",
+        "cargo:rustc-env=WELLREAD_TARGET={}",
         env::var("TARGET").expect("TARGET not set")
     );
     println!("cargo:rerun-if-changed=../extensions/windows-thumbnail/src");

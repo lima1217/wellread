@@ -74,7 +74,7 @@ const parseIntentOpenWithFiles = async (appService: AppService | null) => {
  * Decide whether an "Open with" file intent should open as a transient book
  * (straight to the reader, no library write) or be imported into the library.
  *
- * Only Android's `VIEW` intent (the system "Open with Readest" chooser) can be
+ * Only Android's `VIEW` intent (the system "Open with Wellread" chooser) can be
  * transient, and only when the user has turned off "Auto Import on File Open".
  * Every other case — a share-sheet `SEND` capture, or `VIEW` with auto-import
  * on — imports the file so it persists in the library (and syncs to the cloud

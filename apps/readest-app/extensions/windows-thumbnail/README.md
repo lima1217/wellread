@@ -1,13 +1,13 @@
-# Windows Thumbnail Provider for Readest
+# Windows thumbnail provider for Wellread
 
-This crate provides Windows Explorer thumbnail support for eBook files when Readest is set as the default application.
+This crate provides Windows Explorer thumbnail support for eBook files when Wellread is set as the default application.
 
 ## Features
 
 - **Automatic Cover Extraction**: Extracts cover images from EPUB, MOBI, AZW, AZW3, FB2, CBZ, CBR files
-- **Readest Branding**: Adds a small Readest icon overlay at the bottom-right corner
+- **Wellread Branding**: Adds a small Wellread icon overlay at the bottom-right corner
 - **Smart Caching**: Caches generated thumbnails for faster subsequent loads
-- **File Association Aware**: Only shows thumbnails when Readest is the default app for the file type
+- **File Association Aware**: Only shows thumbnails when Wellread is the default app for the file type
 - **COM Integration**: Full Windows Shell extension implementation via `IThumbnailProvider`
 
 ## Supported Formats
@@ -43,7 +43,7 @@ cargo build --release --features cli
 
 ## Installation
 
-The thumbnail provider DLL is automatically registered when Readest is installed via the NSIS installer.
+The thumbnail provider DLL is automatically registered when Wellread is installed via the NSIS installer.
 
 ### Manual Registration (for development)
 
@@ -62,7 +62,7 @@ After registration, you may need to restart Windows Explorer or log out/in for c
 
 ## Usage (Development / Manual testing)
 
-For local development and testing, build the Windows DLL (or the library) from the Readest Tauri app folder and register it manually. The legacy CLI test harness used to live in the separate `packages/tauri` workspace, but the thumbnail handler implementation now lives inside Readest's Tauri app.
+For local development and testing, build the Windows DLL (or the library) from the Wellread Tauri app folder and register it manually. The legacy CLI test harness used to live in the separate `packages/tauri` workspace, but the thumbnail handler implementation now lives inside Wellread's Tauri app.
 
 Build the DLL (for Windows explorer integration):
 
@@ -71,7 +71,7 @@ cd apps/readest-app/src-tauri
 cargo build --release --manifest-path Cargo.toml --features com
 ```
 
-The standalone CLI test harness is no longer distributed with the app. To test the thumbnail provider locally, build and register the DLL as shown above and use a small test harness that imports `readestlib`'s thumbnail code or use Explorer after registering the handler.
+The standalone CLI test harness is no longer distributed with the app. To test the thumbnail provider locally, build and register the DLL as shown above and use a small test harness that imports `wellreadlib`'s thumbnail code or use Explorer after registering the handler.
 
 Manual registration for development (register the generated DLL):
 
@@ -86,7 +86,7 @@ regsvr32 /s /u target\release\windows_thumbnail.dll
 ie4uinit.exe -show
 ```
 
-This generates a thumbnail with the Readest overlay at the specified size.
+This generates a thumbnail with the Wellread overlay at the specified size.
 
 ## Architecture
 
@@ -99,13 +99,13 @@ This generates a thumbnail with the Readest overlay at the specified size.
 │                          │         │                             │
 │                          │         ▼                             │
 │                          │    Check File Association             │
-│                          │    (is Readest the default?)          │
+│                          │    (is Wellread the default?)          │
 │                          │         │                             │
 │                          │         ▼ (if yes)                    │
 │                          │    Extract Cover Image                │
 │                          │         │                             │
 │                          │         ▼                             │
-│                          │    Add Readest Overlay                │
+│                          │    Add Wellread Overlay                │
 │                          │         │                             │
 │                          │         ▼                             │
 │                          │    Return HBITMAP                     │
@@ -123,11 +123,11 @@ This generates a thumbnail with the Readest overlay at the specified size.
 
 1. When Windows Explorer needs a thumbnail, it queries the registered shell extension
 2. The COM DLL implements `IInitializeWithItem` to receive the file path
-3. It checks if Readest.exe is the default application for that file type using `AssocQueryStringW`
-4. If Readest is the default, it extracts the cover and generates the thumbnail
-5. If Readest is NOT the default, it returns `S_FALSE` to let Windows use other handlers
+3. It checks if Wellread.exe is the default application for that file type using `AssocQueryStringW`
+4. If Wellread is the default, it extracts the cover and generates the thumbnail
+5. If Wellread is NOT the default, it returns `S_FALSE` to let Windows use other handlers
 
-This ensures thumbnails only appear for files the user has associated with Readest.
+This ensures thumbnails only appear for files the user has associated with Wellread.
 
 ## License
 

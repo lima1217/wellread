@@ -2,7 +2,7 @@ import type { EpubImage } from './types';
 
 /**
  * Synthetic cover image for clipped articles. Produces a 600×900 SVG
- * (2:3 — the standard book-cover aspect ratio Readest uses everywhere
+ * (2:3 — the standard book-cover aspect ratio Wellread uses everywhere
  * else) with a vivid two-tone layout:
  *
  *  - colored top block (theme color hashed from the author, so the same

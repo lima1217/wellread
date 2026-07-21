@@ -6,8 +6,8 @@ function createMockView() {
   return {} as FoliateView;
 }
 
-const LAST_POS_ID = 'readest-skip-link-last-pos';
-const NEXT_SECTION_ID = 'readest-skip-link-next-section';
+const LAST_POS_ID = 'wellread-skip-link-last-pos';
+const NEXT_SECTION_ID = 'wellread-skip-link-next-section';
 
 const cleanupSkipLinks = () => {
   document.getElementById(LAST_POS_ID)?.remove();
