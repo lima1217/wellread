@@ -61,7 +61,6 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-webdriver",
  "tauri-plugin-websocket",
- "tauri-plugin-webview-upgrade",
  "tauri-plugin-window-state",
  "thiserror 2.0.18",
  "tokio",
@@ -8115,13 +8114,6 @@ dependencies = [
  "tokio-tungstenite",
 ]
 
-[[package]]
-name = "tauri-plugin-webview-upgrade"
-version = "0.1.0"
-dependencies = [
- "tauri",
- "tauri-plugin",
-]
 
 [[package]]
 name = "tauri-plugin-window-state"

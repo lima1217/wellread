@@ -100,7 +100,7 @@ flowchart TB
 
     subgraph Native["Tauri native host (Rust)"]
         TauriCore["src-tauri/src/lib.rs<br/>(commands, dir_scanner, transfer_file, clip_url)"]
-        Plugins["Tauri plugins<br/>(fs, dialog, http, oauth, deep-link, opener, updater,<br/>native-bridge, native-tts, turso, webview-upgrade)"]
+        Plugins["Tauri plugins<br/>(fs, dialog, http, oauth, deep-link, opener, updater,<br/>native-bridge, native-tts, turso)"]
     end
 
     subgraph Server["Next.js server (Worker / Node)"]
@@ -500,8 +500,6 @@ Everything else is delegated to **Tauri plugins**, mostly bundled in
   - `tauri-plugin-native-tts`: native text-to-speech
   - `tauri-plugin-turso`: embedded Turso/libSQL database for the native
     targets, mirrored by the WASM build used in the browser
-  - `tauri-plugin-webview-upgrade`: webview update flow on platforms where
-    that matters
 
 A subtle but important detail in `lib.rs`: `allow_paths_in_scopes` is the
 frontend-callable shim that extends both `fs_scope` and `asset_protocol_scope`
