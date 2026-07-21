@@ -501,12 +501,18 @@ const languagePanelItems = [
   },
 ];
 
-// ai panel items (ModelConfig)
+// ai panel items (ModelProfile list + detail)
 const aiPanelItems = [
   {
     id: 'settings.ai.enableAssistant',
     labelKey: _('Enable AI'),
     keywords: ['ai', 'assistant', 'enable', 'reading', 'llm', 'model'],
+    section: 'AI',
+  },
+  {
+    id: 'settings.ai.profiles',
+    labelKey: _('Profiles'),
+    keywords: ['profile', 'model', 'deepseek', 'openai', 'endpoint', 'active'],
     section: 'AI',
   },
   {

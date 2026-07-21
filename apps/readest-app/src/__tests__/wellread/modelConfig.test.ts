@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_MODEL_CONFIG,
   DEFAULT_PROFILE_NAME,
+  addProfile,
   getActiveProfile,
   mergeModelConfig,
   modelApiKeySecureItem,
@@ -9,9 +10,35 @@ import {
   removeProfile,
   renameProfile,
   resetDeepSeekDefaults,
+  setActiveProfile,
+  shouldHotReloadEve,
+  updateProfile,
   type ModelConfig,
   type ModelProfile,
 } from '@/services/wellread/modelConfig';
+
+const twoProfiles: ModelConfig = {
+  enabled: true,
+  activeProfileId: 'a',
+  profiles: [
+    {
+      id: 'a',
+      name: 'A',
+      baseURL: 'https://a.example/v1',
+      modelId: 'm-a',
+      contextWindowTokens: 1000,
+      apiMode: 'chat',
+    },
+    {
+      id: 'b',
+      name: 'B',
+      baseURL: 'https://b.example/v1',
+      modelId: 'm-b',
+      contextWindowTokens: 2000,
+      apiMode: 'chat',
+    },
+  ],
+};
 
 describe('ModelConfig (multi ModelProfile)', () => {
   it('defaults to one DeepSeek profile, disabled, with no apiKey on the profile', () => {
@@ -87,11 +114,15 @@ describe('ModelConfig (multi ModelProfile)', () => {
     });
   });
 
-  it('mergeModelConfig presets a DeepSeek profile when profiles is empty', () => {
-    const merged = mergeModelConfig({ enabled: true, profiles: [], activeProfileId: null });
-    expect(merged.profiles).toHaveLength(1);
-    expect(merged.activeProfileId).toBe(merged.profiles[0]!.id);
-    expect(merged.profiles[0]!.modelId).toBe('deepseek-v4-flash');
+  it('mergeModelConfig presets DeepSeek when profiles are omitted, keeps explicit empty list', () => {
+    const omitted = mergeModelConfig({ enabled: true });
+    expect(omitted.profiles).toHaveLength(1);
+    expect(omitted.activeProfileId).toBe(omitted.profiles[0]!.id);
+    expect(omitted.profiles[0]!.modelId).toBe('deepseek-v4-flash');
+
+    const emptied = mergeModelConfig({ enabled: true, profiles: [], activeProfileId: null });
+    expect(emptied.profiles).toEqual([]);
+    expect(emptied.activeProfileId).toBeNull();
   });
 
   it('getActiveProfile returns the active row or null when missing', () => {
@@ -178,42 +209,97 @@ describe('ModelConfig (multi ModelProfile)', () => {
   });
 
   it('removeProfile clears the row and reassigns active; rename keeps id', () => {
-    const config: ModelConfig = {
-      enabled: true,
-      activeProfileId: 'a',
-      profiles: [
-        {
-          id: 'a',
-          name: 'A',
-          baseURL: 'https://a.example/v1',
-          modelId: 'm-a',
-          contextWindowTokens: 1000,
-          apiMode: 'chat',
-        },
-        {
-          id: 'b',
-          name: 'B',
-          baseURL: 'https://b.example/v1',
-          modelId: 'm-b',
-          contextWindowTokens: 2000,
-          apiMode: 'chat',
-        },
-      ],
-    };
-    expect(removeProfile(config, 'a')).toEqual({
+    expect(removeProfile(twoProfiles, 'a')).toEqual({
       enabled: true,
       activeProfileId: 'b',
-      profiles: [config.profiles[1]],
+      profiles: [twoProfiles.profiles[1]],
     });
-    expect(removeProfile(config, 'a').profiles).toHaveLength(1);
-    expect(removeProfile({ ...config, profiles: [config.profiles[0]!] }, 'a')).toEqual({
+    expect(removeProfile(twoProfiles, 'a').profiles).toHaveLength(1);
+    expect(removeProfile({ ...twoProfiles, profiles: [twoProfiles.profiles[0]!] }, 'a')).toEqual({
       enabled: true,
       activeProfileId: null,
       profiles: [],
     });
-    expect(renameProfile(config, 'a', 'Alpha').profiles[0]).toMatchObject({
+    expect(renameProfile(twoProfiles, 'a', 'Alpha').profiles[0]).toMatchObject({
       id: 'a',
       name: 'Alpha',
     });
+  });
+
+  it('addProfile appends a DeepSeek-default row with a new id; activates when list was empty', () => {
+    const { config, profile } = addProfile(twoProfiles);
+    expect(config.profiles).toHaveLength(3);
+    expect(profile.id).toBeTruthy();
+    expect(profile.id).not.toBe('a');
+    expect(profile.id).not.toBe('b');
+    expect(profile).toMatchObject({
+      name: DEFAULT_PROFILE_NAME,
+      baseURL: 'https://api.deepseek.com/v1',
+      modelId: 'deepseek-v4-flash',
+      contextWindowTokens: 1_000_000,
+      apiMode: 'chat',
+    });
+    expect(config.activeProfileId).toBe('a');
+    expect(config.profiles[2]!.id).toBe(profile.id);
+
+    const fromEmpty = addProfile({ enabled: true, activeProfileId: null, profiles: [] });
+    expect(fromEmpty.config.profiles).toHaveLength(1);
+    expect(fromEmpty.config.activeProfileId).toBe(fromEmpty.profile.id);
+  });
+
+  it('setActiveProfile points at an existing id and no-ops for unknown ids', () => {
+    expect(setActiveProfile(twoProfiles, 'b').activeProfileId).toBe('b');
+    expect(setActiveProfile(twoProfiles, 'missing')).toBe(twoProfiles);
+  });
+
+  it('updateProfile patches fields on a named row without changing id or other rows', () => {
+    const next = updateProfile(twoProfiles, 'b', {
+      name: 'Work',
+      modelId: 'gpt-x',
+      baseURL: 'https://work.example/v1',
+      contextWindowTokens: 32_000,
+      apiMode: 'responses',
+    });
+    expect(next.profiles[0]).toEqual(twoProfiles.profiles[0]);
+    expect(next.profiles[1]).toEqual({
+      id: 'b',
+      name: 'Work',
+      baseURL: 'https://work.example/v1',
+      modelId: 'gpt-x',
+      contextWindowTokens: 32_000,
+      apiMode: 'responses',
+    });
+    expect(updateProfile(twoProfiles, 'missing', { name: 'Nope' })).toBe(twoProfiles);
+  });
+
+  it('shouldHotReloadEve when active pointer changes or the active profile is edited', () => {
+    expect(
+      shouldHotReloadEve({
+        previousActiveId: 'a',
+        nextActiveId: 'b',
+        editedProfileId: null,
+      }),
+    ).toBe(true);
+    expect(
+      shouldHotReloadEve({
+        previousActiveId: 'a',
+        nextActiveId: 'a',
+        editedProfileId: 'a',
+      }),
+    ).toBe(true);
+    expect(
+      shouldHotReloadEve({
+        previousActiveId: 'a',
+        nextActiveId: 'a',
+        editedProfileId: 'b',
+      }),
+    ).toBe(false);
+    expect(
+      shouldHotReloadEve({
+        previousActiveId: 'a',
+        nextActiveId: 'a',
+        editedProfileId: null,
+      }),
+    ).toBe(false);
   });
 });

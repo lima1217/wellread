@@ -1,7 +1,9 @@
 /**
- * ModelConfig — multi ModelProfile BYO settings (ai-panel SPEC §3 / ticket 01).
+ * ModelConfig — multi ModelProfile BYO settings (ai-panel SPEC §3 / tickets 01–02).
  * apiKey lives in OS keychain per profile id, never on these types.
  */
+
+import { v4 as uuidv4 } from 'uuid';
 
 /** Which OpenAI-style endpoint family the sidecar should call. */
 export type ModelApiMode = 'chat' | 'responses';
@@ -149,17 +151,21 @@ export function mergeModelConfig(partial?: Partial<ModelConfig> | null): ModelCo
   }
 
   const enabled = partial?.enabled ?? DEFAULT_MODEL_CONFIG.enabled;
-  const rawProfiles = Array.isArray(partial?.profiles) ? partial.profiles : [];
+  // Omitted `profiles` → preset DeepSeek default. Explicit `[]` stays empty
+  // so settings can show the post-delete-all empty state (ticket 02).
+  const rawProfiles = Array.isArray(partial?.profiles) ? partial.profiles : null;
   const profiles =
-    rawProfiles.length > 0
-      ? rawProfiles
+    rawProfiles === null
+      ? [createDefaultProfile()]
+      : rawProfiles
           .filter((p): p is ModelProfile => Boolean(p && typeof p.id === 'string' && p.id))
-          .map((p) => normalizeProfile(p))
-      : [createDefaultProfile()];
+          .map((p) => normalizeProfile(p));
 
   let activeProfileId = partial?.activeProfileId ?? null;
-  if (!activeProfileId || !profiles.some((p) => p.id === activeProfileId)) {
-    activeProfileId = profiles[0]?.id ?? null;
+  if (profiles.length === 0) {
+    activeProfileId = null;
+  } else if (!activeProfileId || !profiles.some((p) => p.id === activeProfileId)) {
+    activeProfileId = profiles[0]!.id;
   }
 
   return { enabled, activeProfileId, profiles };
@@ -215,33 +221,49 @@ export function renameProfile(config: ModelConfig, profileId: string, name: stri
   };
 }
 
-/**
- * Replace fields on the active profile (or create the default row if missing).
- * Used by the transitional single-form AI settings UI until ticket 02.
- */
-export function upsertActiveProfileFields(
-  current: ModelConfig,
+/** Append a DeepSeek-default profile. Activates it when the list was empty. */
+export function addProfile(config: ModelConfig): { config: ModelConfig; profile: ModelProfile } {
+  const profile = createDefaultProfile(uuidv4());
+  const profiles = [...config.profiles, profile];
+  const activeProfileId = config.profiles.length === 0 ? profile.id : config.activeProfileId;
+  return {
+    profile,
+    config: { enabled: config.enabled, activeProfileId, profiles },
+  };
+}
+
+/** Point `activeProfileId` at an existing profile; unknown ids are a no-op. */
+export function setActiveProfile(config: ModelConfig, profileId: string): ModelConfig {
+  if (!config.profiles.some((p) => p.id === profileId)) return config;
+  if (config.activeProfileId === profileId) return config;
+  return { ...config, activeProfileId: profileId };
+}
+
+/** Patch fields on a named profile; unknown ids are a no-op. Id stays stable. */
+export function updateProfile(
+  config: ModelConfig,
+  profileId: string,
   fields: Partial<Omit<ModelProfile, 'id'>>,
 ): ModelConfig {
-  const merged = mergeModelConfig(current);
-  const active = getActiveProfile(merged);
-  if (!active) {
-    const profile = normalizeProfile({
-      id: DEFAULT_PROFILE_ID,
-      ...DEFAULT_PROFILE_FIELDS,
-      ...fields,
-    });
-    return {
-      enabled: merged.enabled,
-      activeProfileId: profile.id,
-      profiles: [profile],
-    };
-  }
+  if (!config.profiles.some((p) => p.id === profileId)) return config;
   return {
-    enabled: merged.enabled,
-    activeProfileId: active.id,
-    profiles: merged.profiles.map((p) =>
-      p.id === active.id ? normalizeProfile({ ...p, ...fields, id: p.id }) : p,
+    ...config,
+    profiles: config.profiles.map((p) =>
+      p.id === profileId ? normalizeProfile({ ...p, ...fields, id: p.id }) : p,
     ),
   };
+}
+
+/**
+ * Whether saving should restart eve with the active profile.
+ * Active pointer change, or edits to the active row → reload; non-active edits do not.
+ */
+export function shouldHotReloadEve(input: {
+  previousActiveId: string | null;
+  nextActiveId: string | null;
+  editedProfileId: string | null;
+}): boolean {
+  if (input.previousActiveId !== input.nextActiveId) return true;
+  if (input.editedProfileId && input.editedProfileId === input.nextActiveId) return true;
+  return false;
 }
