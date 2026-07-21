@@ -134,9 +134,15 @@ export async function runTurn(input) {
         });
 
         let content = '';
+        /** Captured from fullStream `error` parts — AI SDK yields these instead of throwing. */
+        let streamError = /** @type {unknown} */ (null);
         for await (const part of result.fullStream) {
-          if (abortSignal?.aborted) {
+          if (abortSignal?.aborted || part.type === 'abort') {
             return finishAborted(session, userId, onEvent, persistSession);
+          }
+          if (part.type === 'error') {
+            streamError = part.error;
+            continue;
           }
           if (part.type === 'text-delta') {
             const delta = part.text;
@@ -187,9 +193,25 @@ export async function runTurn(input) {
           }
         }
 
+        if (abortSignal?.aborted) {
+          return finishAborted(session, userId, onEvent, persistSession);
+        }
+
+        if (streamError != null) {
+          if (isAbortError(streamError)) {
+            return finishAborted(session, userId, onEvent, persistSession);
+          }
+          dropInFlightUser(session, userId, persistSession);
+          onEvent({
+            type: 'error',
+            message:
+              streamError instanceof Error ? streamError.message : String(streamError),
+          });
+          onEvent({ type: 'done' });
+          return null;
+        }
+
         // Residual text only — never promote reasoning into the answer body.
-        /** @type {string} */
-        let emptyDetail = '';
         if (!content.trim()) {
           try {
             const fallback = await result.text;
@@ -201,9 +223,16 @@ export async function runTurn(input) {
             if (isAbortError(error) || abortSignal?.aborted) {
               return finishAborted(session, userId, onEvent, persistSession);
             }
-            if (error instanceof Error && error.message) {
-              emptyDetail = ` (${error.message})`;
-            }
+            // AI SDK rejects with NoOutputGeneratedError when the stream ended
+            // on an error/abort before any step finished — surface that, don't
+            // pretend the model returned an empty successful reply.
+            dropInFlightUser(session, userId, persistSession);
+            onEvent({
+              type: 'error',
+              message: error instanceof Error ? error.message : String(error),
+            });
+            onEvent({ type: 'done' });
+            return null;
           }
         }
 
@@ -215,7 +244,7 @@ export async function runTurn(input) {
           dropInFlightUser(session, userId, persistSession);
           onEvent({
             type: 'error',
-            message: `Model returned an empty reply. Check API key/model.${emptyDetail}`,
+            message: 'Model returned an empty reply. Check API key/model.',
           });
           onEvent({ type: 'done' });
           return null;

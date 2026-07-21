@@ -18,6 +18,8 @@ describe('buildSystemPrompt', () => {
     assert.match(prompt, /Grounding is optional/i);
     assert.match(prompt, /answer freely/i);
     assert.match(prompt, /\bcite\b/i);
+    assert.match(prompt, /\bcfi\b/i);
+    assert.match(prompt, /attached sources/i);
     assert.match(prompt, /write_file/);
     assert.match(prompt, /unavailable until mounted/);
     assert.match(prompt, /no emoji/i);

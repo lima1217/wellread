@@ -27,8 +27,10 @@ export const broadcastGlobalSettings = async (settings: SystemSettings): Promise
   if (!isTauriAppPlatform()) return;
   if (!settings.globalViewSettings || !settings.globalReadSettings) return;
   try {
+    const win = getCurrentWindow();
+    if (!win?.label) return;
     const payload: SettingsSyncPayload = {
-      sourceLabel: getCurrentWindow().label,
+      sourceLabel: win.label,
       globalViewSettings: settings.globalViewSettings,
       globalReadSettings: settings.globalReadSettings,
     };
@@ -42,9 +44,16 @@ export const subscribeSettingsSync = async (
   onReceive: (payload: SettingsSyncPayload) => void,
 ): Promise<UnlistenFn> => {
   if (!isTauriAppPlatform()) return () => {};
-  const currentLabel = getCurrentWindow().label;
-  return listen<SettingsSyncPayload>(SETTINGS_SYNC_EVENT, ({ payload }) => {
-    if (!payload || payload.sourceLabel === currentLabel) return;
-    onReceive(payload);
-  });
+  try {
+    const win = getCurrentWindow();
+    if (!win?.label) return () => {};
+    const currentLabel = win.label;
+    return listen<SettingsSyncPayload>(SETTINGS_SYNC_EVENT, ({ payload }) => {
+      if (!payload || payload.sourceLabel === currentLabel) return;
+      onReceive(payload);
+    });
+  } catch (err) {
+    console.warn('Failed to subscribe to settings sync', err);
+    return () => {};
+  }
 };

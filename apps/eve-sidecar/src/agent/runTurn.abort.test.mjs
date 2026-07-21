@@ -161,6 +161,99 @@ describe('runTurn abort', () => {
     );
   });
 
+  it('treats Stop (abort mid-connect) as aborted, not empty reply', async () => {
+    const session = emptySession();
+    const events = [];
+    const ac = new AbortController();
+
+    const result = await runTurn({
+      model: /** @type {any} */ ({
+        specificationVersion: 'v2',
+        provider: 'test',
+        modelId: 'abort-connect',
+        supportedUrls: {},
+        doGenerate: async () => {
+          throw new Error('doGenerate unused');
+        },
+        doStream: async ({ abortSignal }) => {
+          await new Promise((resolve, reject) => {
+            const timer = setTimeout(resolve, 200);
+            abortSignal?.addEventListener(
+              'abort',
+              () => {
+                clearTimeout(timer);
+                const err = new Error('Aborted');
+                err.name = 'AbortError';
+                reject(err);
+              },
+              { once: true },
+            );
+            setTimeout(() => ac.abort(), 15);
+          });
+          return {
+            stream: new ReadableStream({
+              start(controller) {
+                controller.close();
+              },
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          };
+        },
+      }),
+      session,
+      userMessage: 'keep going',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      onEvent: (event) => events.push(event),
+      abortSignal: ac.signal,
+    });
+
+    assert.equal(result, null);
+    assert.equal(session.messages.length, 0);
+    assert.equal(
+      events.some((e) => e.type === 'error' && /empty reply/i.test(String(e.message))),
+      false,
+    );
+    assert.deepEqual(
+      events.filter((e) => e.type === 'done'),
+      [{ type: 'done', aborted: true }],
+    );
+  });
+
+  it('surfaces provider stream errors instead of masking them as empty reply', async () => {
+    const session = emptySession();
+    const events = [];
+
+    const result = await runTurn({
+      model: /** @type {any} */ ({
+        specificationVersion: 'v2',
+        provider: 'test',
+        modelId: 'provider-boom',
+        supportedUrls: {},
+        doGenerate: async () => {
+          throw new Error('doGenerate unused');
+        },
+        doStream: async () => {
+          throw new Error('provider exploded');
+        },
+      }),
+      session,
+      userMessage: 'say something',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      onEvent: (event) => events.push(event),
+    });
+
+    assert.equal(result, null);
+    assert.equal(session.messages.length, 0);
+    const errorEvent = events.find((e) => e.type === 'error');
+    assert.ok(errorEvent, 'expected an error event');
+    assert.match(String(errorEvent.message), /provider exploded/i);
+    assert.equal(/empty reply/i.test(String(errorEvent.message)), false);
+    assert.deepEqual(
+      events.filter((e) => e.type === 'done'),
+      [{ type: 'done' }],
+    );
+  });
+
   it('persists the session after compress even when the turn later fails', async () => {
     const messages = [];
     for (let i = 0; i < 20; i++) {

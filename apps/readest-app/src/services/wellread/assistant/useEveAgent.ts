@@ -9,7 +9,7 @@ import {
   type EveToolTrace,
   type ThinkingMode,
 } from './eveClient';
-import { formatPendingQuotesForTurn } from './helpers';
+import { formatPendingQuotesForTurn, hydrateEveMessagesForDisplay } from './helpers';
 import type { PendingQuote } from './readingAssistantStore';
 
 export type UseEveAgentStatus = 'ready' | 'submitted' | 'streaming' | 'error';
@@ -69,6 +69,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
           abortRef.current?.abort();
           abortRef.current = null;
           setInFlightTools([]);
+          setError(null);
           setStatus('ready');
         }
         setActiveSessionId(null);
@@ -88,6 +89,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
         abortRef.current?.abort();
         abortRef.current = null;
         setInFlightTools([]);
+        setError(null);
         setStatus('ready');
       }
       try {
@@ -95,7 +97,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
         if (cancelled) return;
         activeSessionIdRef.current = session.id;
         setActiveSessionId(session.id);
-        setMessages(session.messages);
+        setMessages(hydrateEveMessagesForDisplay(session.messages));
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -111,6 +113,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
     abortRef.current?.abort();
     abortRef.current = null;
     setInFlightTools([]);
+    setError(null);
     setStatus('ready');
   }, []);
 
@@ -119,7 +122,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
       const session = await getEveSession(id);
       // History / New chat may have moved on while this fetch was in flight.
       if (activeSessionIdRef.current !== id) return;
-      setMessages(session.messages);
+      setMessages(hydrateEveMessagesForDisplay(session.messages));
     } catch {
       // Keep local messages if refetch fails; disk remains source of truth on reopen.
     }

@@ -16,7 +16,7 @@ export function buildSystemPrompt(input) {
     `Extract: ${extractRoot} — you may use glob, grep, and read_file on that tree when helpful; UTF-8 extract text only (not epub/pdf binaries).`,
     "Grounding is optional: answer freely when you already know enough; search the extract when you need this book's text; cite locations when you reference specific passages.",
     `Notes: ${notesRoot} — write_file only on an explicit user ask to save; use fixed paths (summary.md, outline.md, chapters/<slug>.md) and overwrite in place; no confirmation prompts.`,
-    'When you cite a passage, prefer chunk frontmatter cfi (and endCfi/title when present) so the reader can jump back.',
+    'When you cite a passage, include chunk frontmatter cfi (and endCfi/title when present). Prefer prose with cfi over markdown links to extract chunk files — the reader jumps via attached sources.',
     "Reply in the user's language. Plain prose only — no emoji.",
     'Answer with mounted tools only; translation pipelines, wiki packs, and cross-book search are unavailable until mounted.',
   ].join('\n');

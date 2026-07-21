@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatEveSourceLabel,
   formatPendingQuotesForTurn,
   formatWorkDuration,
+  hydrateEveMessagesForDisplay,
+  isAssistantSourceHref,
+  isExternalHttpHref,
   isReadingAssistantAvailable,
+  parsePendingQuotesFromWire,
+  resolveEveSource,
   shouldPushAgentSessionToStore,
   shouldShowPendingReply,
   summarizeToolTrace,
@@ -70,6 +76,73 @@ describe('formatPendingQuotesForTurn', () => {
     expect(formatPendingQuotesForTurn([{ text: 'hello' }, { text: '  ' }], 'ask')).toBe(
       ['> hello', '', 'ask'].join('\n'),
     );
+  });
+});
+
+describe('parsePendingQuotesFromWire', () => {
+  it('round-trips formatPendingQuotesForTurn into QuoteStack fields', () => {
+    const quotes = [
+      { text: 'selected line', chapterTitle: 'Chapter 1' },
+      { text: 'second', chapterTitle: null },
+    ];
+    const wire = formatPendingQuotesForTurn(quotes, 'What does this mean?');
+    expect(parsePendingQuotesFromWire(wire)).toEqual({
+      quotes: [
+        { text: 'selected line', chapterTitle: 'Chapter 1' },
+        { text: 'second', chapterTitle: null },
+      ],
+      content: 'What does this mean?',
+    });
+  });
+
+  it('leaves plain user text alone', () => {
+    expect(parsePendingQuotesFromWire('Just a question')).toEqual({
+      quotes: [],
+      content: 'Just a question',
+    });
+  });
+});
+
+describe('hydrateEveMessagesForDisplay', () => {
+  it('splits persisted wire user content into quotes + question', () => {
+    const hydrated = hydrateEveMessagesForDisplay([
+      {
+        id: 'u1',
+        role: 'user',
+        content: '> But back to Hardy.\n\nWhy did he stop?',
+        createdAt: 1,
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: 'Because…',
+        createdAt: 2,
+      },
+    ]);
+    expect(hydrated[0]).toEqual({
+      id: 'u1',
+      role: 'user',
+      content: 'Why did he stop?',
+      createdAt: 1,
+      quotes: [{ text: 'But back to Hardy.', chapterTitle: null }],
+    });
+    expect(hydrated[1]).toEqual({
+      id: 'a1',
+      role: 'assistant',
+      content: 'Because…',
+      createdAt: 2,
+    });
+  });
+
+  it('keeps client quotes when already present', () => {
+    const msg = {
+      id: 'u1',
+      role: 'user' as const,
+      content: 'Why?',
+      createdAt: 1,
+      quotes: [{ text: 'already', chapterTitle: null }],
+    };
+    expect(hydrateEveMessagesForDisplay([msg])[0]).toEqual(msg);
   });
 });
 
@@ -184,5 +257,77 @@ describe('shouldPushAgentSessionToStore', () => {
         bookId: 'book-1',
       }),
     ).toBe(false);
+  });
+});
+
+describe('isAssistantSourceHref', () => {
+  it('detects extract chunk paths and epubcfi hrefs', () => {
+    expect(isAssistantSourceHref('chunks/00021-section-21.md')).toBe(true);
+    expect(
+      isAssistantSourceHref('/workspace/.wellread/extract/abc/chunks/00021-section-21.md'),
+    ).toBe(true);
+    expect(isAssistantSourceHref('epubcfi(/6/36!/4/2/1:0)')).toBe(true);
+    expect(isAssistantSourceHref('https://example.com/doc')).toBe(false);
+    expect(isAssistantSourceHref(null)).toBe(false);
+  });
+});
+
+describe('isExternalHttpHref', () => {
+  it('accepts only absolute http(s) URLs', () => {
+    expect(isExternalHttpHref('https://example.com/a')).toBe(true);
+    expect(isExternalHttpHref('http://example.com/a')).toBe(true);
+    expect(isExternalHttpHref('chunks/00021-section-21.md')).toBe(false);
+    expect(isExternalHttpHref('/workspace/.wellread/extract/x.md')).toBe(false);
+    expect(isExternalHttpHref('file:///tmp/x.md')).toBe(false);
+    expect(isExternalHttpHref(null)).toBe(false);
+  });
+});
+
+describe('resolveEveSource', () => {
+  const sources = [
+    {
+      cfi: 'epubcfi(/6/36!/4/2/1:0)',
+      title: 'Section 21',
+      path: '/workspace/.wellread/extract/bk/chunks/00021-section-21.md',
+    },
+    {
+      cfi: 'epubcfi(/6/4!/4/2/1:0)',
+      title: 'Preface',
+      path: '/workspace/.wellread/extract/bk/chunks/00001-preface.md',
+    },
+  ];
+
+  it('matches chunk markdown hrefs to source path', () => {
+    expect(resolveEveSource(sources, { href: 'chunks/00021-section-21.md' })?.cfi).toBe(
+      'epubcfi(/6/36!/4/2/1:0)',
+    );
+    expect(
+      resolveEveSource(sources, {
+        href: '/workspace/.wellread/extract/bk/chunks/00021-section-21.md',
+      })?.cfi,
+    ).toBe('epubcfi(/6/36!/4/2/1:0)');
+  });
+
+  it('matches link label to source title when href is missing or unmatched', () => {
+    expect(resolveEveSource(sources, { label: 'Section 21' })?.cfi).toBe('epubcfi(/6/36!/4/2/1:0)');
+  });
+
+  it('resolves bare epubcfi hrefs even without a sources entry', () => {
+    expect(resolveEveSource([], { href: 'epubcfi(/6/8!/4/1:0)' })?.cfi).toBe(
+      'epubcfi(/6/8!/4/1:0)',
+    );
+  });
+
+  it('returns null when nothing matches', () => {
+    expect(resolveEveSource(sources, { href: 'https://example.com', label: 'Elsewhere' })).toBe(
+      null,
+    );
+  });
+});
+
+describe('formatEveSourceLabel', () => {
+  it('prefers title and falls back to Source N', () => {
+    expect(formatEveSourceLabel({ cfi: 'x', title: 'Section 21' }, 0)).toBe('Section 21');
+    expect(formatEveSourceLabel({ cfi: 'x' }, 2)).toBe('Source 3');
   });
 });

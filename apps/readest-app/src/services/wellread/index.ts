@@ -31,7 +31,13 @@ export { useEveConnectionStore } from './eveConnectionStore';
 export {
   isReadingAssistantAvailable,
   formatPendingQuotesForTurn,
+  parsePendingQuotesFromWire,
+  hydrateEveMessagesForDisplay,
   summarizeToolTrace,
+  isAssistantSourceHref,
+  isExternalHttpHref,
+  resolveEveSource,
+  formatEveSourceLabel,
 } from './assistant/helpers';
 export {
   useReadingAssistantStore,

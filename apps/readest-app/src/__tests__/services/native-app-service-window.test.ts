@@ -92,3 +92,15 @@ describe('NativeAppService rounded-window capability', () => {
     expect(service.hasRoundedWindow).toBe(false);
   });
 });
+
+describe('NativeAppService OS plugin bootstrap', () => {
+  test('constructs when plugin-os internals are missing (osType throws)', async () => {
+    osTypeMock.mockImplementation(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'os_type')");
+    });
+    vi.resetModules();
+    const mod = await import('@/services/nativeAppService');
+    const service = new mod.NativeAppService();
+    expect(service.isDesktopApp || service.isMobileApp).toBe(true);
+  });
+});

@@ -22,6 +22,11 @@ export function createHttpAbort(req, res) {
   };
 
   req.on('aborted', trigger);
+  // Tauri plugin-http cancel often closes the socket without Node's legacy
+  // `req.aborted` event; `req`/`res` `close` still fire on disconnect.
+  req.on('close', () => {
+    if (!settled) trigger();
+  });
   // Client fetch abort closes the socket; `close` also fires on normal end,
   // so only abort when the handler has not settled yet.
   res.on('close', () => {

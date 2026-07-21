@@ -63,7 +63,30 @@ declare global {
   }
 }
 
-const OS_TYPE = osType();
+/**
+ * plugin-os `type()` reads `window.__TAURI_OS_PLUGIN_INTERNALS__.os_type`.
+ * Stray webviews (e.g. target=_blank without Tauri inject) lack that object and
+ * crash on module eval — resolve defensively with a UA fallback.
+ */
+const resolveNativeOsType = (): string => {
+  try {
+    return osType();
+  } catch {
+    const platform = typeof navigator !== 'undefined' ? getOSPlatform() : 'unknown';
+    if (
+      platform === 'ios' ||
+      platform === 'android' ||
+      platform === 'macos' ||
+      platform === 'windows' ||
+      platform === 'linux'
+    ) {
+      return platform;
+    }
+    return 'macos';
+  }
+};
+
+const OS_TYPE = resolveNativeOsType();
 
 const safeDecodePath = (input: string) => {
   try {

@@ -24,6 +24,15 @@ describe('createHttpAbort', () => {
     assert.equal(signal.aborted, true);
   });
 
+  it('aborts when the request closes before settle', () => {
+    const req = new EventEmitter();
+    const res = new EventEmitter();
+    const { signal } = createHttpAbort(req, res);
+
+    req.emit('close');
+    assert.equal(signal.aborted, true);
+  });
+
   it('does not abort on response close after settle', () => {
     const req = new EventEmitter();
     const res = new EventEmitter();
@@ -31,6 +40,16 @@ describe('createHttpAbort', () => {
 
     settle();
     res.emit('close');
+    assert.equal(signal.aborted, false);
+  });
+
+  it('does not abort on request close after settle', () => {
+    const req = new EventEmitter();
+    const res = new EventEmitter();
+    const { signal, settle } = createHttpAbort(req, res);
+
+    settle();
+    req.emit('close');
     assert.equal(signal.aborted, false);
   });
 });

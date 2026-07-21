@@ -55,6 +55,40 @@ describe('useEveAgent', () => {
     expect(result.current.sessionId).toBe('ses_existing');
   });
 
+  it('hydrates Pending Quotes from wire content when opening Chat History', async () => {
+    getEveSession.mockResolvedValue({
+      id: 'ses_history',
+      bookId: 'book-1',
+      title: 'Why did he stop?',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          content: '> But back to Hardy.\n\nWhy did he stop?',
+          createdAt: 1,
+        },
+      ],
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_history' }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.messages).toEqual([
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'Why did he stop?',
+          createdAt: 1,
+          quotes: [{ text: 'But back to Hardy.', chapterTitle: null }],
+        },
+      ]);
+    });
+  });
+
   it('creates a session lazily on first send when none is active', async () => {
     createEveSession.mockResolvedValue({
       id: 'ses_new',
@@ -703,6 +737,59 @@ describe('useEveAgent', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('does not surface empty-reply errors that arrive after Stop', async () => {
+    getEveSession.mockResolvedValue({
+      id: 'ses_existing',
+      bookId: 'book-1',
+      title: 'Chat',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [{ id: 'kept', role: 'assistant', content: 'prior', createdAt: 1 }],
+    });
+
+    streamEveTurn.mockImplementation(async function* (_sid, _msg, signal: AbortSignal) {
+      yield { type: 'message.user' as const, id: 'u1', content: 'stop me' };
+      await new Promise<void>((resolve) => {
+        if (signal.aborted) resolve();
+        else signal.addEventListener('abort', () => resolve(), { once: true });
+      });
+      // Buffered NDJSON from a misclassified server abort — must not stick as UI error.
+      yield {
+        type: 'error' as const,
+        message:
+          'Model returned an empty reply. Check API key/model. (No output generated. Check the stream for errors.)',
+      };
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1);
+    });
+
+    await act(async () => {
+      result.current.setComposer('stop me');
+    });
+
+    let sendPromise!: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.send();
+    });
+    await act(async () => {
+      result.current.stop();
+    });
+    await act(async () => {
+      await sendPromise;
+    });
+
+    expect(result.current.status).toBe('ready');
+    expect(result.current.error).toBeNull();
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({ id: 'kept', content: 'prior' }),
+    ]);
+  });
+
   it('ignores reconcileFromDisk after switching to another session', async () => {
     let resolveStale: (value: unknown) => void;
     const staleLoad = new Promise((resolve) => {
@@ -832,6 +919,58 @@ describe('useEveAgent', () => {
     expect(result.current.messages).toEqual([]);
     expect(result.current.status).toBe('error');
     expect(result.current.error?.message).toMatch(/empty reply/i);
+  });
+
+  it('clears a stream error when switching to New chat (sessionId → null)', async () => {
+    getEveSession
+      .mockResolvedValueOnce({
+        id: 'ses_existing',
+        bookId: 'book-1',
+        title: 'Chat',
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [],
+      })
+      .mockResolvedValueOnce({
+        id: 'ses_existing',
+        bookId: 'book-1',
+        title: 'Chat',
+        createdAt: 1,
+        updatedAt: 1,
+        messages: [],
+      });
+
+    streamEveTurn.mockImplementation(async function* () {
+      yield { type: 'message.user' as const, id: 'u1', content: 'Why?' };
+      yield { type: 'error' as const, message: 'Model returned an empty reply' };
+    });
+
+    const { result, rerender } = renderHook(
+      ({ sessionId }: { sessionId: string | null }) =>
+        useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId }),
+      { initialProps: { sessionId: 'ses_existing' as string | null } },
+    );
+    await waitFor(() => {
+      expect(result.current.sessionId).toBe('ses_existing');
+    });
+
+    await act(async () => {
+      result.current.setComposer('Why?');
+    });
+    await act(async () => {
+      await result.current.send();
+    });
+    await waitFor(() => {
+      expect(result.current.error?.message).toMatch(/empty reply/i);
+    });
+
+    rerender({ sessionId: null });
+    await waitFor(() => {
+      expect(result.current.sessionId).toBeNull();
+    });
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.status).toBe('ready');
+    expect(result.current.error).toBeNull();
   });
 
   it('reconciles messages from disk when done is aborted', async () => {

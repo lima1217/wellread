@@ -1,18 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, isValidElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { ArrowUpIcon, CheckIcon, ChevronUpIcon, CopyIcon, Loader2Icon, XIcon } from 'lucide-react';
 import clsx from 'clsx';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ReactNode } from 'react';
 
 import { useTranslation } from '@/hooks/useTranslation';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useSettingsStore } from '@/store/settingsStore';
+import { useReaderStore } from '@/store/readerStore';
 import { useEnv } from '@/context/EnvContext';
 import { writeTextToClipboard } from '@/utils/clipboard';
 import { saveSysSettings } from '@/helpers/settings';
+import { eventDispatcher } from '@/utils/event';
 import { getModelApiKey } from '@/services/wellread/modelApiKey';
 import {
   getActiveProfile,
@@ -24,8 +26,11 @@ import {
 import { reloadEveSidecar } from '@/services/wellread/eveSidecar';
 import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
 import {
+  formatEveSourceLabel,
   formatWorkDuration,
+  isExternalHttpHref,
   isReadingAssistantAvailable,
+  resolveEveSource,
   shouldPushAgentSessionToStore,
   shouldShowPendingReply,
   summarizeToolTrace,
@@ -38,8 +43,10 @@ import {
 import type {
   EveMessage,
   EveMessageQuote,
+  EveSource,
   EveToolTrace,
 } from '@/services/wellread/assistant/eveClient';
+import { openExternalUrl } from '@/utils/open';
 
 interface AIAssistantProps {
   bookKey: string;
@@ -88,10 +95,105 @@ function MarkdownRule() {
   return <div className='my-[0.9em]' aria-hidden='true' />;
 }
 
-const assistantMarkdownComponents: Components = {
-  blockquote: ({ children }) => <MarkdownBlockquote>{children}</MarkdownBlockquote>,
-  hr: () => <MarkdownRule />,
-};
+function plainTextFromChildren(children: ReactNode): string {
+  if (children == null || typeof children === 'boolean') return '';
+  if (typeof children === 'string' || typeof children === 'number') return String(children);
+  if (Array.isArray(children)) return children.map(plainTextFromChildren).join('');
+  if (isValidElement(children)) {
+    const el = children as ReactElement<{ children?: ReactNode }>;
+    return plainTextFromChildren(el.props.children);
+  }
+  return '';
+}
+
+function jumpToCfi(bookKey: string, cfi: string) {
+  eventDispatcher.dispatch('navigate', { bookKey, cfi });
+  useReaderStore.getState().getView(bookKey)?.goTo(cfi);
+}
+
+function createAssistantMarkdownComponents(opts: {
+  bookKey: string;
+  sources?: EveSource[];
+}): Components {
+  return {
+    blockquote: ({ children }) => <MarkdownBlockquote>{children}</MarkdownBlockquote>,
+    hr: () => <MarkdownRule />,
+    a: ({ href, children }) => {
+      const label = plainTextFromChildren(children);
+      const source = resolveEveSource(opts.sources, { href, label });
+      if (source?.cfi) {
+        return (
+          <button
+            type='button'
+            className={clsx(
+              'text-base-content underline decoration-from-font underline-offset-2',
+              'hover:text-base-content/80',
+              focusRing,
+            )}
+            onClick={(e) => {
+              e.preventDefault();
+              jumpToCfi(opts.bookKey, source.cfi);
+            }}
+          >
+            {children}
+          </button>
+        );
+      }
+      // Relative/file/workspace hrefs must not become target=_blank — that opens a
+      // non-Tauri browser window and crashes settings sync on getCurrentWindow().
+      if (!isExternalHttpHref(href)) {
+        return <span>{children}</span>;
+      }
+      return (
+        <button
+          type='button'
+          className={clsx(
+            'text-base-content underline decoration-from-font underline-offset-2',
+            'hover:text-base-content/80',
+            focusRing,
+          )}
+          onClick={(e) => {
+            e.preventDefault();
+            openExternalUrl(href!);
+          }}
+        >
+          {children}
+        </button>
+      );
+    },
+  };
+}
+
+/** Structured jump targets from tool-collected chunk frontmatter. */
+function MessageSources({ bookKey, sources }: { bookKey: string; sources: EveSource[] }) {
+  const _ = useTranslation();
+  if (!sources.length) return null;
+  return (
+    <div className='text-base-content/60 mt-2 flex flex-col gap-1 font-sans text-[0.85em] leading-snug'>
+      <span className='select-none'>{_('Sources')}</span>
+      <ul className='flex flex-col gap-0.5'>
+        {sources.map((source, index) => {
+          const label = formatEveSourceLabel(source, index);
+          return (
+            <li key={`${source.cfi}-${index}`}>
+              <button
+                type='button'
+                className={clsx(
+                  'text-start underline decoration-from-font underline-offset-2',
+                  'hover:text-base-content',
+                  focusRing,
+                )}
+                onClick={() => jumpToCfi(bookKey, source.cfi)}
+              >
+                {label}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
 /** Chat body uses app UI type, not the reader's book face. Keep 16px + 1.75 for CJK air. */
 const messageTypeClass = 'font-sans text-base leading-[1.75]';
@@ -365,7 +467,15 @@ function PendingQuoteBar({
   );
 }
 
-const ReadingAssistantChat = ({ bookId, bookTitle }: { bookId: string; bookTitle: string }) => {
+const ReadingAssistantChat = ({
+  bookKey,
+  bookId,
+  bookTitle,
+}: {
+  bookKey: string;
+  bookId: string;
+  bookTitle: string;
+}) => {
   const _ = useTranslation();
   const { envConfig } = useEnv();
   const { settings, setSettings, saveSettings } = useSettingsStore();
@@ -510,7 +620,10 @@ const ReadingAssistantChat = ({ bookId, bookTitle }: { bookId: string; bookTitle
                   {msg.content.trim() ? (
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
-                      components={assistantMarkdownComponents}
+                      components={createAssistantMarkdownComponents({
+                        bookKey,
+                        sources: msg.sources,
+                      })}
                     >
                       {msg.content}
                     </ReactMarkdown>
@@ -519,6 +632,9 @@ const ReadingAssistantChat = ({ bookId, bookTitle }: { bookId: string; bookTitle
               ) : (
                 <div>{msg.content}</div>
               )}
+              {msg.role === 'assistant' && msg.sources?.length ? (
+                <MessageSources bookKey={bookKey} sources={msg.sources} />
+              ) : null}
               {msg.role === 'assistant' && msg.tools?.length ? (
                 <ToolTrace tools={msg.tools} />
               ) : null}
@@ -761,7 +877,9 @@ const AIAssistant = ({ bookKey }: AIAssistantProps) => {
   // Key only on bookId — not activeSessionId. First send creates a session and
   // writes it to the store; a sessionId key remount would drop the in-flight stream.
   // Session switches (History / New chat) are handled by useEveAgent's load effect.
-  return <ReadingAssistantChat key={bookId} bookId={bookId} bookTitle={bookTitle} />;
+  return (
+    <ReadingAssistantChat key={bookId} bookKey={bookKey} bookId={bookId} bookTitle={bookTitle} />
+  );
 };
 
 export default AIAssistant;
