@@ -4,7 +4,6 @@ import { CustomTexture } from '@/styles/textures';
 import { HighlightColor, HighlightStyle, UserHighlightColor, ViewSettings } from './book';
 import { OPDSCatalog } from './opds';
 import type { ModelConfig } from '@/services/wellread/modelConfig';
-import type { NotebookTab } from '@/store/notebookStore';
 import type { DictionarySettings, ImportedDictionary } from '@/services/dictionaries/types';
 
 export type ThemeType = 'light' | 'dark' | 'auto';
@@ -47,9 +46,8 @@ export type LibraryGroupByType = (typeof LibraryGroupByType)[keyof typeof Librar
 export interface ReadSettings {
   sideBarWidth: string;
   isSideBarPinned: boolean;
-  notebookWidth: string;
-  isNotebookPinned: boolean;
-  notebookActiveTab: NotebookTab;
+  assistantPanelWidth: string;
+  isAssistantPanelPinned: boolean;
   autohideCursor: boolean;
   /**
    * Global Word Lens toggle: auto-download a gloss pack on demand when the

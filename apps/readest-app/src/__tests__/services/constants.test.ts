@@ -316,12 +316,11 @@ describe('services/constants', () => {
       expect(DEFAULT_READSETTINGS).not.toBeNull();
     });
 
-    it('has sidebar and notebook settings', () => {
+    it('has sidebar and assistant panel settings', () => {
       expect(typeof DEFAULT_READSETTINGS.sideBarWidth).toBe('string');
       expect(typeof DEFAULT_READSETTINGS.isSideBarPinned).toBe('boolean');
-      expect(typeof DEFAULT_READSETTINGS.notebookWidth).toBe('string');
-      expect(typeof DEFAULT_READSETTINGS.isNotebookPinned).toBe('boolean');
-      expect(DEFAULT_READSETTINGS.notebookActiveTab).toBe('ai');
+      expect(typeof DEFAULT_READSETTINGS.assistantPanelWidth).toBe('string');
+      expect(typeof DEFAULT_READSETTINGS.isAssistantPanelPinned).toBe('boolean');
     });
 
     it('has cursor settings', () => {

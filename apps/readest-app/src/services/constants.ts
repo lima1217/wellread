@@ -164,9 +164,8 @@ export const READING_RULER_COLORS: Record<ReadingRulerColor, string> = {
 export const DEFAULT_READSETTINGS: ReadSettings = {
   sideBarWidth: '15%',
   isSideBarPinned: true,
-  notebookWidth: '25%',
-  isNotebookPinned: false,
-  notebookActiveTab: 'ai',
+  assistantPanelWidth: '25%',
+  isAssistantPanelPinned: false,
   autohideCursor: true,
   wordLensAutoDownload: true,
 

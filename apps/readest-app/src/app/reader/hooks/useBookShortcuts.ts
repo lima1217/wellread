@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useReaderStore } from '@/store/readerStore';
-import { useNotebookStore } from '@/store/notebookStore';
+import { useAssistantPanelStore } from '@/store/assistantPanelStore';
 import { isTauriAppPlatform } from '@/services/environment';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -29,7 +29,7 @@ const useBookShortcuts = ({ sideBarBookKey, bookKeys }: UseBookShortcutsProps) =
   const { toggleSideBar, setSideBarBookKey } = useSidebarStore();
   const { setSettingsDialogOpen } = useSettingsStore();
   const { getBookData } = useBookDataStore();
-  const { toggleNotebook } = useNotebookStore();
+  const { toggleAssistantPanel } = useAssistantPanelStore();
   const { getNextBookKey } = useBooksManager();
   const { open: openCommandPalette } = useCommandPalette();
   const lastParagraphToggleRef = useRef(0);
@@ -356,7 +356,7 @@ const useBookShortcuts = ({ sideBarBookKey, bookKeys }: UseBookShortcutsProps) =
       onAdjustTextSelection: adjustTextSelection,
       onSwitchSideBar: switchSideBar,
       onToggleSideBar: toggleSideBar,
-      onToggleNotebook: toggleNotebook,
+      onToggleAI: toggleAssistantPanel,
       onToggleScrollMode: toggleScrollMode,
       onToggleBookmark: toggleBookmark,
       onToggleParagraphMode: toggleParagraphMode,

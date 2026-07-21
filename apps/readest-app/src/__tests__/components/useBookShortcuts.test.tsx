@@ -63,9 +63,9 @@ vi.mock('@/store/bookDataStore', () => ({
   }),
 }));
 
-vi.mock('@/store/notebookStore', () => ({
-  useNotebookStore: () => ({
-    toggleNotebook: vi.fn(),
+vi.mock('@/store/assistantPanelStore', () => ({
+  useAssistantPanelStore: () => ({
+    toggleAssistantPanel: vi.fn(),
   }),
 }));
 

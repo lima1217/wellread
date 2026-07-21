@@ -18,9 +18,9 @@ const DEFAULT_SHORTCUTS = {
     description: _('Toggle Sidebar'),
     section: 'General',
   },
-  onToggleNotebook: {
+  onToggleAI: {
     keys: ['n'],
-    description: _('Toggle Notebook'),
+    description: _('Toggle AI'),
     section: 'General',
   },
   onShowSearchBar: {

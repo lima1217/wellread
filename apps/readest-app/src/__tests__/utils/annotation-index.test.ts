@@ -30,7 +30,7 @@ describe('buildAnnotationIndex / selectLocationAnnotations', () => {
   });
 
   it('buckets a note-only annotation (no style) so its bubble survives relocate', () => {
-    // Regression: notes added via the Notebook flow carry a `note` but no
+    // Regression: notes added via the annotation flow carry a `note` but no
     // `style`/`color`. They must still be tracked so the note bubble is
     // re-applied on page turns, not just at section first-render.
     const noteOnly = note({ note: 'a margin note' });

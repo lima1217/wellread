@@ -11,7 +11,7 @@ import { useLibrary } from '@/hooks/useLibrary';
 import { useThemeStore } from '@/store/themeStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
-import { useNotebookStore } from '@/store/notebookStore';
+import { useAssistantPanelStore } from '@/store/assistantPanelStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useDeviceControlStore } from '@/store/deviceStore';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
@@ -37,10 +37,10 @@ Z-Index Layering Guide:
      • Ensures the border stays on top of all UI elements.
 50 – Loading Progress / Toast Notifications / Dialogs / Popups
      • Includes Settings, About, Updater, KOSync dialogs and Annotation popups.
-45 – Sidebar / Notebook (Unpinned)
+45 – Sidebar / Assistant panel (Unpinned)
      • Floats above the content but below global dialogs.
-20 – Menu / Sidebar / Notebook (Pinned)
-     • Docked navigation or note views.
+20 – Menu / Sidebar / Assistant panel (Pinned)
+     • Docked navigation or assistant views.
 10 – Headerbar / Footbar / Ribbon
      • Top toolbar, bottom footbar and ribbon elements.
  0 – Base Content
@@ -58,8 +58,8 @@ const Reader: React.FC<{ ids?: string }> = ({ ids }) => {
   const { acquireBackKeyInterception, releaseBackKeyInterception } = useDeviceControlStore();
   const { isSideBarVisible, isSideBarPinned } = useSidebarStore();
   const { getIsSideBarVisible, setSideBarVisible } = useSidebarStore();
-  const { isNotebookVisible, isNotebookPinned } = useNotebookStore();
-  const { getIsNotebookVisible, setNotebookVisible } = useNotebookStore();
+  const { isAssistantPanelVisible, isAssistantPanelPinned } = useAssistantPanelStore();
+  const { getIsAssistantPanelVisible, setAssistantPanelVisible } = useAssistantPanelStore();
   const { isDarkMode, systemUIAlwaysHidden, isRoundedWindow } = useThemeStore();
 
   useTheme({ systemUIVisible: settings.alwaysShowStatusBar, appThemeColor: 'base-100' });
@@ -83,8 +83,8 @@ const Reader: React.FC<{ ids?: string }> = ({ ids }) => {
         (document.activeElement as HTMLElement)?.blur();
       } else if (getIsSideBarVisible() && !isSideBarPinned) {
         setSideBarVisible(false);
-      } else if (getIsNotebookVisible() && !isNotebookPinned) {
-        setNotebookVisible(false);
+      } else if (getIsAssistantPanelVisible() && !isAssistantPanelPinned) {
+        setAssistantPanelVisible(false);
       } else {
         eventDispatcher.dispatch('close-reader');
         router.back();
@@ -118,8 +118,8 @@ const Reader: React.FC<{ ids?: string }> = ({ ids }) => {
     sideBarBookKey,
     isSideBarPinned,
     isSideBarVisible,
-    isNotebookPinned,
-    isNotebookVisible,
+    isAssistantPanelPinned,
+    isAssistantPanelVisible,
   ]);
 
   useEffect(() => {

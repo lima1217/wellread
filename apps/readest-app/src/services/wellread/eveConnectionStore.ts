@@ -5,7 +5,7 @@
  * Readiness comes from Rust `get_eve_sidecar_info` only: that command returns
  * info after a no-proxy loopback health check. A second browser `fetch` probe
  * is unreliable (system HTTP proxies like Clash/V2Ray often 502 loopback) and
- * left the Notebook AI tab spinning forever while the sidecar was healthy.
+ * left the Reading Assistant spinning forever while the sidecar was healthy.
  */
 
 import { create } from 'zustand';

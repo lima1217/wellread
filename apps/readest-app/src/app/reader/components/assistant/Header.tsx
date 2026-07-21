@@ -6,7 +6,7 @@ import { MdArrowBackIosNew, MdOutlinePushPin, MdPushPin } from 'react-icons/md';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 
-const NotebookHeader: React.FC<{
+const AssistantHeader: React.FC<{
   isPinned: boolean;
   pane: 'chat' | 'history';
   handleClose: () => void;
@@ -19,11 +19,11 @@ const NotebookHeader: React.FC<{
   const isHistory = pane === 'history';
 
   return (
-    <div className='notebook-header relative flex h-11 items-center px-3' dir='ltr'>
+    <div className='assistant-header relative flex h-11 items-center px-3' dir='ltr'>
       <div className='absolute inset-0 z-[-1] flex items-center justify-center'>
         <div
           className={clsx(
-            'notebook-title text-sm font-medium',
+            'assistant-title text-sm font-medium',
             isHistory && 'text-base-content/60',
           )}
         >
@@ -32,7 +32,7 @@ const NotebookHeader: React.FC<{
       </div>
       <div className='flex w-full items-center gap-x-2'>
         <button
-          title={isPinned ? _('Unpin Notebook') : _('Pin Notebook')}
+          title={isPinned ? _('Unpin AI') : _('Pin AI')}
           onClick={handleTogglePin}
           className={clsx(
             'btn btn-ghost btn-circle hidden h-6 min-h-6 w-6 sm:flex',
@@ -75,4 +75,4 @@ const NotebookHeader: React.FC<{
   );
 };
 
-export default NotebookHeader;
+export default AssistantHeader;

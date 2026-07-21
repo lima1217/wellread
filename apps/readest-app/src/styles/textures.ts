@@ -89,11 +89,11 @@ export function createCustomTexture(
 
 const createTextureCSS = (texture: BackgroundTexture) => {
   const css = `
-    .sidebar-container, .notebook-container, .foliate-viewer {
+    .sidebar-container, .assistant-panel-container, .foliate-viewer {
       position: relative;
     }
 
-    body::before, .sidebar-container::before, .notebook-container::before,
+    body::before, .sidebar-container::before, .assistant-panel-container::before,
     .foliate-viewer::before, .notch-masked::before {
       content: "";
       position: absolute;

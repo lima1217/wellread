@@ -183,7 +183,7 @@ flowchart TB
 
     subgraph ReaderInternals["app/reader internals"]
         ReaderPage["page.tsx"]
-        ReaderComps["components/*<br/>(BookView, Sidebar, Notebook,<br/>Annotator, FootnotePopup, Translator,<br/>RSVP overlay, AIChat, ParallelView, ...)"]
+        ReaderComps["components/*<br/>(BookView, Sidebar, AssistantPanel,<br/>Annotator, FootnotePopup, Translator,<br/>RSVP overlay, AIChat, ParallelView, ...)"]
         ReaderHooks["hooks/*<br/>(useFoliateEvents, useScrollHandler,<br/>useProgressSync, useAnnotations, ...)"]
         ReaderUtils["utils/*"]
     end
@@ -213,7 +213,7 @@ libraryStore        -> books, folders, selection, sort
 bookDataStore       -> per-book data (TOC, annotations, locations)
 readerStore         -> active views, layout, ribbon state
 parallelViewStore   -> two-pane reading
-notebookStore       -> notebook side panel
+assistantPanelStore -> Reading Assistant side panel
 settingsStore       -> user/app settings
 themeStore          -> light/dark/atmosphere
 sidebarStore        -> sidebar visibility/width

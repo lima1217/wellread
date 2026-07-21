@@ -25,7 +25,7 @@ import { useRendererInputListeners } from '../../hooks/useRendererInputListeners
 import { useReadwiseSync } from '../../hooks/useReadwiseSync';
 import { useHardcoverSync } from '../../hooks/useHardcoverSync';
 import { useTextSelector } from '../../hooks/useTextSelector';
-import { useOpenAIInNotebook } from '../../hooks/useOpenAIInNotebook';
+import { useOpenReadingAssistant } from '../../hooks/useOpenReadingAssistant';
 import { Point, Position, TextSelection } from '@/utils/sel';
 import {
   getPopupPosition,
@@ -113,7 +113,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
 
   useReadwiseSync(bookKey);
   useHardcoverSync(bookKey);
-  const { openAIInNotebook } = useOpenAIInNotebook();
+  const { openReadingAssistant } = useOpenReadingAssistant();
 
   useEffect(() => {
     void loadCustomDictionaries(envConfig).catch((error) => {
@@ -1201,7 +1201,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     const bookId = bookData.book?.hash;
     if (!bookId) return;
     const chapterTitle = progress?.sectionLabel || null;
-    void openAIInNotebook({
+    void openReadingAssistant({
       bookId,
       bookTitle: bookData.book?.title,
       selectionText: selection.text,

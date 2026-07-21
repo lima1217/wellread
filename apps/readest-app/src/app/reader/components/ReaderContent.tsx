@@ -32,7 +32,7 @@ import useBooksManager from '../hooks/useBooksManager';
 import useBookShortcuts from '../hooks/useBookShortcuts';
 import Spinner from '@/components/Spinner';
 import SideBar from './sidebar/SideBar';
-import Notebook from './notebook/Notebook';
+import AssistantPanel from './assistant/AssistantPanel';
 import BooksGrid from './BooksGrid';
 import SettingsDialog from '@/components/settings/SettingsDialog';
 
@@ -237,7 +237,7 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
         onGoToLibrary={handleCloseBooksToLibrary}
       />
       {isSettingsDialogOpen && <SettingsDialog bookKey={settingsDialogBookKey} />}
-      <Notebook />
+      <AssistantPanel />
       {showDetailsBook && (
         <BookDetailModal
           isOpen={!!showDetailsBook}

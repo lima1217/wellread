@@ -1,18 +1,18 @@
 import { useCallback } from 'react';
-import { useNotebookStore } from '@/store/notebookStore';
+import { useAssistantPanelStore } from '@/store/assistantPanelStore';
 import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
 import { createEveSession } from '@/services/wellread/assistant/eveClient';
 
 /**
- * Open the notebook Reading Assistant tab.
+ * Open the Reading Assistant panel.
  * Optionally append a Pending Quote (does not write composer or auto-send).
  */
-export function useOpenAIInNotebook() {
-  const { setNotebookVisible, setNotebookActiveTab } = useNotebookStore();
+export function useOpenReadingAssistant() {
+  const { setAssistantPanelVisible } = useAssistantPanelStore();
   const setActiveSession = useReadingAssistantStore((s) => s.setActiveSession);
   const appendPendingQuote = useReadingAssistantStore((s) => s.appendPendingQuote);
 
-  const openAIInNotebook = useCallback(
+  const openReadingAssistant = useCallback(
     async (options?: {
       sessionId?: string;
       bookId?: string;
@@ -22,8 +22,7 @@ export function useOpenAIInNotebook() {
       selectionText?: string;
       chapterTitle?: string | null;
     }) => {
-      setNotebookVisible(true);
-      setNotebookActiveTab('ai');
+      setAssistantPanelVisible(true);
 
       if (options?.sessionId) {
         setActiveSession(options.sessionId, options.bookId ?? null);
@@ -50,12 +49,12 @@ export function useOpenAIInNotebook() {
         });
       }
     },
-    [setNotebookVisible, setNotebookActiveTab, setActiveSession, appendPendingQuote],
+    [setAssistantPanelVisible, setActiveSession, appendPendingQuote],
   );
 
   return {
-    openAIInNotebook,
+    openReadingAssistant,
   };
 }
 
-export default useOpenAIInNotebook;
+export default useOpenReadingAssistant;

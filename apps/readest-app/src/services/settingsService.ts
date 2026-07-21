@@ -99,6 +99,36 @@ export function migrateHighlightColorPrefs(read: ReadSettings): void {
   read.userHighlightColors = userColors;
 }
 
+/**
+ * Migrate legacy notebook panel keys on ReadSettings to assistant panel names.
+ * Preserves width/pin from older installs; drops notebookActiveTab (single-pane AI).
+ * @returns true when legacy keys were present and rewritten
+ */
+export function migrateAssistantPanelSettings(read: ReadSettings): boolean {
+  const legacy = read as ReadSettings & {
+    notebookWidth?: string;
+    isNotebookPinned?: boolean;
+    notebookActiveTab?: unknown;
+  };
+
+  let migrated = false;
+  if (typeof legacy.notebookWidth === 'string') {
+    read.assistantPanelWidth = legacy.notebookWidth;
+    delete legacy.notebookWidth;
+    migrated = true;
+  }
+  if (typeof legacy.isNotebookPinned === 'boolean') {
+    read.isAssistantPanelPinned = legacy.isNotebookPinned;
+    delete legacy.isNotebookPinned;
+    migrated = true;
+  }
+  if ('notebookActiveTab' in legacy) {
+    delete legacy.notebookActiveTab;
+    migrated = true;
+  }
+  return migrated;
+}
+
 export async function loadSettings(ctx: Context): Promise<SystemSettings> {
   const defaultSettings: SystemSettings = {
     ...DEFAULT_SYSTEM_SETTINGS,
@@ -135,6 +165,7 @@ export async function loadSettings(ctx: Context): Promise<SystemSettings> {
     ...settings.globalReadSettings,
   };
   migrateHighlightColorPrefs(settings.globalReadSettings);
+  const assistantPanelMigrated = migrateAssistantPanelSettings(settings.globalReadSettings);
   settings.globalViewSettings = {
     ...getDefaultViewSettings(ctx),
     ...settings.globalViewSettings,
@@ -153,6 +184,8 @@ export async function loadSettings(ctx: Context): Promise<SystemSettings> {
 
   if (!settings.replicaDeviceId) {
     settings.replicaDeviceId = uuidv4();
+    await saveSettings(ctx.fs, settings);
+  } else if (assistantPanelMigrated) {
     await saveSettings(ctx.fs, settings);
   }
 

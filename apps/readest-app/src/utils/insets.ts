@@ -23,7 +23,7 @@ export const getViewInsets = (viewSettings: ViewSettings) => {
 };
 
 /**
- * Top padding (px) for a slide-in panel (sidebar / notebook) so its toolbar
+ * Top padding (px) for a slide-in panel (sidebar / assistant) so its toolbar
  * clears the device status bar, mirroring the reader header.
  *
  * A partial-height mobile bottom sheet doesn't reach the top of the screen, so

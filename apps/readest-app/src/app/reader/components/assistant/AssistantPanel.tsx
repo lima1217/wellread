@@ -5,7 +5,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
-import { useNotebookStore } from '@/store/notebookStore';
+import { useAssistantPanelStore } from '@/store/assistantPanelStore';
 import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useThemeStore } from '@/store/themeStore';
@@ -19,27 +19,31 @@ import { Overlay } from '@/components/Overlay';
 import { saveSysSettings } from '@/helpers/settings';
 import useShortcuts from '@/hooks/useShortcuts';
 import AIAssistant from './AIAssistant';
-import NotebookHeader from './Header';
+import AssistantHeader from './Header';
 import ChatHistoryView from '../sidebar/ChatHistoryView';
 
-const MIN_NOTEBOOK_WIDTH = 0.15;
-const MAX_NOTEBOOK_WIDTH = 0.45;
+const MIN_ASSISTANT_PANEL_WIDTH = 0.15;
+const MAX_ASSISTANT_PANEL_WIDTH = 0.45;
 
 type AssistantPane = 'chat' | 'history';
 
-const Notebook: React.FC = ({}) => {
+const AssistantPanel: React.FC = ({}) => {
   const _ = useTranslation();
   const { envConfig, appService } = useEnv();
   const { settings } = useSettingsStore();
   const { updateAppTheme, safeAreaInsets, systemUIVisible, statusBarHeight } = useThemeStore();
   const { sideBarBookKey } = useSidebarStore();
-  const { notebookWidth, isNotebookVisible, isNotebookPinned } = useNotebookStore();
-  const { setNotebookPin } = useNotebookStore();
+  const { assistantPanelWidth, isAssistantPanelVisible, isAssistantPanelPinned } =
+    useAssistantPanelStore();
+  const { setAssistantPanelPin } = useAssistantPanelStore();
   const { getBookData } = useBookDataStore();
   const { getViewSettings } = useReaderStore();
-  const { getNotebookWidth, setNotebookWidth, setNotebookVisible, toggleNotebookPin } =
-    useNotebookStore();
-  const { setNotebookActiveTab } = useNotebookStore();
+  const {
+    getAssistantPanelWidth,
+    setAssistantPanelWidth,
+    setAssistantPanelVisible,
+    toggleAssistantPanelPin,
+  } = useAssistantPanelStore();
   const activeSessionId = useReadingAssistantStore((s) => s.activeSessionId);
 
   const isMobile = window.innerWidth < 640;
@@ -48,39 +52,39 @@ const Notebook: React.FC = ({}) => {
 
   useEffect(() => {
     setPane('chat');
-  }, [sideBarBookKey, isNotebookVisible]);
+  }, [sideBarBookKey, isAssistantPanelVisible]);
 
   const {
-    panelRef: notebookRef,
+    panelRef: assistantPanelRef,
     overlayRef,
-    panelHeight: notebookHeight,
+    panelHeight: assistantPanelHeight,
     handleVerticalDragStart,
   } = useSwipeToDismiss(
     () => {
-      setNotebookVisible(false);
+      setAssistantPanelVisible(false);
       setIsFullHeightInMobile(isMobile);
     },
     (data) => setIsFullHeightInMobile(data.clientY < 44),
   );
 
   const onNavigateEvent = async () => {
-    const { isNotebookPinned } = useNotebookStore.getState();
-    if (!isNotebookPinned) {
-      setNotebookVisible(false);
+    const { isAssistantPanelPinned } = useAssistantPanelStore.getState();
+    if (!isAssistantPanelPinned) {
+      setAssistantPanelVisible(false);
     }
   };
 
-  const handleHideNotebook = useCallback(() => {
-    if (!isNotebookPinned) {
-      setNotebookVisible(false);
+  const handleHideAssistantPanel = useCallback(() => {
+    if (!isAssistantPanelPinned) {
+      setAssistantPanelVisible(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNotebookPinned]);
+  }, [isAssistantPanelPinned]);
 
-  useShortcuts({ onEscape: handleHideNotebook }, [handleHideNotebook]);
+  useShortcuts({ onEscape: handleHideAssistantPanel }, [handleHideAssistantPanel]);
 
   useEffect(() => {
-    if (isNotebookVisible) {
+    if (isAssistantPanelVisible) {
       updateAppTheme('base-200');
       overlayRef.current = document.querySelector('.overlay') as HTMLDivElement | null;
     } else {
@@ -88,21 +92,12 @@ const Notebook: React.FC = ({}) => {
       overlayRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNotebookVisible]);
+  }, [isAssistantPanelVisible]);
 
   useEffect(() => {
-    setNotebookWidth(settings.globalReadSettings.notebookWidth);
-    setNotebookPin(settings.globalReadSettings.isNotebookPinned);
-    setNotebookVisible(settings.globalReadSettings.isNotebookPinned);
-    // Single-pane Reading Assistant: always land on the AI face. Persisted
-    // notebookActiveTab may still be 'notes' from older installs — force 'ai'.
-    setNotebookActiveTab('ai');
-    if (settings.globalReadSettings.notebookActiveTab !== 'ai') {
-      saveSysSettings(envConfig, 'globalReadSettings', {
-        ...settings.globalReadSettings,
-        notebookActiveTab: 'ai',
-      });
-    }
+    setAssistantPanelWidth(settings.globalReadSettings.assistantPanelWidth);
+    setAssistantPanelPin(settings.globalReadSettings.isAssistantPanelPinned);
+    setAssistantPanelVisible(settings.globalReadSettings.isAssistantPanelPinned);
 
     eventDispatcher.on('navigate', onNavigateEvent);
     return () => {
@@ -111,29 +106,32 @@ const Notebook: React.FC = ({}) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleNotebookResize = (newWidth: string) => {
-    setNotebookWidth(newWidth);
-    settings.globalReadSettings.notebookWidth = newWidth;
+  const handleAssistantPanelResize = (newWidth: string) => {
+    setAssistantPanelWidth(newWidth);
+    settings.globalReadSettings.assistantPanelWidth = newWidth;
   };
 
   const handleTogglePin = () => {
-    toggleNotebookPin();
+    toggleAssistantPanelPin();
     const globalReadSettings = settings.globalReadSettings;
-    const newGlobalReadSettings = { ...globalReadSettings, isNotebookPinned: !isNotebookPinned };
+    const newGlobalReadSettings = {
+      ...globalReadSettings,
+      isAssistantPanelPinned: !isAssistantPanelPinned,
+    };
     saveSysSettings(envConfig, 'globalReadSettings', newGlobalReadSettings);
   };
 
   const handleClickOverlay = () => {
-    setNotebookVisible(false);
+    setAssistantPanelVisible(false);
   };
 
   const { handleResizeStart: handleDragStart, handleResizeKeyDown: handleDragKeyDown } =
     usePanelResize({
       side: 'end',
-      minWidth: MIN_NOTEBOOK_WIDTH,
-      maxWidth: MAX_NOTEBOOK_WIDTH,
-      getWidth: getNotebookWidth,
-      onResize: handleNotebookResize,
+      minWidth: MIN_ASSISTANT_PANEL_WIDTH,
+      maxWidth: MAX_ASSISTANT_PANEL_WIDTH,
+      getWidth: getAssistantPanelWidth,
+      onResize: handleAssistantPanelResize,
     });
 
   if (!sideBarBookKey) return null;
@@ -146,31 +144,31 @@ const Notebook: React.FC = ({}) => {
   const { bookDoc } = bookData;
   const languageDir = getBookDirFromLanguage(bookDoc.metadata.language);
 
-  return isNotebookVisible ? (
+  return isAssistantPanelVisible ? (
     <>
-      {!isNotebookPinned && (
+      {!isAssistantPanelPinned && (
         <Overlay
           className={clsx('z-[45]', viewSettings?.isEink ? '' : 'bg-black/50 sm:bg-black/20')}
           onDismiss={handleClickOverlay}
         />
       )}
       <div
-        ref={notebookRef}
+        ref={assistantPanelRef}
         className={clsx(
-          'notebook-container right-0 flex min-w-60 select-none flex-col',
+          'assistant-panel-container right-0 flex min-w-60 select-none flex-col',
           'full-height font-sans text-base font-normal transition-[padding-top] duration-300 sm:text-sm',
           viewSettings?.isEink ? 'bg-base-100' : 'bg-base-200',
           appService?.hasRoundedWindow && 'rounded-window-top-right rounded-window-bottom-right',
-          isNotebookPinned ? 'z-20' : 'z-[45] shadow-2xl',
-          !isNotebookPinned && viewSettings?.isEink && 'border-base-content border-s',
+          isAssistantPanelPinned ? 'z-20' : 'z-[45] shadow-2xl',
+          !isAssistantPanelPinned && viewSettings?.isEink && 'border-base-content border-s',
         )}
         role='group'
         aria-label={_('Reading Assistant')}
         dir={viewSettings?.rtl && languageDir === 'rtl' ? 'rtl' : 'ltr'}
         style={{
-          width: isMobile ? '100%' : `${notebookWidth}`,
-          maxWidth: isMobile ? '100%' : `${MAX_NOTEBOOK_WIDTH * 100}%`,
-          position: isMobile ? 'fixed' : isNotebookPinned ? 'relative' : 'absolute',
+          width: isMobile ? '100%' : `${assistantPanelWidth}`,
+          maxWidth: isMobile ? '100%' : `${MAX_ASSISTANT_PANEL_WIDTH * 100}%`,
+          position: isMobile ? 'fixed' : isAssistantPanelPinned ? 'relative' : 'absolute',
           paddingTop: `${getPanelTopInset({
             isMobile,
             isFullHeightInMobile,
@@ -182,7 +180,7 @@ const Notebook: React.FC = ({}) => {
       >
         <style jsx>{`
           @media (max-width: 640px) {
-            .notebook-container {
+            .assistant-panel-container {
               border-top-left-radius: 16px;
               border-top-right-radius: 16px;
             }
@@ -198,9 +196,9 @@ const Notebook: React.FC = ({}) => {
           )}
           role='slider'
           tabIndex={0}
-          aria-label={_('Resize Notebook')}
+          aria-label={_('Resize AI')}
           aria-orientation='horizontal'
-          aria-valuenow={parseFloat(notebookWidth)}
+          aria-valuenow={parseFloat(assistantPanelWidth)}
           onMouseDown={handleDragStart}
           onTouchStart={handleDragStart}
           onKeyDown={handleDragKeyDown}
@@ -210,9 +208,9 @@ const Notebook: React.FC = ({}) => {
             <div
               role='slider'
               tabIndex={0}
-              aria-label={_('Resize Notebook')}
+              aria-label={_('Resize AI')}
               aria-orientation='vertical'
-              aria-valuenow={notebookHeight.current}
+              aria-valuenow={assistantPanelHeight.current}
               className='drag-handle flex h-6 max-h-6 min-h-6 w-full cursor-row-resize items-center justify-center'
               onMouseDown={handleVerticalDragStart}
               onTouchStart={handleVerticalDragStart}
@@ -220,10 +218,10 @@ const Notebook: React.FC = ({}) => {
               <div className='bg-base-content/50 h-1 w-10 rounded-full'></div>
             </div>
           )}
-          <NotebookHeader
-            isPinned={isNotebookPinned}
+          <AssistantHeader
+            isPinned={isAssistantPanelPinned}
             pane={pane}
-            handleClose={() => setNotebookVisible(false)}
+            handleClose={() => setAssistantPanelVisible(false)}
             handleTogglePin={handleTogglePin}
             onOpenHistory={() => setPane('history')}
             onBackToChat={() => setPane('chat')}
@@ -247,4 +245,4 @@ const Notebook: React.FC = ({}) => {
   ) : null;
 };
 
-export default Notebook;
+export default AssistantPanel;

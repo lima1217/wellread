@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNotebookStore } from '@/store/notebookStore';
+import { useAssistantPanelStore } from '@/store/assistantPanelStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 import { TextSelection } from '@/utils/sel';
@@ -17,38 +17,38 @@ interface NoteEditorProps {
 const NoteEditor: React.FC<NoteEditorProps> = ({ onSave, onEdit }) => {
   const _ = useTranslation();
   const {
-    notebookNewAnnotation,
-    notebookEditAnnotation,
-    setNotebookNewAnnotation,
-    setNotebookEditAnnotation,
-    saveNotebookAnnotationDraft,
-    getNotebookAnnotationDraft,
-  } = useNotebookStore();
+    newAnnotation,
+    editAnnotation,
+    setNewAnnotation,
+    setEditAnnotation,
+    saveAnnotationDraft,
+    getAnnotationDraft,
+  } = useAssistantPanelStore();
 
   const editorRef = useRef<TextEditorRef>(null);
   const [note, setNote] = useState('');
   const separatorWidth = useResponsiveSize(3);
 
   useEffect(() => {
-    if (notebookEditAnnotation) {
-      const noteText = notebookEditAnnotation.note;
+    if (editAnnotation) {
+      const noteText = editAnnotation.note;
       setNote(noteText);
       editorRef.current?.setValue(noteText);
       editorRef.current?.focus();
-    } else if (notebookNewAnnotation) {
+    } else if (newAnnotation) {
       const noteText = getAnnotationText();
       if (noteText) {
-        const draftNote = getNotebookAnnotationDraft(md5Fingerprint(noteText)) || '';
+        const draftNote = getAnnotationDraft(md5Fingerprint(noteText)) || '';
         setNote(draftNote);
         editorRef.current?.setValue(draftNote);
         editorRef.current?.focus();
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notebookNewAnnotation, notebookEditAnnotation]);
+  }, [newAnnotation, editAnnotation]);
 
   const getAnnotationText = () => {
-    return notebookEditAnnotation?.text || notebookNewAnnotation?.text || '';
+    return editAnnotation?.text || newAnnotation?.text || '';
   };
 
   const handleNoteChange = (value: string) => {
@@ -60,7 +60,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ onSave, onEdit }) => {
     if (currentValue) {
       const noteText = getAnnotationText();
       if (noteText) {
-        saveNotebookAnnotationDraft(md5Fingerprint(noteText), currentValue);
+        saveAnnotationDraft(md5Fingerprint(noteText), currentValue);
       }
     }
   };
@@ -68,23 +68,23 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ onSave, onEdit }) => {
   const handleSaveNote = () => {
     const currentValue = editorRef.current?.getValue();
     if (currentValue) {
-      if (notebookNewAnnotation) {
-        onSave(notebookNewAnnotation, currentValue);
-      } else if (notebookEditAnnotation) {
-        notebookEditAnnotation.note = currentValue;
-        onEdit(notebookEditAnnotation);
+      if (newAnnotation) {
+        onSave(newAnnotation, currentValue);
+      } else if (editAnnotation) {
+        editAnnotation.note = currentValue;
+        onEdit(editAnnotation);
       }
     }
   };
 
   const handleEscape = () => {
-    if (notebookNewAnnotation) {
-      // Clearing the selection ends the creation flow; Notebook reacts to that
+    if (newAnnotation) {
+      // Clearing the selection ends the creation flow; the panel reacts to that
       // and tears down the empty placeholder highlight it created (#4791).
-      setNotebookNewAnnotation(null);
+      setNewAnnotation(null);
     }
-    if (notebookEditAnnotation) {
-      setNotebookEditAnnotation(null);
+    if (editAnnotation) {
+      setEditAnnotation(null);
     }
   };
 

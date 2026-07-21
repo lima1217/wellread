@@ -1,50 +1,44 @@
 import React from 'react';
-import { RiQuillPenLine } from 'react-icons/ri';
+import { PiRobot } from 'react-icons/pi';
 
 import { useEnv } from '@/context/EnvContext';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
-import { useNotebookStore } from '@/store/notebookStore';
+import { useAssistantPanelStore } from '@/store/assistantPanelStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 import Button from '@/components/Button';
 
-interface NotebookTogglerProps {
+interface AITogglerProps {
   bookKey: string;
 }
 
-const NotebookToggler: React.FC<NotebookTogglerProps> = ({ bookKey }) => {
+const AIToggler: React.FC<AITogglerProps> = ({ bookKey }) => {
   const _ = useTranslation();
   const { appService } = useEnv();
   const { setHoveredBookKey } = useReaderStore();
   const { sideBarBookKey, setSideBarBookKey } = useSidebarStore();
-  const { isNotebookVisible, toggleNotebook } = useNotebookStore();
+  const { isAssistantPanelVisible, toggleAssistantPanel } = useAssistantPanelStore();
   const iconSize18 = useResponsiveSize(18);
 
-  const handleToggleSidebar = () => {
+  const handleToggleAI = () => {
     if (appService?.isMobile) {
       setHoveredBookKey('');
     }
     if (sideBarBookKey === bookKey) {
-      toggleNotebook();
+      toggleAssistantPanel();
     } else {
       setSideBarBookKey(bookKey);
-      if (!isNotebookVisible) toggleNotebook();
+      if (!isAssistantPanelVisible) toggleAssistantPanel();
     }
   };
   return (
     <Button
-      icon={
-        sideBarBookKey == bookKey && isNotebookVisible ? (
-          <RiQuillPenLine size={iconSize18} className='text-base-content' />
-        ) : (
-          <RiQuillPenLine size={iconSize18} className='text-base-content' />
-        )
-      }
-      onClick={handleToggleSidebar}
-      label={_('Notebook')}
+      icon={<PiRobot size={iconSize18} className='text-base-content' />}
+      onClick={handleToggleAI}
+      label={_('AI')}
     ></Button>
   );
 };
 
-export default NotebookToggler;
+export default AIToggler;
