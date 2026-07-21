@@ -17,11 +17,9 @@ export class ReaderPage extends BasePage {
   readonly headerBar: Locator;
   readonly footerBar: Locator;
   readonly sidebar: Locator;
-  readonly notebook: Locator;
   readonly tocItems: Locator;
   readonly searchResults: Locator;
   readonly annotationPopup: Locator;
-  readonly noteEditor: Locator;
   readonly annotationItems: Locator;
 
   constructor(page: Page) {
@@ -31,11 +29,9 @@ export class ReaderPage extends BasePage {
     this.headerBar = page.locator('.header-bar').first();
     this.footerBar = page.locator('.footer-bar').first();
     this.sidebar = page.locator('[role="navigation"][aria-label="Sidebar"]');
-    this.notebook = page.locator('[role="group"][aria-label="Notebook"]');
     this.tocItems = page.locator('.toc-list [role="treeitem"]');
     this.searchResults = page.locator('.search-results li[role="button"]');
     this.annotationPopup = page.locator('.selection-popup');
-    this.noteEditor = page.locator('.note-editor-container');
     this.annotationItems = page.locator('li.booknote-item[role="button"]');
   }
 
@@ -255,12 +251,9 @@ export class ReaderPage extends BasePage {
     await this.page.locator(`[aria-label="Select ${color} color"]`).click();
   }
 
-  /** Annotate the current selection with a note. */
-  async addNote(text: string): Promise<void> {
+  /** Annotate the current selection (highlight only; notes edit in the left sidebar). */
+  async annotateSelection(): Promise<void> {
     await this.popupTool('Annotate').click();
-    await this.noteEditor.waitFor({ state: 'visible' });
-    await this.noteEditor.getByRole('textbox').fill(text);
-    await this.notebook.getByRole('button', { name: 'Save' }).click();
   }
 
   /** Dismiss the annotation popup if it is open. */

@@ -31,14 +31,14 @@ test.describe('Annotation', () => {
     await expect(reader.annotationItems).toHaveCount(1);
   });
 
-  test('adds a note to the selected text', async ({ openBook }) => {
+  test('annotates the selected text as a highlight', async ({ openBook }) => {
     const reader = await openBook();
-    const noteText = 'A note added by the e2e suite';
 
     await reader.selectText();
-    await reader.addNote(noteText);
+    await reader.annotateSelection();
 
-    await expect(reader.notebook.getByText(noteText)).toBeVisible();
+    await reader.openAnnotationsTab();
+    await expect(reader.annotationItems).toHaveCount(1);
   });
 
   test('deletes an annotation', async ({ openBook }) => {
