@@ -22,8 +22,8 @@ export const DEFAULT_ANNOTATION_TOOLBAR_ITEMS: AnnotationToolType[] = [
   'annotate',
   'search',
   'dictionary',
-  'ask',
   'proofread',
+  'ask',
 ];
 
 // Drop unknown/duplicate entries; fall back to the default when unset (a

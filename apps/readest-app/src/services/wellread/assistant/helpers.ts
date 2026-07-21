@@ -45,28 +45,6 @@ export function formatPendingQuotesForTurn(
   return [...blocks, question].filter(Boolean).join('\n\n');
 }
 
-export type SystemPromptInput = {
-  bookId: string;
-  bookTitle?: string | null;
-};
-
-export function buildReadingAssistantSystemPrompt(input: SystemPromptInput): string {
-  const title = input.bookTitle?.trim() || input.bookId;
-  const extractRoot = `/workspace/.wellread/extract/${input.bookId}/`;
-  const notesRoot = `/workspace/.wellread/notes/${input.bookId}/`;
-  return [
-    'You are the Reading Assistant for wellread — a desktop ebook reader.',
-    `Current book: "${title}" (bookId=${input.bookId}).`,
-    `Stay on the current book only. Prefer materials under ${extractRoot}.`,
-    'You may use glob, grep, and read_file on that extract tree when helpful; do not read epub/pdf binaries as text.',
-    'Grounding is optional: answer freely when you already know enough; cite book locations when you reference specific passages.',
-    'When citing a passage, prefer sources with cfi (and optional endCfi/title) from chunk frontmatter so the reader can jump back.',
-    `write_file only when the user explicitly asks to save/write/store something. Use fixed paths under ${notesRoot} (e.g. summary.md, outline.md, chapters/<slug>.md) and overwrite in place. Do not write otherwise; do not ask for confirmation.`,
-    'Match the user language (Chinese question → Chinese answer).',
-    'Do not pretend to have skills that are not mounted (translation pipelines, wiki packs, cross-book search).',
-  ].join('\n');
-}
-
 export type SourceItem = {
   cfi: string;
   endCfi?: string;
@@ -116,4 +94,32 @@ export function summarizeToolTrace(tools: ToolTraceEntry[]): string {
   if (n === 0) return '';
   // English key-as-content; UI may pass through useTranslation.
   return `Searched extract · ${n} ${n === 1 ? 'step' : 'steps'}`;
+}
+
+/**
+ * Show the pending-reply dots only while the *current* turn has no assistant text.
+ * Prior assistant messages in the session must not suppress later waits.
+ * Reasoning-only bubbles (Think mode) still count as a visible reply cue.
+ */
+export function shouldShowPendingReply(
+  busy: boolean,
+  messages: ReadonlyArray<{ role: string; content: string; reasoning?: string }>,
+): boolean {
+  if (!busy) return false;
+  const last = messages[messages.length - 1];
+  if (!last) return true;
+  if (last.role === 'assistant') {
+    if (last.content.trim().length > 0) return false;
+    if ((last.reasoning ?? '').trim().length > 0) return false;
+  }
+  return true;
+}
+
+/** Compact duration for assistant footer metadata (e.g. "12s", "2m 5s"). */
+export function formatWorkDuration(ms: number): string {
+  const totalSec = Math.max(1, Math.round(ms / 1000));
+  if (totalSec < 60) return `${totalSec}s`;
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
 }

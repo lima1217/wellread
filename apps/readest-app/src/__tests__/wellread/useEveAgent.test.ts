@@ -128,6 +128,7 @@ describe('useEveAgent', () => {
       'ses_existing',
       '> quoted\n\nWhy?',
       expect.any(AbortSignal),
+      { thinkingMode: 'fast' },
     );
     expect(result.current.messages[0]).toMatchObject({
       role: 'user',
@@ -175,5 +176,247 @@ describe('useEveAgent', () => {
     expect(createEveSession).not.toHaveBeenCalled();
     expect(streamEveTurn).not.toHaveBeenCalled();
     expect(onSendFailed).not.toHaveBeenCalled();
+  });
+
+  it('shows an optimistic user message before the first stream event, then replaces it', async () => {
+    getEveSession.mockResolvedValue({
+      id: 'ses_existing',
+      bookId: 'book-1',
+      title: 'Chat',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [],
+    });
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    streamEveTurn.mockImplementation(async function* () {
+      await gate;
+      yield { type: 'message.user' as const, id: 'u1', content: 'What is vocation?' };
+      yield { type: 'done' as const };
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.sessionId).toBe('ses_existing');
+    });
+
+    await act(async () => {
+      result.current.setComposer('What is vocation?');
+    });
+
+    let sendDone: Promise<void> | undefined;
+    await act(async () => {
+      sendDone = result.current.send();
+    });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe('submitted');
+      expect(result.current.messages).toHaveLength(1);
+    });
+    expect(result.current.messages[0]).toMatchObject({
+      role: 'user',
+      content: 'What is vocation?',
+    });
+    expect(result.current.messages[0]?.id).toMatch(/^optimistic-user-/);
+
+    release();
+    await act(async () => {
+      await sendDone;
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0]).toMatchObject({
+      id: 'u1',
+      role: 'user',
+      content: 'What is vocation?',
+    });
+  });
+
+  it('passes Think mode and accumulates reasoning separate from content', async () => {
+    getEveSession.mockResolvedValue({
+      id: 'ses_existing',
+      bookId: 'book-1',
+      title: 'Chat',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [],
+    });
+    streamEveTurn.mockImplementation(async function* () {
+      yield { type: 'message.user' as const, id: 'u1', content: 'Why?' };
+      yield {
+        type: 'message.assistant.reasoning.delta' as const,
+        id: 'a1',
+        delta: 'step ',
+      };
+      yield {
+        type: 'message.assistant.reasoning.delta' as const,
+        id: 'a1',
+        delta: 'two',
+      };
+      yield {
+        type: 'message.assistant.delta' as const,
+        id: 'a1',
+        delta: 'Because vocation.',
+      };
+      yield {
+        type: 'message.assistant' as const,
+        id: 'a1',
+        content: 'Because vocation.',
+        reasoning: 'step two',
+      };
+      yield { type: 'done' as const };
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({
+        bookId: 'book-1',
+        bookTitle: 'Middlemarch',
+        sessionId: 'ses_existing',
+        thinkingMode: 'think',
+      }),
+    );
+    await waitFor(() => {
+      expect(result.current.sessionId).toBe('ses_existing');
+    });
+
+    await act(async () => {
+      result.current.setComposer('Why?');
+    });
+    await act(async () => {
+      await result.current.send();
+    });
+
+    expect(streamEveTurn).toHaveBeenCalledWith('ses_existing', 'Why?', expect.any(AbortSignal), {
+      thinkingMode: 'think',
+    });
+    const assistant = result.current.messages.find((m) => m.role === 'assistant');
+    expect(assistant).toMatchObject({
+      content: 'Because vocation.',
+      reasoning: 'step two',
+    });
+  });
+
+  it('exposes in-flight tools before assistant text arrives and clears them when done', async () => {
+    getEveSession.mockResolvedValue({
+      id: 'ses_existing',
+      bookId: 'book-1',
+      title: 'Chat',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [],
+    });
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    streamEveTurn.mockImplementation(async function* () {
+      yield { type: 'message.user' as const, id: 'u1', content: 'Why?' };
+      yield {
+        type: 'tool.start' as const,
+        id: 't1',
+        name: 'search_extract',
+        args: { q: 'vocation' },
+      };
+      await gate;
+      yield {
+        type: 'message.assistant.delta' as const,
+        id: 'a1',
+        delta: 'Because…',
+      };
+      yield { type: 'done' as const };
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.sessionId).toBe('ses_existing');
+    });
+
+    await act(async () => {
+      result.current.setComposer('Why?');
+    });
+
+    let sendDone: Promise<void> | undefined;
+    await act(async () => {
+      sendDone = result.current.send();
+    });
+
+    await waitFor(() => {
+      expect(result.current.inFlightTools).toHaveLength(1);
+    });
+    expect(result.current.inFlightTools[0]).toMatchObject({
+      id: 't1',
+      name: 'search_extract',
+    });
+
+    release();
+    await act(async () => {
+      await sendDone;
+    });
+
+    expect(result.current.inFlightTools).toEqual([]);
+    expect(result.current.status).toBe('ready');
+  });
+
+  it('applies context.compressed by dropping removed ids and prepending the summary', async () => {
+    getEveSession.mockResolvedValue({
+      id: 'ses_existing',
+      bookId: 'book-1',
+      title: 'Chat',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [
+        { id: 'old1', role: 'user', content: 'earlier', createdAt: 1 },
+        { id: 'old2', role: 'assistant', content: 'reply', createdAt: 2 },
+      ],
+    });
+    streamEveTurn.mockImplementation(async function* () {
+      yield { type: 'message.user' as const, id: 'u1', content: 'new question' };
+      yield {
+        type: 'context.compressed' as const,
+        beforeTokens: 900,
+        afterTokens: 180,
+        targetTokens: 200,
+        removedIds: ['old1', 'old2'],
+        summary: {
+          id: 'sum1',
+          role: 'assistant' as const,
+          content: '[Conversation summary]\nPrior turns compacted.',
+          createdAt: 3,
+          compacted: true,
+        },
+      };
+      yield { type: 'done' as const };
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(2);
+    });
+
+    await act(async () => {
+      result.current.setComposer('new question');
+    });
+    await act(async () => {
+      await result.current.send();
+    });
+
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({
+        id: 'sum1',
+        compacted: true,
+        content: '[Conversation summary]\nPrior turns compacted.',
+      }),
+      expect.objectContaining({ id: 'u1', role: 'user', content: 'new question' }),
+    ]);
   });
 });

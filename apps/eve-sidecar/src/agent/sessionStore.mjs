@@ -22,8 +22,10 @@ import { randomBytes } from 'node:crypto';
  *   role: 'user' | 'assistant' | 'system',
  *   content: string,
  *   createdAt: number,
+ *   reasoning?: string,
  *   sources?: Array<{ cfi: string, endCfi?: string, title?: string, path?: string }>,
  *   tools?: Array<{ id: string, name: string, args?: unknown, result?: unknown }>,
+ *   compacted?: boolean,
  * }} SessionMessage
  *
  * @typedef {SessionMeta & { messages: SessionMessage[] }} Session

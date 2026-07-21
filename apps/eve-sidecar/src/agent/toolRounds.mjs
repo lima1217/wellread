@@ -8,7 +8,7 @@ export const MIN_MAX_TOOL_ROUNDS = 2;
 export const HARD_MAX_TOOL_ROUNDS = 24;
 
 export const TOOLS_EXHAUSTED_SYSTEM_PROMPT =
-  '工具调用次数已用尽。请基于已获取的信息直接作答，并在末尾用一行说明还缺少哪些信息或无法确认的部分，不要继续要求调用工具。';
+  '工具调用次数已用尽。基于已获取的信息直接作答；末尾用一行列出仍缺或无法确认的部分。';
 
 /**
  * @param {unknown} [limit]

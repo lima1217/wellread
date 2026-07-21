@@ -7,6 +7,7 @@ import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { useAssistantPanelStore } from '@/store/assistantPanelStore';
 import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
+import { createEveSession } from '@/services/wellread/assistant/eveClient';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useThemeStore } from '@/store/themeStore';
 import { useEnv } from '@/context/EnvContext';
@@ -45,6 +46,8 @@ const AssistantPanel: React.FC = ({}) => {
     toggleAssistantPanelPin,
   } = useAssistantPanelStore();
   const activeSessionId = useReadingAssistantStore((s) => s.activeSessionId);
+  const setActiveSession = useReadingAssistantStore((s) => s.setActiveSession);
+  const clearPendingQuotes = useReadingAssistantStore((s) => s.clearPendingQuotes);
 
   const isMobile = window.innerWidth < 640;
   const [isFullHeightInMobile, setIsFullHeightInMobile] = useState(isMobile);
@@ -121,6 +124,22 @@ const AssistantPanel: React.FC = ({}) => {
     saveSysSettings(envConfig, 'globalReadSettings', newGlobalReadSettings);
   };
 
+  const handleNewSession = useCallback(async () => {
+    if (!sideBarBookKey) return;
+    const data = getBookData(sideBarBookKey);
+    const bookId = data?.book?.hash || sideBarBookKey.split('-')[0] || '';
+    if (!bookId) return;
+    const bookTitle = data?.book?.title || 'Unknown';
+    clearPendingQuotes();
+    const session = await createEveSession({
+      bookId,
+      bookTitle,
+      title: `Chat about ${bookTitle}`,
+    });
+    setActiveSession(session.id, bookId);
+    setPane('chat');
+  }, [sideBarBookKey, getBookData, clearPendingQuotes, setActiveSession]);
+
   const handleClickOverlay = () => {
     setAssistantPanelVisible(false);
   };
@@ -155,8 +174,9 @@ const AssistantPanel: React.FC = ({}) => {
       <div
         ref={assistantPanelRef}
         className={clsx(
-          'assistant-panel-container right-0 flex min-w-60 select-none flex-col',
+          'assistant-panel-container right-0 flex min-w-60 select-none flex-col overscroll-contain',
           'full-height font-sans text-base font-normal transition-[padding-top] duration-300 sm:text-sm',
+          'motion-reduce:transition-none',
           viewSettings?.isEink ? 'bg-base-100' : 'bg-base-200',
           appService?.hasRoundedWindow && 'rounded-window-top-right rounded-window-bottom-right',
           isAssistantPanelPinned ? 'z-20' : 'z-[45] shadow-2xl',
@@ -225,13 +245,20 @@ const AssistantPanel: React.FC = ({}) => {
             handleTogglePin={handleTogglePin}
             onOpenHistory={() => setPane('history')}
             onBackToChat={() => setPane('chat')}
+            onNewSession={() => void handleNewSession()}
           />
         </div>
         <div className='flex min-h-0 flex-1 flex-col'>
-          {pane === 'history' ? (
-            <ChatHistoryView bookKey={sideBarBookKey} onSessionOpen={() => setPane('chat')} />
-          ) : (
+          {/* Keep chat mounted while history is open so in-flight streaming
+              (useEveAgent React state) survives pane switches. */}
+          <div
+            className={clsx('flex min-h-0 flex-1 flex-col', pane !== 'chat' && 'hidden')}
+            aria-hidden={pane !== 'chat'}
+          >
             <AIAssistant key={activeSessionId ?? 'new'} bookKey={sideBarBookKey} />
+          </div>
+          {pane === 'history' && (
+            <ChatHistoryView bookKey={sideBarBookKey} onSessionOpen={() => setPane('chat')} />
           )}
         </div>
         <div

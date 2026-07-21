@@ -4,9 +4,11 @@ import {
   createLanguageModel,
   normalizeApiMode,
   normalizeModelEnv,
-  patchDeepSeekChatBody,
-  promoteReasoningContentInPayload,
-  withDeepSeekThinkingDisabled,
+  normalizeThinkingMode,
+  patchChatCompletionBody,
+  transformCompletionPayload,
+  turnFetchContext,
+  withModelFetchPatch,
 } from './createModel.mjs';
 
 describe('normalizeModelEnv', () => {
@@ -32,58 +34,31 @@ describe('normalizeModelEnv', () => {
   });
 });
 
-describe('withDeepSeekThinkingDisabled', () => {
-  it('injects thinking disabled into chat completion JSON bodies', async () => {
-    /** @type {string | undefined} */
-    let sentBody;
-    const wrapped = withDeepSeekThinkingDisabled(async (_url, init) => {
-      sentBody = typeof init?.body === 'string' ? init.body : undefined;
-      return new Response('{}', { status: 200 });
-    });
-
-    await wrapped('https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      body: JSON.stringify({ model: 'deepseek-v4-flash', messages: [] }),
-    });
-
-    assert.ok(sentBody);
-    const parsed = JSON.parse(sentBody);
-    assert.deepEqual(parsed.thinking, { type: 'disabled' });
-  });
-
-  it('overrides an explicit thinking enabled setting', async () => {
-    /** @type {string | undefined} */
-    let sentBody;
-    const wrapped = withDeepSeekThinkingDisabled(async (_url, init) => {
-      sentBody = typeof init?.body === 'string' ? init.body : undefined;
-      return new Response('{}', { status: 200 });
-    });
-
-    await wrapped('https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      body: JSON.stringify({
-        model: 'deepseek-v4-flash',
-        thinking: { type: 'enabled' },
-      }),
-    });
-
-    assert.equal(JSON.parse(/** @type {string} */ (sentBody)).thinking.type, 'disabled');
+describe('normalizeThinkingMode', () => {
+  it('accepts think and defaults everything else to fast', () => {
+    assert.equal(normalizeThinkingMode('think'), 'think');
+    assert.equal(normalizeThinkingMode('fast'), 'fast');
+    assert.equal(normalizeThinkingMode(undefined), 'fast');
+    assert.equal(normalizeThinkingMode('nope'), 'fast');
   });
 });
 
-describe('patchDeepSeekChatBody', () => {
-  it('rewrites developer role to system and disables thinking', () => {
+describe('patchChatCompletionBody', () => {
+  it('rewrites developer role to system and disables thinking in fast mode', () => {
     assert.deepEqual(
-      patchDeepSeekChatBody({
-        model: 'deepseek-v4-flash',
-        messages: [
-          { role: 'developer', content: 'sys' },
-          { role: 'user', content: 'hi' },
-        ],
-        thinking: { type: 'enabled' },
-      }),
+      patchChatCompletionBody(
+        {
+          model: 'glm-5.2',
+          messages: [
+            { role: 'developer', content: 'sys' },
+            { role: 'user', content: 'hi' },
+          ],
+          thinking: { type: 'enabled' },
+        },
+        'fast',
+      ),
       {
-        model: 'deepseek-v4-flash',
+        model: 'glm-5.2',
         messages: [
           { role: 'system', content: 'sys' },
           { role: 'user', content: 'hi' },
@@ -92,23 +67,115 @@ describe('patchDeepSeekChatBody', () => {
       },
     );
   });
+
+  it('enables thinking in think mode', () => {
+    assert.deepEqual(
+      patchChatCompletionBody({ model: 'glm-5.2', messages: [] }, 'think').thinking,
+      { type: 'enabled' },
+    );
+  });
 });
 
-describe('promoteReasoningContentInPayload', () => {
-  it('copies delta.reasoning_content into empty delta.content', () => {
-    const out = promoteReasoningContentInPayload({
-      choices: [{ delta: { reasoning_content: 'think', content: '' } }],
-    });
-    assert.deepEqual(out, {
-      choices: [{ delta: { reasoning_content: 'think', content: 'think' } }],
-    });
+describe('transformCompletionPayload', () => {
+  it('never copies reasoning into empty content', () => {
+    const out = transformCompletionPayload(
+      { choices: [{ delta: { reasoning_content: 'think', content: '' } }] },
+      { thinkingMode: 'fast' },
+    );
+    assert.equal(out.choices[0].delta.content, '');
+    assert.equal(out.choices[0].delta.reasoning_content, undefined);
   });
 
-  it('leaves non-empty content alone', () => {
-    const input = {
-      choices: [{ delta: { reasoning_content: 'think', content: 'answer' } }],
-    };
-    assert.equal(promoteReasoningContentInPayload(input), input);
+  it('leaves answer content alone while forwarding reasoning in think mode', () => {
+    /** @type {string[]} */
+    const reasoning = [];
+    const out = transformCompletionPayload(
+      { choices: [{ delta: { reasoning_content: 'step', content: 'answer' } }] },
+      {
+        thinkingMode: 'think',
+        onReasoningDelta: (delta) => reasoning.push(delta),
+      },
+    );
+    assert.deepEqual(reasoning, ['step']);
+    assert.equal(out.choices[0].delta.content, 'answer');
+    assert.equal(out.choices[0].delta.reasoning_content, undefined);
+  });
+
+  it('forwards reasoning-only deltas in think mode without inventing content', () => {
+    /** @type {string[]} */
+    const reasoning = [];
+    const out = transformCompletionPayload(
+      { choices: [{ delta: { reasoning_content: 'cot', content: '' } }] },
+      {
+        thinkingMode: 'think',
+        onReasoningDelta: (delta) => reasoning.push(delta),
+      },
+    );
+    assert.deepEqual(reasoning, ['cot']);
+    assert.equal(out.choices[0].delta.content, '');
+    assert.equal(out.choices[0].delta.reasoning_content, undefined);
+  });
+});
+
+describe('withModelFetchPatch', () => {
+  it('injects thinking disabled when turn context mode is fast', async () => {
+    /** @type {string | undefined} */
+    let sentBody;
+    const wrapped = withModelFetchPatch(async (_url, init) => {
+      sentBody = typeof init?.body === 'string' ? init.body : undefined;
+      return new Response('{}', { status: 200 });
+    });
+
+    await turnFetchContext.run({ thinkingMode: 'fast' }, () =>
+      wrapped('https://api.example.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'glm-5.2', messages: [] }),
+      }),
+    );
+
+    assert.ok(sentBody);
+    assert.deepEqual(JSON.parse(sentBody).thinking, { type: 'disabled' });
+  });
+
+  it('injects thinking enabled when turn context mode is think', async () => {
+    /** @type {string | undefined} */
+    let sentBody;
+    const wrapped = withModelFetchPatch(async (_url, init) => {
+      sentBody = typeof init?.body === 'string' ? init.body : undefined;
+      return new Response('{}', { status: 200 });
+    });
+
+    await turnFetchContext.run({ thinkingMode: 'think' }, () =>
+      wrapped('https://api.example.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'glm-5.2', thinking: { type: 'disabled' } }),
+      }),
+    );
+
+    assert.equal(JSON.parse(/** @type {string} */ (sentBody)).thinking.type, 'enabled');
+  });
+
+  it('keeps each concurrent turn thinkingMode isolated', async () => {
+    /** @type {string[]} */
+    const thinkingTypes = [];
+    const wrapped = withModelFetchPatch(async (_url, init) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
+      thinkingTypes.push(body.thinking?.type);
+      return new Response('{}', { status: 200 });
+    });
+
+    const request = (mode) =>
+      turnFetchContext.run({ thinkingMode: mode }, () =>
+        wrapped('https://api.example.com/v1/chat/completions', {
+          method: 'POST',
+          body: JSON.stringify({ model: 'glm-5.2', messages: [] }),
+        }),
+      );
+
+    await Promise.all([request('think'), request('fast')]);
+
+    assert.deepEqual(thinkingTypes.toSorted(), ['disabled', 'enabled']);
   });
 });
 

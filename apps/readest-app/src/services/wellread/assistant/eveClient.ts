@@ -28,10 +28,14 @@ export type EveMessage = {
   role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt: number;
+  /** Model chain-of-thought when Thinking Mode is Think (not part of the answer body). */
+  reasoning?: string;
   /** Client-side Pending Quotes attached to this user turn (not always persisted). */
   quotes?: EveMessageQuote[];
   sources?: EveSource[];
   tools?: EveToolTrace[];
+  /** True when this message is an LLM compaction of earlier turns. */
+  compacted?: boolean;
 };
 
 export type EveSessionMeta = {
@@ -45,20 +49,39 @@ export type EveSessionMeta = {
 
 export type EveSession = EveSessionMeta & { messages: EveMessage[] };
 
+export type ThinkingMode = 'think' | 'fast';
+
 export type EveStreamEvent =
   | { type: 'message.user'; id: string; content: string }
   | { type: 'message.assistant.delta'; id: string; delta: string }
+  | { type: 'message.assistant.reasoning.delta'; id: string; delta: string }
   | {
       type: 'message.assistant';
       id: string;
       content: string;
+      reasoning?: string;
       sources?: EveSource[];
       tools?: EveToolTrace[];
     }
   | { type: 'tool.start'; id: string; name: string; args?: unknown }
   | { type: 'tool.end'; id: string; name: string; result?: unknown }
+  | {
+      type: 'context.compressed';
+      beforeTokens: number;
+      afterTokens: number;
+      targetTokens: number;
+      removedIds: string[];
+      summary: {
+        id: string;
+        role: 'assistant' | 'user' | 'system';
+        content: string;
+        createdAt: number;
+        compacted?: boolean;
+      };
+    }
+  | { type: 'context.compress_failed'; message: string }
   | { type: 'error'; message: string }
-  | { type: 'done' };
+  | { type: 'done'; aborted?: boolean };
 
 function authHeaders(token: string | undefined): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -121,12 +144,14 @@ export async function* streamEveTurn(
   sessionId: string,
   message: string,
   signal?: AbortSignal,
+  options?: { thinkingMode?: ThinkingMode },
 ): AsyncGenerator<EveStreamEvent> {
   const { baseUrl, token } = base();
+  const thinkingMode = options?.thinkingMode === 'think' ? 'think' : 'fast';
   const res = await eveFetch(`${baseUrl}/eve/v1/sessions/${encodeURIComponent(sessionId)}/turns`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...authHeaders(token) },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, thinkingMode }),
     signal,
   });
   if (!res.ok || !res.body) {

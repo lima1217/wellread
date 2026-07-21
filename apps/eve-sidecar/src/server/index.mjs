@@ -9,7 +9,11 @@
 import http from 'node:http';
 import { mkdirSync } from 'node:fs';
 import { createOpenAI } from '@ai-sdk/openai';
-import { createLanguageModel, normalizeModelEnv } from '../createModel.mjs';
+import {
+  createLanguageModel,
+  normalizeModelEnv,
+  normalizeThinkingMode,
+} from '../createModel.mjs';
 import { createHttpAbort } from '../agent/httpAbort.mjs';
 import { createSessionStore } from '../agent/sessionStore.mjs';
 import { runTurn } from '../agent/runTurn.mjs';
@@ -30,11 +34,13 @@ const modelConfig = normalizeModelEnv({
 });
 
 let languageModel = null;
+let modelContextWindowTokens = modelConfig.contextWindowTokens;
 let modelReady = false;
 let modelError = '';
 try {
   const built = createLanguageModel(modelConfig, { createOpenAI });
   languageModel = built.model;
+  modelContextWindowTokens = built.modelContextWindowTokens;
   modelReady = Boolean(modelConfig.apiKey);
 } catch (error) {
   modelError = error instanceof Error ? error.message : String(error);
@@ -192,6 +198,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: 'message_required' }, req);
         return;
       }
+      const thinkingMode = normalizeThinkingMode(body.thinkingMode);
 
       res.writeHead(200, {
         'content-type': 'application/x-ndjson; charset=utf-8',
@@ -220,6 +227,8 @@ const server = http.createServer(async (req, res) => {
           getBooksRoot,
           onEvent: writeEvent,
           abortSignal,
+          contextWindowTokens: modelContextWindowTokens,
+          thinkingMode,
         });
         sessions.save(session);
       } catch (error) {

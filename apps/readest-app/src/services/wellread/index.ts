@@ -41,7 +41,6 @@ export { useEveConnectionStore } from './eveConnectionStore';
 export {
   isReadingAssistantAvailable,
   formatPendingQuotesForTurn,
-  buildReadingAssistantSystemPrompt,
   extractSourcesFromChunkMarkdown,
   summarizeToolTrace,
 } from './assistant/helpers';

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildReadingAssistantSystemPrompt,
   extractSourcesFromChunkMarkdown,
   formatPendingQuotesForTurn,
+  formatWorkDuration,
   isReadingAssistantAvailable,
+  shouldShowPendingReply,
   summarizeToolTrace,
 } from '@/services/wellread/assistant/helpers';
 
@@ -72,22 +73,6 @@ describe('formatPendingQuotesForTurn', () => {
   });
 });
 
-describe('buildReadingAssistantSystemPrompt', () => {
-  it('injects bookId, extract root, write rules, and no cross-book', () => {
-    const prompt = buildReadingAssistantSystemPrompt({
-      bookId: 'abc123',
-      bookTitle: 'Moby Dick',
-    });
-    expect(prompt).toContain('abc123');
-    expect(prompt).toContain('Moby Dick');
-    expect(prompt).toContain('/workspace/.wellread/extract/abc123/');
-    expect(prompt).toContain('/workspace/.wellread/notes/abc123/');
-    expect(prompt.toLowerCase()).toMatch(/do not|不要|勿/);
-    expect(prompt).toMatch(/write_file/);
-    expect(prompt.toLowerCase()).toMatch(/current book|当前书/);
-  });
-});
-
 describe('extractSourcesFromChunkMarkdown', () => {
   it('reads cfi/endCfi/title from YAML frontmatter', () => {
     const md = `---
@@ -131,5 +116,54 @@ describe('summarizeToolTrace', () => {
 
   it('uses singular step for one tool call', () => {
     expect(summarizeToolTrace([{ name: 'grep' }])).toBe('Searched extract · 1 step');
+  });
+});
+
+describe('shouldShowPendingReply', () => {
+  it('is false when not busy', () => {
+    expect(shouldShowPendingReply(false, [{ role: 'user', content: 'hi' }])).toBe(false);
+  });
+
+  it('is true on a later turn while waiting after prior assistant replies', () => {
+    expect(
+      shouldShowPendingReply(true, [
+        { role: 'user', content: 'first' },
+        { role: 'assistant', content: 'answer one' },
+        { role: 'user', content: 'second' },
+      ]),
+    ).toBe(true);
+  });
+
+  it('is false once the current turn has assistant text', () => {
+    expect(
+      shouldShowPendingReply(true, [
+        { role: 'user', content: 'first' },
+        { role: 'assistant', content: 'answer one' },
+        { role: 'user', content: 'second' },
+        { role: 'assistant', content: 'answer two' },
+      ]),
+    ).toBe(false);
+  });
+
+  it('is false when the current turn only has reasoning so far', () => {
+    expect(
+      shouldShowPendingReply(true, [
+        { role: 'user', content: 'why?' },
+        { role: 'assistant', content: '', reasoning: 'Let me think…' },
+      ]),
+    ).toBe(false);
+  });
+});
+
+describe('formatWorkDuration', () => {
+  it('rounds to whole seconds and floors sub-second work to 1s', () => {
+    expect(formatWorkDuration(0)).toBe('1s');
+    expect(formatWorkDuration(400)).toBe('1s');
+    expect(formatWorkDuration(12_400)).toBe('12s');
+  });
+
+  it('formats minute spans without trailing zero seconds', () => {
+    expect(formatWorkDuration(60_000)).toBe('1m');
+    expect(formatWorkDuration(125_000)).toBe('2m 5s');
   });
 });

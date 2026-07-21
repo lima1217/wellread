@@ -14,8 +14,7 @@ export function createReadingTools(options) {
 
   return {
     read_file: tool({
-      description:
-        'Read a UTF-8 text file under /workspace (prefer /workspace/.wellread/extract/<bookId>/).',
+      description: 'Read UTF-8 text at an absolute /workspace path (extract chunks).',
       inputSchema: z.object({
         path: z.string().describe('Absolute workspace path starting with /workspace'),
       }),
@@ -27,8 +26,7 @@ export function createReadingTools(options) {
     }),
 
     write_file: tool({
-      description:
-        'Write UTF-8 text under /workspace/.wellread/ only (notes paths). Overwrites existing files.',
+      description: 'Write UTF-8 notes under /workspace/.wellread/ (overwrite).',
       inputSchema: z.object({
         path: z.string(),
         content: z.string(),
@@ -43,7 +41,7 @@ export function createReadingTools(options) {
     }),
 
     glob: tool({
-      description: 'Glob files under /workspace/.wellread/ only.',
+      description: 'Find extract/notes paths under /workspace/.wellread/.',
       inputSchema: z.object({
         pattern: z.string().describe('Glob pattern, e.g. /workspace/.wellread/extract/<bookId>/**/*.md'),
       }),
@@ -54,7 +52,7 @@ export function createReadingTools(options) {
     }),
 
     grep: tool({
-      description: 'Grep file contents under /workspace/.wellread/ only.',
+      description: 'Search extract/notes text under /workspace/.wellread/.',
       inputSchema: z.object({
         pattern: z.string(),
         path: z.string().optional(),
