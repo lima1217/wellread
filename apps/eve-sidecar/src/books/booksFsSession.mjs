@@ -12,6 +12,7 @@ import { createNodeRealpathLookup } from './nodeLookup.mjs';
 import {
   WORKSPACE_ROOT,
   WRITABLE_DIR,
+  authorizeExistingWritePrefix,
   authorizeRead,
   authorizeWrite,
   normalizeAbsolute,
@@ -71,8 +72,10 @@ export function createBooksFsSession(options) {
       }
       const mapped = workspaceToHost(workspacePath, booksRoot);
       if (!mapped.ok) throw new Error(mapped.reason);
-      // Create parent dirs inside .wellread before realpath authorize (last
-      // component may be new; intermediates must exist for the walker).
+      // Authorize the deepest existing prefix before mkdir so a symlink under
+      // .wellread cannot create directories outside Books.
+      const prefix = authorizeExistingWritePrefix(mapped.hostPath, booksRoot, lookup);
+      if (!prefix.ok) throw new Error(prefix.reason);
       mkdirSync(dirname(mapped.hostPath), { recursive: true });
       const auth = authorizeWrite(workspacePath, booksRoot, lookup);
       if (!auth.ok) throw new Error(auth.reason);

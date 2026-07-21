@@ -137,3 +137,58 @@ export function authorizeWrite(workspacePath, booksRoot, lookup) {
 export function authorizeWellreadSearch(workspacePath, booksRoot, lookup) {
   return authorizeWrite(workspacePath, booksRoot, lookup);
 }
+
+function dirnameAbsolute(absoluteHostPath) {
+  const p = normalizeAbsolute(absoluteHostPath);
+  if (p === '/') return '/';
+  const idx = p.lastIndexOf('/');
+  return idx <= 0 ? '/' : p.slice(0, idx) || '/';
+}
+
+/**
+ * Before mkdir for a write, authorize the deepest existing path prefix.
+ * Blocks `.wellread` symlinks that escape Books from creating outside dirs.
+ */
+export function authorizeExistingWritePrefix(hostPath, booksRoot, lookup) {
+  const root = normalizeAbsolute(booksRoot);
+  const writableRoot = normalizeAbsolute(`${booksRoot}/${WRITABLE_DIR}`);
+  const target = normalizeAbsolute(hostPath);
+
+  if (!underRoot(target, writableRoot)) {
+    return {
+      ok: false,
+      reason: `writes only under ${WORKSPACE_ROOT}/${WRITABLE_DIR}/`,
+    };
+  }
+
+  let current = dirnameAbsolute(target);
+  while (true) {
+    const node = lookup(current);
+    if (node.kind !== 'missing') {
+      const resolved = realpath(current, lookup);
+      if (!resolved.ok) return resolved;
+      if (underRoot(resolved.realPath, writableRoot)) {
+        return { ok: true, realPath: resolved.realPath };
+      }
+      // Allow creating `.wellread` itself when only the Books root exists.
+      if (
+        normalizeAbsolute(resolved.realPath) === root &&
+        underRoot(target, writableRoot)
+      ) {
+        return { ok: true, realPath: resolved.realPath };
+      }
+      return {
+        ok: false,
+        reason: `realpath escaped writable root before mkdir: ${resolved.realPath}`,
+      };
+    }
+    if (current === '/' || current === root) {
+      return { ok: false, reason: `books root missing: ${root}` };
+    }
+    const parent = dirnameAbsolute(current);
+    if (parent === current) {
+      return { ok: false, reason: `books root missing: ${root}` };
+    }
+    current = parent;
+  }
+}

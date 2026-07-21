@@ -142,10 +142,26 @@ export function grepWellread(booksRoot, pattern, options = {}) {
   const mapped = workspaceToHost(searchWs, root);
   if (!mapped.ok) throw new Error(mapped.reason);
 
-  const re =
-    options.regex === false
-      ? new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-      : new RegExp(pattern);
+  const MAX_PATTERN_LENGTH = 256;
+  if (typeof pattern !== 'string' || pattern.length === 0) {
+    throw new Error('invalid_grep_pattern: empty');
+  }
+  if (pattern.length > MAX_PATTERN_LENGTH) {
+    throw new Error(
+      `invalid_grep_pattern: too long (max ${MAX_PATTERN_LENGTH})`,
+    );
+  }
+
+  let re;
+  try {
+    re =
+      options.regex === false
+        ? new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        : new RegExp(pattern);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`invalid_grep_pattern: ${detail}`);
+  }
 
   const maxHits = options.maxHits ?? 200;
   const hits = [];

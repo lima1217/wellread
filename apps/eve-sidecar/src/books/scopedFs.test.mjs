@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -35,6 +42,32 @@ describe('createBooksFsSession', () => {
       assert.deepEqual(read, content);
     } finally {
       rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('does not mkdir outside Books via a .wellread symlink before rejecting write', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-books-')));
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-outside-')));
+    try {
+      mkdirSync(join(booksRoot, '.wellread'), { recursive: true });
+      symlinkSync(outside, join(booksRoot, '.wellread', 'link'));
+      const session = createBooksFsSession({ getBooksRoot: () => booksRoot });
+      const content = new TextEncoder().encode('nope');
+      await assert.rejects(
+        () =>
+          session.writeFile({
+            path: '.wellread/link/a/b/x.md',
+            content,
+          }),
+      );
+      assert.equal(
+        existsSync(join(outside, 'a')),
+        false,
+        'must not create directories outside Books before authorizeWrite',
+      );
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
     }
   });
 });

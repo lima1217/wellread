@@ -2,7 +2,7 @@
  * Build a self-contained `.output/` for Tauri `bundle.resources`.
  *
  * Layout:
- *   .output/server/{index,createModel,agent/*,books/*}.mjs
+ *   .output/server/index.mjs (+ sibling server modules, createModel, agent/*, books/*)
  *   .output/node_modules/   (production deps via npm, no pnpm symlinks)
  *
  * Entry imports stay relative under `.output/server/` — never `../../src/`.
@@ -79,6 +79,8 @@ export function build() {
   cpSync(join(root, 'src', 'createModel.mjs'), join(outServer, 'createModel.mjs'));
   copyRuntimeTree(join(root, 'src', 'agent'), join(outServer, 'agent'));
   copyRuntimeTree(join(root, 'src', 'books'), join(outServer, 'books'));
+  // Sibling modules under server/ (readJson, turnInFlight, …) must ship with the entry.
+  copyRuntimeTree(join(root, 'src', 'server'), outServer);
   rewriteServerEntry(join(root, 'src', 'server', 'index.mjs'), join(outServer, 'index.mjs'));
   installProdNodeModules();
 

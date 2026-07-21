@@ -17,9 +17,26 @@ import {
 import { createHttpAbort } from '../agent/httpAbort.mjs';
 import { createSessionStore } from '../agent/sessionStore.mjs';
 import { runTurn } from '../agent/runTurn.mjs';
+import { resolveLoopbackToken } from './loopbackToken.mjs';
+import {
+  BadJsonError,
+  RequestBodyTooLargeError,
+  readJson,
+} from './readJson.mjs';
+import {
+  TURN_IN_FLIGHT_BODY,
+  createTurnInFlightGate,
+} from './turnInFlight.mjs';
 
 const HOST = '127.0.0.1';
-const token = (process.env.EVE_LOOPBACK_TOKEN || '').trim();
+
+const tokenResult = resolveLoopbackToken(process.env);
+if (!tokenResult.ok) {
+  console.error(tokenResult.reason);
+  process.exit(1);
+}
+const token = tokenResult.token;
+
 const dataDir = process.env.EVE_DATA_DIR || './.eve-data';
 const booksRootEnv = (process.env.EVE_BOOKS_ROOT || '').trim();
 
@@ -47,6 +64,7 @@ try {
 }
 
 const sessions = createSessionStore(dataDir);
+const turnGate = createTurnInFlightGate();
 
 function getBooksRoot() {
   if (!booksRootEnv) {
@@ -75,6 +93,7 @@ function corsHeaders(req) {
 }
 
 function checkAuth(req) {
+  // Empty token only reachable with EVE_ALLOW_NO_TOKEN=1 (fail-closed at boot).
   if (!token) return true;
   const header = req.headers.authorization || '';
   return header === `Bearer ${token}`;
@@ -85,15 +104,16 @@ function sendJson(res, status, body, req) {
   res.end(body === undefined ? '' : JSON.stringify(body));
 }
 
-/**
- * @param {import('node:http').IncomingMessage} req
- */
-async function readJson(req) {
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const raw = Buffer.concat(chunks).toString('utf8');
-  if (!raw) return {};
-  return JSON.parse(raw);
+function sendBodyError(res, req, error) {
+  if (error instanceof RequestBodyTooLargeError || error?.code === 'REQUEST_BODY_TOO_LARGE') {
+    sendJson(res, 413, { error: 'payload_too_large' }, req);
+    return true;
+  }
+  if (error instanceof BadJsonError || error?.code === 'BAD_JSON') {
+    sendJson(res, 400, { error: 'bad_json' }, req);
+    return true;
+  }
+  return false;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -192,59 +212,68 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 503, { error: 'model_not_ready', detail: modelError || 'missing apiKey' }, req);
         return;
       }
-      const body = await readJson(req);
-      const message = typeof body.message === 'string' ? body.message.trim() : '';
-      if (!message) {
-        sendJson(res, 400, { error: 'message_required' }, req);
+      if (!turnGate.tryAcquire(id)) {
+        sendJson(res, 409, TURN_IN_FLIGHT_BODY, req);
         return;
       }
-      const thinkingMode = normalizeThinkingMode(body.thinkingMode);
-
-      res.writeHead(200, {
-        'content-type': 'application/x-ndjson; charset=utf-8',
-        'cache-control': 'no-cache',
-        connection: 'keep-alive',
-        ...corsHeaders(req),
-      });
-
-      // Client AbortController cancels the fetch; propagate into streamText.
-      const { signal: abortSignal, settle: settleAbort } = createHttpAbort(req, res);
-
-      const writeEvent = (event) => {
-        if (res.writableEnded || res.destroyed) return;
-        try {
-          res.write(`${JSON.stringify(event)}\n`);
-        } catch {
-          // Client gone — abort path will stop the model/tools.
-        }
-      };
-
       try {
-        await runTurn({
-          model: languageModel,
-          session,
-          userMessage: message,
-          getBooksRoot,
-          onEvent: writeEvent,
-          abortSignal,
-          contextWindowTokens: modelContextWindowTokens,
-          thinkingMode,
+        const body = await readJson(req);
+        const message = typeof body.message === 'string' ? body.message.trim() : '';
+        if (!message) {
+          sendJson(res, 400, { error: 'message_required' }, req);
+          return;
+        }
+        const thinkingMode = normalizeThinkingMode(body.thinkingMode);
+
+        res.writeHead(200, {
+          'content-type': 'application/x-ndjson; charset=utf-8',
+          'cache-control': 'no-cache',
+          connection: 'keep-alive',
+          ...corsHeaders(req),
         });
-        sessions.save(session);
-      } catch (error) {
-        writeEvent({
-          type: 'error',
-          message: error instanceof Error ? error.message : String(error),
-        });
+
+        // Client AbortController cancels the fetch; propagate into streamText.
+        const { signal: abortSignal, settle: settleAbort } = createHttpAbort(req, res);
+
+        const writeEvent = (event) => {
+          if (res.writableEnded || res.destroyed) return;
+          try {
+            res.write(`${JSON.stringify(event)}\n`);
+          } catch {
+            // Client gone — abort path will stop the model/tools.
+          }
+        };
+
+        try {
+          await runTurn({
+            model: languageModel,
+            session,
+            userMessage: message,
+            getBooksRoot,
+            onEvent: writeEvent,
+            abortSignal,
+            contextWindowTokens: modelContextWindowTokens,
+            thinkingMode,
+          });
+          sessions.save(session);
+        } catch (error) {
+          writeEvent({
+            type: 'error',
+            message: error instanceof Error ? error.message : String(error),
+          });
+        } finally {
+          settleAbort();
+        }
+        if (!res.writableEnded) res.end();
       } finally {
-        settleAbort();
+        turnGate.release(id);
       }
-      if (!res.writableEnded) res.end();
       return;
     }
 
     sendJson(res, 404, { error: 'not_found' }, req);
   } catch (error) {
+    if (sendBodyError(res, req, error)) return;
     sendJson(
       res,
       500,
