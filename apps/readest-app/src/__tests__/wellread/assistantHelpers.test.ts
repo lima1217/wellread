@@ -8,11 +8,12 @@ import {
 } from '@/services/wellread/assistant/helpers';
 
 describe('isReadingAssistantAvailable', () => {
-  it('requires model enabled, sidecar ready, and non-empty apiKey', () => {
+  it('requires enabled, sidecar ready, valid active profile, and non-empty apiKey', () => {
     expect(
       isReadingAssistantAvailable({
         modelEnabled: true,
         sidecarReady: true,
+        hasActiveProfile: true,
         hasApiKey: true,
       }),
     ).toBe(true);
@@ -20,6 +21,7 @@ describe('isReadingAssistantAvailable', () => {
       isReadingAssistantAvailable({
         modelEnabled: false,
         sidecarReady: true,
+        hasActiveProfile: true,
         hasApiKey: true,
       }),
     ).toBe(false);
@@ -27,6 +29,7 @@ describe('isReadingAssistantAvailable', () => {
       isReadingAssistantAvailable({
         modelEnabled: true,
         sidecarReady: false,
+        hasActiveProfile: true,
         hasApiKey: true,
       }),
     ).toBe(false);
@@ -34,6 +37,15 @@ describe('isReadingAssistantAvailable', () => {
       isReadingAssistantAvailable({
         modelEnabled: true,
         sidecarReady: true,
+        hasActiveProfile: false,
+        hasApiKey: true,
+      }),
+    ).toBe(false);
+    expect(
+      isReadingAssistantAvailable({
+        modelEnabled: true,
+        sidecarReady: true,
+        hasActiveProfile: true,
         hasApiKey: false,
       }),
     ).toBe(false);

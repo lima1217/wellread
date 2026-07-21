@@ -12,15 +12,28 @@ export { ensureBookExtract } from './extract/ensureBookExtract';
 export { ensureExtractForOpenedBook } from './extract/ensureExtractForOpenedBook';
 export {
   DEFAULT_MODEL_CONFIG,
-  MODEL_API_KEY_SECURE_ITEM,
+  DEFAULT_PROFILE_ID,
+  DEFAULT_PROFILE_NAME,
+  LEGACY_MODEL_API_KEY_SECURE_ITEM,
+  createDefaultProfile,
+  getActiveProfile,
   mergeModelConfig,
+  modelApiKeySecureItem,
+  normalizeModelApiMode,
+  removeProfile,
+  renameProfile,
   resetDeepSeekDefaults,
+  toSidecarModelPayload,
+  upsertActiveProfileFields,
+  type ModelApiMode,
   type ModelConfig,
+  type ModelProfile,
 } from './modelConfig';
 export { parseEveListenUrl } from './eveListen';
 export { testModelConnection } from './testModelConnection';
-export { getModelApiKey, setModelApiKey } from './modelApiKey';
+export { clearModelApiKey, getModelApiKey, setModelApiKey } from './modelApiKey';
 export { getEveSidecarInfo, reloadEveSidecar, type EveSidecarInfo } from './eveSidecar';
+export { syncEveSidecarApiKey } from './syncEveSidecarApiKey';
 export { useEveConnectionStore } from './eveConnectionStore';
 export {
   isReadingAssistantAvailable,

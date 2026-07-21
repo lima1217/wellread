@@ -1,13 +1,19 @@
 import { invoke } from '@tauri-apps/api/core';
 import { isTauriAppPlatform } from '@/services/environment';
-import type { ModelConfig } from './modelConfig';
+import type { ModelApiMode } from './modelConfig';
 
 export type EveSidecarInfo = {
   baseUrl: string;
   token: string;
 };
 
-export type ReloadEveSidecarPayload = Partial<ModelConfig> & {
+/** Flattened active-profile fields for Rust reload_eve_sidecar. */
+export type ReloadEveSidecarPayload = {
+  enabled?: boolean;
+  baseURL?: string;
+  modelId?: string;
+  contextWindowTokens?: number;
+  apiMode?: ModelApiMode;
   apiKey?: string;
 };
 
@@ -22,7 +28,7 @@ export async function getEveSidecarInfo(): Promise<EveSidecarInfo | null> {
 }
 
 /**
- * Ask Rust to restart the eve sidecar with the latest ModelConfig + apiKey
+ * Ask Rust to restart the eve sidecar with the latest active ModelProfile + apiKey
  * (hot-reload degradation path from ticket 07).
  */
 export async function reloadEveSidecar(
@@ -35,6 +41,7 @@ export async function reloadEveSidecar(
         baseUrl: payload.baseURL,
         modelId: payload.modelId,
         contextWindowTokens: payload.contextWindowTokens,
+        apiMode: payload.apiMode,
         apiKey: payload.apiKey,
       }
     : undefined;

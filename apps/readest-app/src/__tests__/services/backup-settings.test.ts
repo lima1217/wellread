@@ -51,9 +51,17 @@ function makeSettings(overrides: Partial<SystemSettings> = {}): SystemSettings {
     hardcover: { enabled: false, accessToken: 'hc-token', lastSyncedAt: 888 },
     modelConfig: {
       enabled: true,
-      baseURL: 'https://api.deepseek.com/v1',
-      modelId: 'deepseek-v4-flash',
-      contextWindowTokens: 1_000_000,
+      activeProfileId: 'deepseek-default',
+      profiles: [
+        {
+          id: 'deepseek-default',
+          name: 'DeepSeek',
+          baseURL: 'https://api.deepseek.com/v1',
+          modelId: 'deepseek-v4-flash',
+          contextWindowTokens: 1_000_000,
+          apiMode: 'chat',
+        },
+      ],
     },
     globalReadSettings: {
       sideBarWidth: '20%',
@@ -129,10 +137,11 @@ describe('sanitizeSettingsForBackup - credentials', () => {
     const out = sanitizeSettingsForBackup(makeSettings());
     expect(rec(out.readwise)['accessToken']).toBeUndefined();
     expect(rec(out.hardcover)['accessToken']).toBeUndefined();
-    // modelConfig never carries apiKey; non-secret fields survive backup
-    expect(out.modelConfig?.baseURL).toBe('https://api.deepseek.com/v1');
-    expect(out.modelConfig?.modelId).toBe('deepseek-v4-flash');
+    // modelConfig never carries apiKey; non-secret profile fields survive backup
+    expect(out.modelConfig?.profiles?.[0]?.baseURL).toBe('https://api.deepseek.com/v1');
+    expect(out.modelConfig?.profiles?.[0]?.modelId).toBe('deepseek-v4-flash');
     expect(rec(out.modelConfig)['apiKey']).toBeUndefined();
+    expect(rec(out.modelConfig?.profiles?.[0])['apiKey']).toBeUndefined();
     expect(out.opdsCatalogs[0]!.username).toBeUndefined();
     expect(out.opdsCatalogs[0]!.password).toBeUndefined();
   });

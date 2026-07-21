@@ -9,6 +9,7 @@ import { useReaderStore } from '@/store/readerStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useEnv } from '@/context/EnvContext';
 import { getModelApiKey } from '@/services/wellread/modelApiKey';
+import { getActiveProfile, mergeModelConfig } from '@/services/wellread/modelConfig';
 import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
 import {
   isReadingAssistantAvailable,
@@ -208,20 +209,29 @@ const AIAssistant = ({ bookKey }: AIAssistantProps) => {
   const ready = useEveConnectionStore((s) => s.ready);
   const [hasKey, setHasKey] = useState(false);
 
+  const modelConfig = settings?.modelConfig;
+  const activeProfileId = modelConfig
+    ? (getActiveProfile(mergeModelConfig(modelConfig))?.id ?? null)
+    : null;
+
   useEffect(() => {
     let cancelled = false;
-    if (!appService) return;
-    void getModelApiKey().then((key) => {
+    if (!appService || !activeProfileId) {
+      setHasKey(false);
+      return;
+    }
+    void getModelApiKey(activeProfileId).then((key) => {
       if (!cancelled) setHasKey(Boolean(key?.trim()));
     });
     return () => {
       cancelled = true;
     };
-  }, [appService]);
+  }, [appService, activeProfileId]);
 
   const available = isReadingAssistantAvailable({
-    modelEnabled: settings?.modelConfig?.enabled ?? false,
+    modelEnabled: modelConfig?.enabled ?? false,
     sidecarReady: ready,
+    hasActiveProfile: Boolean(activeProfileId),
     hasApiKey: hasKey,
   });
 

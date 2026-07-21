@@ -6,8 +6,11 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useEnv } from '@/context/EnvContext';
 import {
   DEFAULT_MODEL_CONFIG,
+  getActiveProfile,
   mergeModelConfig,
   resetDeepSeekDefaults,
+  toSidecarModelPayload,
+  upsertActiveProfileFields,
   type ModelConfig,
 } from '@/services/wellread/modelConfig';
 import { getModelApiKey, setModelApiKey } from '@/services/wellread/modelApiKey';
@@ -18,26 +21,31 @@ import { BoxedList, SettingsInput, SettingsRow, SettingsSwitchRow } from './prim
 
 type ConnectionStatus = 'idle' | 'testing' | 'success' | 'error';
 
+const defaultProfile = getActiveProfile(DEFAULT_MODEL_CONFIG)!;
+
 const AIPanel: React.FC = () => {
   const _ = useTranslation();
   const { envConfig } = useEnv();
   const { settings, setSettings, saveSettings } = useSettingsStore();
 
   const saved = mergeModelConfig(settings?.modelConfig);
+  const savedProfile = getActiveProfile(saved) ?? defaultProfile;
 
   const [enabled, setEnabled] = useState(saved.enabled);
   const [apiKey, setApiKey] = useState('');
-  const [modelId, setModelId] = useState(saved.modelId);
-  const [baseURL, setBaseURL] = useState(saved.baseURL);
-  const [contextWindowTokens, setContextWindowTokens] = useState(String(saved.contextWindowTokens));
+  const [modelId, setModelId] = useState(savedProfile.modelId);
+  const [baseURL, setBaseURL] = useState(savedProfile.baseURL);
+  const [contextWindowTokens, setContextWindowTokens] = useState(
+    String(savedProfile.contextWindowTokens),
+  );
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
   const [connectionError, setConnectionError] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    void getModelApiKey().then(setApiKey);
-  }, []);
+    void getModelApiKey(savedProfile.id).then(setApiKey);
+  }, [savedProfile.id]);
 
   const persist = useCallback(
     async (next: ModelConfig, nextApiKey: string) => {
@@ -46,8 +54,14 @@ const AIPanel: React.FC = () => {
         const updated = { ...settings, modelConfig: next };
         setSettings(updated);
         await saveSettings(envConfig, updated);
-        await setModelApiKey(nextApiKey);
-        await reloadEveSidecar({ ...next, apiKey: nextApiKey });
+        const active = getActiveProfile(next);
+        if (active) {
+          await setModelApiKey(active.id, nextApiKey);
+          const payload = toSidecarModelPayload(next);
+          if (payload) {
+            await reloadEveSidecar({ ...payload, apiKey: nextApiKey });
+          }
+        }
         await useEveConnectionStore.getState().refresh();
       } finally {
         setSaving(false);
@@ -57,12 +71,14 @@ const AIPanel: React.FC = () => {
   );
 
   const buildConfig = (): ModelConfig =>
-    mergeModelConfig({
-      enabled,
-      baseURL,
-      modelId,
-      contextWindowTokens: Number(contextWindowTokens),
-    });
+    upsertActiveProfileFields(
+      { ...saved, enabled },
+      {
+        baseURL,
+        modelId,
+        contextWindowTokens: Number(contextWindowTokens),
+      },
+    );
 
   const handleSave = async () => {
     await persist(buildConfig(), apiKey);
@@ -70,9 +86,10 @@ const AIPanel: React.FC = () => {
 
   const handleResetDeepSeek = async () => {
     const reset = resetDeepSeekDefaults(buildConfig());
-    setBaseURL(reset.baseURL);
-    setModelId(reset.modelId);
-    setContextWindowTokens(String(reset.contextWindowTokens));
+    const profile = getActiveProfile(reset) ?? defaultProfile;
+    setBaseURL(profile.baseURL);
+    setModelId(profile.modelId);
+    setContextWindowTokens(String(profile.contextWindowTokens));
     await persist(reset, apiKey);
   };
 
@@ -80,9 +97,9 @@ const AIPanel: React.FC = () => {
     setConnectionStatus('testing');
     setConnectionError('');
     const result = await testModelConnection({
-      baseURL: baseURL.trim() || DEFAULT_MODEL_CONFIG.baseURL,
+      baseURL: baseURL.trim() || defaultProfile.baseURL,
       apiKey,
-      modelId: modelId.trim() || DEFAULT_MODEL_CONFIG.modelId,
+      modelId: modelId.trim() || defaultProfile.modelId,
     });
     if (result.ok) {
       setConnectionStatus('success');
