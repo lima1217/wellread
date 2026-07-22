@@ -26,10 +26,10 @@ import {
 import { reloadEveSidecar } from '@/services/wellread/eveSidecar';
 import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
 import {
-  formatEveSourceLabel,
   formatWorkDuration,
   isExternalHttpHref,
   isReadingAssistantAvailable,
+  linkifyBareEpubCfi,
   resolveEveSource,
   shouldPushAgentSessionToStore,
   shouldShowPendingReply,
@@ -58,17 +58,30 @@ const focusRing =
 /** Composer toolbar selects: flat ghost, not filled pills. */
 const composerSelectTrigger = clsx(
   'text-base-content/55 hover:text-base-content hover:bg-base-200/70',
-  'flex h-7 items-center gap-1 rounded-md px-2 text-[0.85em] leading-none whitespace-nowrap',
+  // Optical: less padding on the chevron side (text-side − 2px).
+  'flex h-7 items-center gap-0.5 rounded-md ps-2 pe-1.5 text-[0.85em] leading-tight whitespace-nowrap',
   'transition-colors duration-150',
 );
+// Daisy `.dropdown-content` defaults to 14px radius / 10px pad — override for a dense
+// composer menu. Outer 10px + p-1 (4px) → inner rounded-md (6px) stays concentric.
 const composerSelectMenu = clsx(
   'dropdown-content no-triangle border-base-200 bg-base-100 eink-bordered',
-  'z-20 mb-1.5 overflow-y-auto overscroll-contain !rounded-lg border !p-1 font-sans',
+  'z-20 mb-1.5 overflow-y-auto overscroll-contain !rounded-[10px] border !p-1 font-sans',
+  '!shadow-[0_1px_2px_oklch(0_0_0/0.06),0_4px_14px_oklch(0_0_0/0.08)]',
 );
 const composerSelectItem = clsx(
   'hover:bg-base-200/80 flex w-full items-center gap-2 rounded-md px-2 py-1.5',
-  'text-start text-[0.85em] leading-snug',
+  'text-start text-[0.85em] leading-snug transition-colors duration-150',
 );
+const composerSelectItemActive = 'bg-base-200/70 text-base-content hover:bg-base-200/80';
+
+function ComposerSelectCheck({ active }: { active: boolean }) {
+  return (
+    <span className='flex size-3.5 shrink-0 items-center justify-center' aria-hidden='true'>
+      {active ? <CheckIcon size={14} strokeWidth={2.25} className='text-base-content/55' /> : null}
+    </span>
+  );
+}
 /** Shared circular action: solid when Send/Stop is live, muted when idle. */
 const composerPrimaryBtn =
   'ms-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors duration-150';
@@ -114,6 +127,7 @@ function jumpToCfi(bookKey: string, cfi: string) {
 function createAssistantMarkdownComponents(opts: {
   bookKey: string;
   sources?: EveSource[];
+  passageLabel: string;
 }): Components {
   return {
     blockquote: ({ children }) => <MarkdownBlockquote>{children}</MarkdownBlockquote>,
@@ -122,6 +136,10 @@ function createAssistantMarkdownComponents(opts: {
       const label = plainTextFromChildren(children);
       const source = resolveEveSource(opts.sources, { href, label });
       if (source?.cfi) {
+        const rawCfiLabel =
+          /epubcfi\(/i.test(label) && extractEpubCfiFromLabel(label) === label.trim();
+        const display =
+          source.title?.trim() || (rawCfiLabel ? opts.passageLabel : null) || children;
         return (
           <button
             type='button'
@@ -135,7 +153,7 @@ function createAssistantMarkdownComponents(opts: {
               jumpToCfi(opts.bookKey, source.cfi);
             }}
           >
-            {children}
+            {display}
           </button>
         );
       }
@@ -164,35 +182,9 @@ function createAssistantMarkdownComponents(opts: {
   };
 }
 
-/** Structured jump targets from tool-collected chunk frontmatter. */
-function MessageSources({ bookKey, sources }: { bookKey: string; sources: EveSource[] }) {
-  const _ = useTranslation();
-  if (!sources.length) return null;
-  return (
-    <div className='text-base-content/60 mt-2 flex flex-col gap-1 font-sans text-[0.85em] leading-snug'>
-      <span className='select-none'>{_('Sources')}</span>
-      <ul className='flex flex-col gap-0.5'>
-        {sources.map((source, index) => {
-          const label = formatEveSourceLabel(source, index);
-          return (
-            <li key={`${source.cfi}-${index}`}>
-              <button
-                type='button'
-                className={clsx(
-                  'text-start underline decoration-from-font underline-offset-2',
-                  'hover:text-base-content',
-                  focusRing,
-                )}
-                onClick={() => jumpToCfi(bookKey, source.cfi)}
-              >
-                {label}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
+function extractEpubCfiFromLabel(text: string): string | null {
+  const m = text.match(/epubcfi\([^)]+\)/i);
+  return m ? m[0] : null;
 }
 
 /** Chat body uses app UI type, not the reader's book face. Keep 16px + 1.75 for CJK air. */
@@ -623,18 +615,16 @@ const ReadingAssistantChat = ({
                       components={createAssistantMarkdownComponents({
                         bookKey,
                         sources: msg.sources,
+                        passageLabel: _('Passage'),
                       })}
                     >
-                      {msg.content}
+                      {linkifyBareEpubCfi(msg.content, msg.sources, _('Passage'))}
                     </ReactMarkdown>
                   ) : null}
                 </div>
               ) : (
                 <div>{msg.content}</div>
               )}
-              {msg.role === 'assistant' && msg.sources?.length ? (
-                <MessageSources bookKey={bookKey} sources={msg.sources} />
-              ) : null}
               {msg.role === 'assistant' && msg.tools?.length ? (
                 <ToolTrace tools={msg.tools} />
               ) : null}
@@ -694,7 +684,7 @@ const ReadingAssistantChat = ({
                 onClick={(e) => e.currentTarget.focus()}
               >
                 <span className='truncate' translate='no'>
-                  {activeProfile?.name ?? _('Model')}
+                  {activeProfile?.modelId ?? _('Model')}
                 </span>
                 <ChevronUpIcon size={12} className='shrink-0 opacity-40' aria-hidden='true' />
               </button>
@@ -709,19 +699,19 @@ const ReadingAssistantChat = ({
                     <li key={profile.id} role='option' aria-selected={isActive}>
                       <button
                         type='button'
-                        className={clsx(composerSelectItem, focusRing)}
+                        className={clsx(
+                          composerSelectItem,
+                          focusRing,
+                          isActive && composerSelectItemActive,
+                        )}
                         onClick={() => {
                           void handleSelectProfile(profile.id);
                           (document.activeElement as HTMLElement | null)?.blur();
                         }}
                       >
-                        <span className='flex w-3.5 shrink-0 justify-center'>
-                          {isActive ? (
-                            <CheckIcon size={13} className='opacity-70' aria-hidden='true' />
-                          ) : null}
-                        </span>
-                        <span className='truncate' translate='no'>
-                          {profile.name}
+                        <ComposerSelectCheck active={isActive} />
+                        <span className='min-w-0 flex-1 truncate' translate='no'>
+                          {profile.modelId}
                         </span>
                       </button>
                     </li>
@@ -746,7 +736,11 @@ const ReadingAssistantChat = ({
                 </span>
                 <ChevronUpIcon size={12} className='shrink-0 opacity-40' aria-hidden='true' />
               </button>
-              <ul tabIndex={0} role='listbox' className={clsx(composerSelectMenu, 'min-w-[7rem]')}>
+              <ul
+                tabIndex={0}
+                role='listbox'
+                className={clsx(composerSelectMenu, 'min-w-[7.5rem]')}
+              >
                 {(
                   [
                     { id: 'think' as const, label: _('Think') },
@@ -758,18 +752,18 @@ const ReadingAssistantChat = ({
                     <li key={option.id} role='option' aria-selected={isActive}>
                       <button
                         type='button'
-                        className={clsx(composerSelectItem, focusRing)}
+                        className={clsx(
+                          composerSelectItem,
+                          focusRing,
+                          isActive && composerSelectItemActive,
+                        )}
                         onClick={() => {
                           handleSelectThinkingMode(option.id);
                           (document.activeElement as HTMLElement | null)?.blur();
                         }}
                       >
-                        <span className='flex w-3.5 shrink-0 justify-center'>
-                          {isActive ? (
-                            <CheckIcon size={13} className='opacity-70' aria-hidden='true' />
-                          ) : null}
-                        </span>
-                        <span>{option.label}</span>
+                        <ComposerSelectCheck active={isActive} />
+                        <span className='min-w-0 flex-1 truncate'>{option.label}</span>
                       </button>
                     </li>
                   );

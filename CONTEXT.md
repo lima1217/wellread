@@ -33,8 +33,8 @@ _Avoid_: source bar（实现绰号）、草稿引用块、把阅读器 live 选�
 
 ## Thinking Mode（Think/Fast）
 
-Composer 上的二档：Think = 思考模式开，Fast = 思考模式关。默认 Fast；写入用户全局设置。不预设具体厂商 API 字段。
-_Avoid_: temperature 滑杆、思考速度滑杆、「更深 vs 更快」质量轴、按会话记忆、按消息锁定
+Composer 上的二档：Think = 思考模式开，Fast = 思考模式关。默认 Fast；写入用户全局设置。不预设具体厂商 API 字段；sidecar 在支持扩展的主机上，Think 映射为 `thinking: enabled` + `reasoning_effort: high`，Fast 为 `thinking: disabled`。
+_Avoid_: temperature 滑杆、思考强度 UI（Low/Medium/High）、按会话记忆、按消息锁定
 
 ## ModelProfile（模型配置档）
 

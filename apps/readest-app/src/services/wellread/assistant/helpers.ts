@@ -150,7 +150,13 @@ export function isExternalHttpHref(href: string | null | undefined): boolean {
 }
 
 function extractEpubCfi(text: string): string | null {
-  const m = text.match(/epubcfi\([^)]+\)/i);
+  let decoded = text;
+  try {
+    decoded = decodeURIComponent(text);
+  } catch {
+    // keep raw text when not URI-encoded
+  }
+  const m = decoded.match(/epubcfi\([^)]+\)/i);
   return m ? m[0] : null;
 }
 
@@ -207,6 +213,56 @@ export function formatEveSourceLabel(source: EveSourceLike, index: number): stri
   const title = source.title?.trim();
   if (title) return title;
   return `Source ${index + 1}`;
+}
+
+const LINKIFY_SLOT = '\uE000';
+
+/**
+ * Turn bare `epubcfi(...)` (and `cfi: epubcfi(...)`) in assistant prose into
+ * markdown links so the reader can jump in-book. Skips fenced/inline code and
+ * existing `[text](href)` links.
+ *
+ * Link labels never embed the raw CFI — epubcfi often contains `[id]` which
+ * breaks markdown link parsing. Destinations use `<...>` so nested `()` in the
+ * CFI cannot close the link early.
+ */
+export function linkifyBareEpubCfi(
+  markdown: string,
+  sources?: EveSourceLike[],
+  fallbackLabel = 'Passage',
+): string {
+  if (!markdown || !/epubcfi\(/i.test(markdown)) return markdown;
+
+  const slots: string[] = [];
+  const stash = (m: string) => {
+    const i = slots.length;
+    slots.push(m);
+    return `${LINKIFY_SLOT}${i}${LINKIFY_SLOT}`;
+  };
+
+  let text = markdown
+    .replace(/```[\s\S]*?```/g, stash)
+    .replace(/`[^`\n]+`/g, stash)
+    .replace(/\[([^\]]*)\]\(<[^>\n]*>\)/g, stash)
+    .replace(/\[([^\]]*)\]\([^()\n]*\([^()\n]*\)[^()\n]*\)/g, stash)
+    .replace(/\[([^\]]*)\]\([^)\n]+\)/g, stash);
+
+  const toLink = (cfi: string) => {
+    const hit = sources?.find((s) => s.cfi === cfi);
+    const rawLabel = hit?.title?.trim() || fallbackLabel;
+    // Strip brackets so a title cannot terminate the markdown link early.
+    const label = rawLabel.replace(/[\[\]]/g, '').trim() || fallbackLabel;
+    return `[${label}](<${cfi}>)`;
+  };
+
+  // Drop the "cfi:" prefix so it does not linger beside the link.
+  text = text.replace(/\bcfi:\s*(epubcfi\([^)]+\))/gi, (_m, cfi: string) => stash(toLink(cfi)));
+  text = text.replace(/epubcfi\([^)]+\)/gi, (cfi) => toLink(cfi));
+
+  return text.replace(
+    new RegExp(`${LINKIFY_SLOT}(\\d+)${LINKIFY_SLOT}`, 'g'),
+    (_m, i: string) => slots[Number(i)]!,
+  );
 }
 
 /**

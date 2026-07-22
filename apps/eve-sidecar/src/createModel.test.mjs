@@ -6,6 +6,7 @@ import {
   normalizeModelEnv,
   normalizeThinkingMode,
   patchChatCompletionBody,
+  THINK_MODE_REASONING_EFFORT,
   supportsThinkingExtension,
   transformCompletionPayload,
   turnFetchContext,
@@ -91,17 +92,32 @@ describe('patchChatCompletionBody', () => {
     );
   });
 
+  it('sets reasoning_effort to high in Think and clears it in Fast', () => {
+    assert.equal(THINK_MODE_REASONING_EFFORT, 'high');
+    assert.equal(
+      patchChatCompletionBody({ model: 'glm-5.2', messages: [] }, 'think').reasoning_effort,
+      'high',
+    );
+    const fast = patchChatCompletionBody(
+      { model: 'glm-5.2', messages: [], reasoning_effort: 'high' },
+      'fast',
+    );
+    assert.equal('reasoning_effort' in fast, false);
+  });
+
   it('omits thinking when injectThinking is false', () => {
     const out = patchChatCompletionBody(
       {
         model: 'gpt-4.1',
         messages: [{ role: 'developer', content: 'sys' }],
         thinking: { type: 'enabled' },
+        reasoning_effort: 'high',
       },
       'think',
       { injectThinking: false },
     );
     assert.equal('thinking' in out, false);
+    assert.equal('reasoning_effort' in out, false);
     assert.deepEqual(out.messages, [{ role: 'system', content: 'sys' }]);
   });
 });
@@ -182,7 +198,9 @@ describe('withModelFetchPatch', () => {
       }),
     );
 
-    assert.equal(JSON.parse(/** @type {string} */ (sentBody)).thinking.type, 'enabled');
+    const parsed = JSON.parse(/** @type {string} */ (sentBody));
+    assert.equal(parsed.thinking.type, 'enabled');
+    assert.equal(parsed.reasoning_effort, 'high');
   });
 
   it('does not inject thinking when injectThinking is false', async () => {

@@ -5,12 +5,12 @@ import { isPWA, isTauriAppPlatform, isWebAppPlatform } from '@/services/environm
 import { BOOK_IDS_SEPARATOR } from '@/services/constants';
 import { AppService } from '@/types/system';
 
+// Monotonic counter — never reuse labels. Decrementing on destroy (or waiting
+// for tauri://created before bumping) collides with still-live windows and
+// races when two books open in quick succession.
 let readerWindowsCount = 0;
 const createReaderWindow = (appService: AppService, url: string) => {
-  const currentWindow = getCurrentWindow();
-  const label = currentWindow.label;
-  const newLabelPrefix = label === 'main' ? 'reader' : label;
-  const win = new WebviewWindow(`${newLabelPrefix}-${readerWindowsCount}`, {
+  const win = new WebviewWindow(`reader-${readerWindowsCount++}`, {
     url,
     width: 800,
     height: 600,
@@ -30,13 +30,9 @@ const createReaderWindow = (appService: AppService, url: string) => {
   });
   win.once('tauri://created', () => {
     console.log('new window created');
-    readerWindowsCount += 1;
   });
   win.once('tauri://error', (e) => {
-    console.error('error creating window', e);
-  });
-  win.once('tauri://destroyed', () => {
-    readerWindowsCount -= 1;
+    console.error('error creating window', e.payload ?? e);
   });
 };
 
@@ -86,7 +82,7 @@ export const ensureMainLibraryWindow = async (appService: AppService) => {
       : 'default') as unknown as ScrollBarStyle,
   });
   win.once('tauri://error', (e) => {
-    console.error('error recreating main window', e);
+    console.error('error recreating main window', e.payload ?? e);
   });
 };
 

@@ -26,6 +26,8 @@ const AssistantHeader: React.FC<{
   const _ = useTranslation();
   const iconSize15 = useResponsiveSize(15);
   const isHistory = pane === 'history';
+  const pressScaleClass =
+    'not-eink:active:scale-[0.96] not-eink:transition-transform not-eink:duration-150 not-eink:ease-out';
 
   return (
     <div
@@ -51,6 +53,7 @@ const AssistantHeader: React.FC<{
           onClick={handleTogglePin}
           className={clsx(
             'btn btn-ghost btn-circle hidden h-8 min-h-8 w-8 sm:flex',
+            pressScaleClass,
             isPinned ? 'bg-base-300' : 'bg-base-300/50',
           )}
         >
@@ -65,7 +68,10 @@ const AssistantHeader: React.FC<{
           title={_('Close')}
           aria-label={_('Close')}
           onClick={handleClose}
-          className='btn btn-ghost btn-circle flex h-8 min-h-8 w-8 hover:bg-transparent sm:hidden'
+          className={clsx(
+            'btn btn-ghost btn-circle flex h-8 min-h-8 w-8 hover:bg-transparent sm:hidden',
+            pressScaleClass,
+          )}
         >
           <MdArrowBackIosNew aria-hidden='true' />
         </button>
@@ -75,7 +81,11 @@ const AssistantHeader: React.FC<{
             title={_('Back to chat')}
             aria-label={_('Back to chat')}
             onClick={onBackToChat}
-            className='btn btn-ghost btn-sm h-8 min-h-8 gap-1 rounded-full px-2.5 text-[0.85em] leading-none whitespace-nowrap'
+            className={clsx(
+              'btn btn-ghost btn-sm h-8 min-h-8 gap-1 rounded-full ps-2 pe-2.5',
+              'text-[0.85em] leading-none whitespace-nowrap',
+              pressScaleClass,
+            )}
           >
             ← {_('Chat')}
           </button>
@@ -85,7 +95,7 @@ const AssistantHeader: React.FC<{
             title={_('Chat History')}
             aria-label={_('Chat History')}
             onClick={onOpenHistory}
-            className='btn btn-ghost btn-circle h-8 min-h-8 w-8'
+            className={clsx('btn btn-ghost btn-circle h-8 min-h-8 w-8', pressScaleClass)}
           >
             <LuHistory size={iconSize15} aria-hidden='true' />
           </button>
@@ -96,7 +106,7 @@ const AssistantHeader: React.FC<{
           title={_('New chat')}
           aria-label={_('New chat')}
           onClick={onNewSession}
-          className='btn btn-ghost btn-circle h-8 min-h-8 w-8'
+          className={clsx('btn btn-ghost btn-circle h-8 min-h-8 w-8', pressScaleClass)}
         >
           <LuPlus size={iconSize15} aria-hidden='true' />
         </button>

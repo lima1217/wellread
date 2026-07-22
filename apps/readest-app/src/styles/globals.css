@@ -150,6 +150,36 @@ foliate-fxl {
   opacity: 0.7;
 }
 
+/* Chat History: staggered row enter (opacity + soft rise; no bounce). */
+@keyframes chat-history-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.chat-history-row {
+  animation: chat-history-row-in 300ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-history-row {
+    animation: none;
+  }
+}
+
+[data-eink='true'] .chat-history-row,
+.no-transitions .chat-history-row {
+  animation: none;
+}
+
 .hover-bar-anim:hover ~ .foliate-viewer {
   animation: scaleUpAndDown 0.3s ease forwards;
 }

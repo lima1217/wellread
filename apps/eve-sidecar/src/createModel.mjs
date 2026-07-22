@@ -15,6 +15,9 @@ export const DEFAULT_MODEL = {
 
 /** @typedef {'think' | 'fast'} ThinkingMode */
 
+/** Fixed vendor effort when Thinking Mode is Think (no user-facing intensity UI). */
+export const THINK_MODE_REASONING_EFFORT = 'high';
+
 /**
  * Per-turn fetch store. `thinkingMode` / `onReasoningDelta` are read at
  * fetch start and closed over into the response transform (TransformStream
@@ -119,9 +122,16 @@ export function patchChatCompletionBody(parsed, thinkingMode = 'fast', options =
   const injectThinking = options.injectThinking !== false;
   const next = { ...parsed };
   if (injectThinking) {
-    next.thinking = { type: mode === 'think' ? 'enabled' : 'disabled' };
+    if (mode === 'think') {
+      next.thinking = { type: 'enabled' };
+      next.reasoning_effort = THINK_MODE_REASONING_EFFORT;
+    } else {
+      next.thinking = { type: 'disabled' };
+      delete next.reasoning_effort;
+    }
   } else {
     delete next.thinking;
+    delete next.reasoning_effort;
   }
   if (Array.isArray(parsed.messages)) {
     next.messages = parsed.messages.map((message) => {

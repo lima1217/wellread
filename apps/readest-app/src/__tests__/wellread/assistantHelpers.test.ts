@@ -7,6 +7,7 @@ import {
   isAssistantSourceHref,
   isExternalHttpHref,
   isReadingAssistantAvailable,
+  linkifyBareEpubCfi,
   parsePendingQuotesFromWire,
   resolveEveSource,
   shouldPushAgentSessionToStore,
@@ -318,6 +319,15 @@ describe('resolveEveSource', () => {
     );
   });
 
+  it('decodes percent-encoded brackets in epubcfi hrefs from markdown', () => {
+    const encoded = 'epubcfi(/6/22!/4%5B7K4G0-68091712f90a44748ee492caf82b4796%5D/1:0)';
+    const raw = 'epubcfi(/6/22!/4[7K4G0-68091712f90a44748ee492caf82b4796]/1:0)';
+    expect(resolveEveSource([{ cfi: raw, title: '游戏机制和事件' }], { href: encoded })).toEqual({
+      cfi: raw,
+      title: '游戏机制和事件',
+    });
+  });
+
   it('returns null when nothing matches', () => {
     expect(resolveEveSource(sources, { href: 'https://example.com', label: 'Elsewhere' })).toBe(
       null,
@@ -329,5 +339,34 @@ describe('formatEveSourceLabel', () => {
   it('prefers title and falls back to Source N', () => {
     expect(formatEveSourceLabel({ cfi: 'x', title: 'Section 21' }, 0)).toBe('Section 21');
     expect(formatEveSourceLabel({ cfi: 'x' }, 2)).toBe('Source 3');
+  });
+});
+
+describe('linkifyBareEpubCfi', () => {
+  const cfi = 'epubcfi(/6/22!/4[7K4G0-68091712f90a44748ee492caf82b4796]/1:0)';
+
+  it('turns bare epubcfi in prose into a markdown link with a safe label', () => {
+    const input = `出自「游戏机制和事件」一节（cfi: ${cfi}）。后续论述可连起来看。`;
+    expect(linkifyBareEpubCfi(input)).toBe(
+      `出自「游戏机制和事件」一节（[Passage](<${cfi}>)）。后续论述可连起来看。`,
+    );
+  });
+
+  it('uses matching source title as link label when available', () => {
+    const input = `见此处（cfi: ${cfi}）`;
+    expect(linkifyBareEpubCfi(input, [{ cfi, title: '游戏机制和事件' }])).toBe(
+      `见此处（[游戏机制和事件](<${cfi}>)）`,
+    );
+  });
+
+  it('does not double-wrap existing markdown links or code', () => {
+    const linked = `见 [原文](<${cfi}>) 与 \`${cfi}\``;
+    expect(linkifyBareEpubCfi(linked)).toBe(linked);
+    const fenced = `\`\`\`\n${cfi}\n\`\`\``;
+    expect(linkifyBareEpubCfi(fenced)).toBe(fenced);
+  });
+
+  it('is a no-op when there is no epubcfi', () => {
+    expect(linkifyBareEpubCfi('没有出处')).toBe('没有出处');
   });
 });

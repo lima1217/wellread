@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import React, { useCallback, useEffect, useId, useState } from 'react';
-import { MdChevronRight, MdExpandMore } from 'react-icons/md';
+import { MdChevronRight } from 'react-icons/md';
 import { PiCheckCircle, PiPlus, PiSpinner, PiWarningCircle } from 'react-icons/pi';
 
 import { useTranslation } from '@/hooks/useTranslation';
@@ -232,31 +232,6 @@ const AIPanel: React.FC = () => {
     });
   };
 
-  const handleResetDeepSeek = async () => {
-    if (!editingProfileId || !draft) return;
-    const nextDraft = draftFromProfile(
-      {
-        ...defaultProfile,
-        id: editingProfileId,
-        name: draft.name.trim() || defaultProfile.name,
-      },
-      draft.apiKey,
-    );
-    setDraft(nextDraft);
-    const next = updateProfile(saved, editingProfileId, {
-      name: nextDraft.name,
-      modelId: nextDraft.modelId,
-      baseURL: nextDraft.baseURL,
-      apiMode: nextDraft.apiMode,
-      contextWindowTokens: Number(nextDraft.contextWindowTokens),
-    });
-    await persist(next, {
-      previousActiveId: saved.activeProfileId,
-      editedProfileId: editingProfileId,
-      editedApiKey: nextDraft.apiKey,
-    });
-  };
-
   const handleTestConnection = async () => {
     if (!draft) return;
     setConnectionStatus('testing');
@@ -310,6 +285,43 @@ const AIPanel: React.FC = () => {
             />
           </div>
 
+          <div className='space-y-1.5' data-setting-id='settings.ai.baseURL'>
+            <SectionTitle as='label' htmlFor={`${baseId}-base-url`} className='!ps-0 block'>
+              {_('Base URL')}
+            </SectionTitle>
+            <input
+              id={`${baseId}-base-url`}
+              type='url'
+              inputMode='url'
+              autoCapitalize='off'
+              spellCheck={false}
+              value={draft.baseURL}
+              placeholder={defaultProfile.baseURL}
+              onChange={(e) => setDraft({ ...draft, baseURL: e.target.value })}
+              className={fieldInputClass}
+            />
+          </div>
+
+          <div className='space-y-1.5' data-setting-id='settings.ai.apiMode'>
+            <SectionTitle as='label' htmlFor={`${baseId}-api-mode`} className='!ps-0 block'>
+              {_('API Mode')}
+            </SectionTitle>
+            <select
+              id={`${baseId}-api-mode`}
+              value={draft.apiMode}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  apiMode: e.target.value === 'responses' ? 'responses' : 'chat',
+                })
+              }
+              className={fieldSelectClass}
+            >
+              <option value='chat'>{_('Chat Completions')}</option>
+              <option value='responses'>{_('Responses API')}</option>
+            </select>
+          </div>
+
           <div className='space-y-1.5' data-setting-id='settings.ai.apiKey'>
             <SectionTitle as='label' htmlFor={`${baseId}-api-key`} className='!ps-0 block'>
               {_('API Key')}
@@ -341,85 +353,30 @@ const AIPanel: React.FC = () => {
             />
           </div>
 
-          <details className='group'>
-            <summary
+          <div className='space-y-1.5'>
+            <SectionTitle as='label' htmlFor={`${baseId}-context-window`} className='!ps-0 block'>
+              {_('Context Window Tokens')}
+            </SectionTitle>
+            <input
+              id={`${baseId}-context-window`}
+              type='number'
+              min={1}
+              inputMode='numeric'
+              value={draft.contextWindowTokens}
+              onChange={(e) => setDraft({ ...draft, contextWindowTokens: e.target.value })}
               className={clsx(
-                'flex cursor-pointer list-none items-center gap-1',
-                'text-base-content/70 hover:text-base-content font-medium',
-                'transition-colors duration-150',
+                fieldInputClass,
+                'tabular-nums',
+                '[appearance:textfield]',
+                '[&::-webkit-inner-spin-button]:appearance-none',
+                '[&::-webkit-outer-spin-button]:appearance-none',
               )}
-            >
-              <MdExpandMore className='h-4 w-4 transition-transform duration-150 group-open:rotate-180' />
-              {_('Advanced')}
-            </summary>
-            <div className='space-y-4 pt-3'>
-              <div className='space-y-1.5' data-setting-id='settings.ai.baseURL'>
-                <SectionTitle as='label' htmlFor={`${baseId}-base-url`} className='!ps-0 block'>
-                  {_('Base URL')}
-                </SectionTitle>
-                <input
-                  id={`${baseId}-base-url`}
-                  type='url'
-                  inputMode='url'
-                  autoCapitalize='off'
-                  spellCheck={false}
-                  value={draft.baseURL}
-                  placeholder={defaultProfile.baseURL}
-                  onChange={(e) => setDraft({ ...draft, baseURL: e.target.value })}
-                  className={fieldInputClass}
-                />
-              </div>
-
-              <div className='space-y-1.5' data-setting-id='settings.ai.apiMode'>
-                <SectionTitle as='label' htmlFor={`${baseId}-api-mode`} className='!ps-0 block'>
-                  {_('API Mode')}
-                </SectionTitle>
-                <select
-                  id={`${baseId}-api-mode`}
-                  value={draft.apiMode}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      apiMode: e.target.value === 'responses' ? 'responses' : 'chat',
-                    })
-                  }
-                  className={fieldSelectClass}
-                >
-                  <option value='chat'>{_('Chat Completions')}</option>
-                  <option value='responses'>{_('Responses API')}</option>
-                </select>
-              </div>
-
-              <div className='space-y-1.5'>
-                <SectionTitle
-                  as='label'
-                  htmlFor={`${baseId}-context-window`}
-                  className='!ps-0 block'
-                >
-                  {_('Context Window Tokens')}
-                </SectionTitle>
-                <input
-                  id={`${baseId}-context-window`}
-                  type='number'
-                  min={1}
-                  inputMode='numeric'
-                  value={draft.contextWindowTokens}
-                  onChange={(e) => setDraft({ ...draft, contextWindowTokens: e.target.value })}
-                  className={clsx(
-                    fieldInputClass,
-                    'tabular-nums',
-                    '[appearance:textfield]',
-                    '[&::-webkit-inner-spin-button]:appearance-none',
-                    '[&::-webkit-outer-spin-button]:appearance-none',
-                  )}
-                />
-              </div>
-            </div>
-          </details>
+            />
+          </div>
 
           <div className='space-y-2'>
             {(connectionStatus === 'success' || connectionStatus === 'error') && (
-              <div className='flex min-h-5 items-center'>
+              <div className='flex min-h-5 items-center justify-end'>
                 {connectionStatus === 'success' && (
                   <span className='text-success flex items-center gap-1 text-[0.85em]'>
                     <PiCheckCircle className='h-4 w-4' />
@@ -434,57 +391,45 @@ const AIPanel: React.FC = () => {
                 )}
               </div>
             )}
-            <div className='flex flex-wrap items-center gap-2'>
-              <div className='me-auto flex flex-wrap items-center gap-2'>
-                {!isActive && (
-                  <button
-                    type='button'
-                    className={clsx('btn btn-ghost btn-sm', actionBtnClass)}
-                    disabled={saving}
-                    onClick={() => void handleSetActive(editingProfileId)}
-                  >
-                    {_('Set Active')}
-                  </button>
-                )}
-                <button
-                  type='button'
-                  className={clsx('btn btn-ghost btn-sm text-error', actionBtnClass)}
-                  disabled={saving}
-                  onClick={() => void handleDelete()}
-                >
-                  {_('Delete')}
-                </button>
-              </div>
-              <div className='flex flex-wrap items-center justify-end gap-2'>
-                <button
-                  type='button'
-                  className={clsx('btn btn-ghost btn-sm', actionBtnClass)}
-                  disabled={connectionStatus === 'testing'}
-                  onClick={() => void handleTestConnection()}
-                >
-                  {connectionStatus === 'testing' ? (
-                    <PiSpinner className='h-4 w-4 animate-spin' />
-                  ) : null}
-                  {_('Test Connection')}
-                </button>
+            <div className='flex flex-wrap items-center justify-end gap-2'>
+              {!isActive && (
                 <button
                   type='button'
                   className={clsx('btn btn-ghost btn-sm', actionBtnClass)}
                   disabled={saving}
-                  onClick={() => void handleResetDeepSeek()}
+                  onClick={() => void handleSetActive(editingProfileId)}
                 >
-                  {_('Restore DeepSeek Defaults')}
+                  {_('Set Active')}
                 </button>
-                <button
-                  type='button'
-                  className={clsx('btn btn-contrast btn-sm gap-1.5', actionBtnClass)}
-                  disabled={saving}
-                  onClick={() => void handleSaveDetail()}
-                >
-                  {saving ? <PiSpinner className='h-4 w-4 animate-spin' /> : null}
-                  {_('Save')}
-                </button>
-              </div>
+              )}
+              <button
+                type='button'
+                className={clsx('btn btn-ghost btn-sm', actionBtnClass)}
+                disabled={connectionStatus === 'testing'}
+                onClick={() => void handleTestConnection()}
+              >
+                {connectionStatus === 'testing' ? (
+                  <PiSpinner className='h-4 w-4 animate-spin' />
+                ) : null}
+                {_('Test Connection')}
+              </button>
+              <button
+                type='button'
+                className={clsx('btn btn-ghost btn-sm text-error', actionBtnClass)}
+                disabled={saving}
+                onClick={() => void handleDelete()}
+              >
+                {_('Delete')}
+              </button>
+              <button
+                type='button'
+                className={clsx('btn btn-contrast btn-sm gap-1.5', actionBtnClass)}
+                disabled={saving}
+                onClick={() => void handleSaveDetail()}
+              >
+                {saving ? <PiSpinner className='h-4 w-4 animate-spin' /> : null}
+                {_('Save')}
+              </button>
             </div>
           </div>
         </div>
