@@ -1,7 +1,0 @@
-{
-  "bundle": {
-    "resources": {
-      "../extensions/windows-thumbnail/target/windows_thumbnail.dll": "wellread_thumbnail.dll"
-    }
-  }
-}

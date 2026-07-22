@@ -10,13 +10,10 @@ GitHub.
 Wellread is a single TypeScript/React codebase (`apps/readest-app`) compiled into
 multiple targets:
 
-- a **desktop app** (Windows / macOS / Linux) via Tauri v2
-- a **mobile app** (Android / iOS) via Tauri v2 mobile
-- a **web app** running on Next.js / Cloudflare Workers (OpenNext) at
-  [web.readest.com](https://web.readest.com)
-- two **side surfaces**: a "Send to Wellread" browser extension
-  (`apps/readest-app/extensions/send-to-readest`) and a Windows thumbnail
-  shell extension (`apps/readest-app/extensions/windows-thumbnail`)
+- a **desktop app** (macOS via Tauri v2; other desktop targets are not packaged)
+- a **web app** running on Next.js / Cloudflare Workers (OpenNext)
+- one **side surface**: a "Send to Wellread" browser extension
+  (`apps/readest-app/extensions/send-to-readest`)
 
 The same React UI runs in all targets. What differs is the **host shell** under
 the UI and the **set of services** that the UI binds to at runtime: see
@@ -26,10 +23,8 @@ section 4.
 flowchart LR
     subgraph Clients
         Desktop["Desktop app<br/>(Tauri shell + React UI)"]
-        Mobile["Mobile app<br/>(Tauri Android/iOS + React UI)"]
         Web["Web app<br/>(Next.js + React UI)"]
         Ext["Browser extension<br/>(Send to Wellread)"]
-        WinExt["Windows shell ext<br/>(thumbnail provider)"]
     end
 
     subgraph Backend["Wellread backend (Next.js routes + Cloudflare Worker)"]
@@ -55,10 +50,8 @@ flowchart LR
     end
 
     Desktop --> Backend
-    Mobile --> Backend
     Web --> Backend
     Ext --> PagesApi
-    WinExt -.reads files.-> Desktop
 
     PagesApi --> Supabase
     PagesApi --> S3
@@ -74,7 +67,6 @@ flowchart LR
 
     Web -.direct.-> Dict
     Desktop -.direct.-> Dict
-    Mobile -.direct.-> Dict
     Web -.direct.-> Readwise
     Desktop -.direct.-> Readwise
 ```
@@ -518,39 +510,33 @@ flowchart LR
     subgraph BuildTargets
         BWeb["next build<br/>+ @opennextjs/cloudflare<br/>(.env.web)"]
         BTauriDesk["next build → tauri build<br/>(.env.tauri)"]
-        BTauriMob["next build → tauri android/ios build"]
     end
 
     subgraph DeployTargets
-        DCloudflare["Cloudflare Workers<br/>(web.readest.com)"]
-        DDocker["Docker image<br/>(ghcr.io/readest/readest)"]
-        DDesktop["dmg / nsis / appimage"]
-        DMobile["aab / ipa"]
+        DCloudflare["Cloudflare Workers"]
+        DDocker["Docker image"]
+        DDesktop["macOS .app / dmg"]
         DExt["browser extension package"]
     end
 
     Source --> BWeb
     Source --> BTauriDesk
-    Source --> BTauriMob
 
     BWeb --> DCloudflare
     BWeb --> DDocker
     BTauriDesk --> DDesktop
-    BTauriMob --> DMobile
     Source --> DExt
 ```
 
 The web target has two delivery modes: a Cloudflare Worker via OpenNext
-(`pnpm deploy`) and a self-hostable Docker image built and published from
-`.github/workflows/docker-image.yml` to GHCR and Docker Hub. The Docker image
+(`pnpm deploy`) and a self-hostable Docker image. The Docker image
 uses `docker/compose.yaml` (pull) plus `docker/compose.build.yaml` (build) and
 relies on the runtime-config mechanism described in section 5.4 so a single
 prebuilt image can be parameterized with `.env`.
 
 Tauri builds use `dotenv` to switch env files (`.env.tauri`,
-`.env.tauri.local`, `.env.apple-*.local`, `.env.ios-*.local`,
-`.env.google-play.local`) for code-signing and store-specific configuration.
-Mobile and desktop produce installable bundles (dmg, nsis, appimage, aab, ipa).
+`.env.tauri.local`, `.env.apple-*.local`) for code-signing configuration.
+Wellread packages the desktop target for macOS only (`pnpm build-macos-aarch64`).
 
 ## 9. Quick rule of thumb
 

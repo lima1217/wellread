@@ -6,12 +6,6 @@ extern crate cocoa;
 #[macro_use]
 extern crate objc;
 
-#[cfg(target_os = "windows")]
-mod windows;
-
-#[cfg(target_os = "android")]
-mod android;
-
 use tauri::utils::config::BackgroundThrottlingPolicy;
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
@@ -439,10 +433,7 @@ pub fn run() {
                 app.handle().plugin(tauri_plugin_cli::init())?;
             }
 
-            // Check for e-ink device on Android before building the window
-            #[cfg(target_os = "android")]
-            let is_eink = android::is_eink_device();
-            #[cfg(not(target_os = "android"))]
+            // Android eink detection was removed with the mobile packaging trim.
             let is_eink = false;
 
             #[cfg(desktop)]

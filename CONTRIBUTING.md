@@ -55,22 +55,18 @@ pnpm tauri info
 
 The output depends on your OS and toolchain. Review it for missing tools.
 
-For Windows targets, install “Build Tools for Visual Studio 2022” (or a higher Visual Studio edition) with the “Desktop development with C++” workflow. For Windows ARM64, also install “VS 2022 C++ ARM64 build tools” and “C++ Clang Compiler for Windows”. Ensure `clang` is on `Path`, for example `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin`.
-
 #### Using Nix
 
 If you have Nix, use the included flake to enter a development shell:
 
 ```bash
 nix develop ./ops          # web app
-nix develop ./ops#ios      # iOS app
-nix develop ./ops#android  # Android app
 ```
 
 ### 3. Build for development
 
 ```bash
-# Tauri app
+# Tauri desktop app (macOS)
 pnpm tauri dev
 # Web app
 pnpm dev-web
@@ -78,46 +74,14 @@ pnpm dev-web
 pnpm preview
 ```
 
-#### Android
-
-Run once before the Android app (the Nix Android shell does this for you):
-
-```bash
-rm apps/readest-app/src-tauri/gen/android
-pnpm tauri android init
-pnpm tauri icon ../../data/icons/readest-book.png
-git checkout apps/readest-app/src-tauri/gen/android
-```
-
-Then run:
-
-```bash
-pnpm tauri android dev
-# Real device
-pnpm tauri android dev --host
-```
-
-#### iOS
-
-```bash
-# One-time setup
-pnpm tauri ios init
-pnpm tauri icon ../../data/icons/readest-book.png
-
-pnpm tauri ios dev
-# Real device
-pnpm tauri ios dev --host
-```
-
 ### 4. Build for production
 
 ```bash
-pnpm tauri build
-pnpm tauri android build
-pnpm tauri ios build
+# macOS aarch64 app bundle (includes eve-sidecar)
+pnpm build-macos-aarch64
 ```
 
-If builds fail, compare your steps with the release workflow: [`.github/workflows/release.yml`](https://github.com/lima1217/wellread/blob/main/.github/workflows/release.yml).
+Wellread ships macOS only. Other desktop/mobile packaging paths have been removed.
 
 ### 5. More information
 

@@ -54,7 +54,7 @@ pnpm clippy:check          # Lint Rust code (src-tauri)
 
 ### Rust Backend (`src-tauri/`)
 
-Platform-specific code lives in `src-tauri/src/{macos,windows,android,ios}/`. Custom Tauri plugins are in `src-tauri/plugins/`.
+Platform-specific code lives in `src-tauri/src/macos/`. Custom Tauri plugins are in `src-tauri/plugins/`.
 
 ## Git Worktrees
 
