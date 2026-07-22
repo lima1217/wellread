@@ -120,16 +120,6 @@ Readest remains the upstream project for:
 
 Wellread’s product direction is deliberately narrower: **local macOS + on-device assistant**.
 
-## Contributors
-
-Open issues or pull requests after reading [CONTRIBUTING.md](CONTRIBUTING.md).
-
-<a href="https://github.com/lima1217/wellread/graphs/contributors">
-  <p align="left">
-    <img width="500" src="https://contrib.rocks/image?repo=lima1217/wellread" alt="Avatars of the project’s contributors" />
-  </p>
-</a>
-
 ## License
 
 Wellread is free software under the [GNU Affero General Public License](https://www.gnu.org/licenses/agpl-3.0.html) v3 or later. See [LICENSE](LICENSE).
