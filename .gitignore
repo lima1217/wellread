@@ -21,6 +21,7 @@ docker/.env
 .DS_Store
 *.pem
 /certs
+.secrets/
 
 # debug
 npm-debug.log*
@@ -57,3 +58,4 @@ result*
 apps/readest-app/src-tauri/binaries/node-*
 apps/eve-sidecar/node_modules/
 apps/eve-sidecar/.output/
+dist/

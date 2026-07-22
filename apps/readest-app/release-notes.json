@@ -1,5 +1,13 @@
 {
   "releases": {
+    "1.0.0": {
+      "date": "2026-07-22",
+      "notes": [
+        "Wellread 1.0.0: first public release under the Wellread brand",
+        "Updates now come from Wellread GitHub Releases instead of Readest",
+        "Local-only ebook reader with eve-based reading assistant"
+      ]
+    },
     "0.11.18": {
       "date": "2026-07-08",
       "notes": [

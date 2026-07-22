@@ -121,7 +121,7 @@
         "role": "Viewer"
       }
     ],
-    "createUpdaterArtifacts": false
+    "createUpdaterArtifacts": true
   },
   "plugins": {
     "fs": {
@@ -162,7 +162,7 @@
       }
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJFMEQ1QjE2OEU1NEIzNTEKUldSUnMxU09GbHNOdmpEaWFMT1crRFpEV2VORzQ2MklxaFc0M1R0ci9xY2c1bENXS0xhM1R1L2sK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIxNTA2OUQxRjBFMTM5ODgKUldTSU9lSHcwV2xRSVZZY1JvU05KNXFVaUZ1V090S2h5WHZMSC83Nml0cHEwSERnNVR1S0dYL2oK",
       "endpoints": ["https://github.com/lima1217/wellread/releases/latest/download/latest.json"]
     }
   }

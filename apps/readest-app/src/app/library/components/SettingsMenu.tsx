@@ -186,7 +186,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
   };
 
   const handleSetSavedBookCoverForLockScreen = async () => {
-    if (!(await requestStoragePermission()) && appService?.distChannel === 'readest') return;
+    if (!(await requestStoragePermission()) && appService?.distChannel === 'wellread') return;
 
     const newValue = settings.savedBookCoverForLockScreen ? '' : 'default';
     if (newValue) {

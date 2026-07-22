@@ -9,8 +9,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3"
 
 [[package]]
-name = "Readest"
-version = "0.2.2"
+name = "Wellread"
+version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "block",
@@ -8113,7 +8113,6 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
 ]
-
 
 [[package]]
 name = "tauri-plugin-window-state"
