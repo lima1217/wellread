@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { eventDispatcher } from '@/utils/event';
+import { stubTranslation as _ } from '@/utils/misc';
 import {
   createEveSession,
   getEveSession,
@@ -294,6 +296,16 @@ export function useEveAgent(options: UseEveAgentOptions) {
                 },
                 ...kept,
               ];
+            });
+          } else if (event.type === 'context.compress_failed') {
+            // Soft failure: session unchanged; turn continues on the server.
+            // Keep agent.error / status for hard turn failures only.
+            if (event.message) {
+              console.warn('[eve] context.compress_failed:', event.message);
+            }
+            eventDispatcher.dispatch('toast', {
+              type: 'warning',
+              message: _("Couldn't compress chat history; continuing with full context"),
             });
           } else if (event.type === 'error') {
             throw new Error(event.message);

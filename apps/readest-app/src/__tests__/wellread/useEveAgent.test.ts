@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
+import { eventDispatcher } from '@/utils/event';
 
 const createEveSession = vi.fn();
 const getEveSession = vi.fn();
@@ -636,6 +637,66 @@ describe('useEveAgent', () => {
       }),
       expect.objectContaining({ id: 'u1', role: 'user', content: 'new question' }),
     ]);
+  });
+
+  it('toasts on context.compress_failed without aborting the turn', async () => {
+    const dispatchSpy = vi.spyOn(eventDispatcher, 'dispatch');
+    getEveSession.mockResolvedValue({
+      id: 'ses_existing',
+      bookId: 'book-1',
+      title: 'Chat',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [{ id: 'old1', role: 'user', content: 'earlier', createdAt: 1 }],
+    });
+    streamEveTurn.mockImplementation(async function* () {
+      yield { type: 'message.user' as const, id: 'u1', content: 'new question' };
+      yield {
+        type: 'context.compress_failed' as const,
+        message: 'summarizer down',
+      };
+      yield {
+        type: 'message.assistant.delta' as const,
+        id: 'a1',
+        delta: 'still answering',
+      };
+      yield {
+        type: 'message.assistant' as const,
+        id: 'a1',
+        content: 'still answering',
+      };
+      yield { type: 'done' as const };
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1);
+    });
+
+    await act(async () => {
+      result.current.setComposer('new question');
+    });
+    await act(async () => {
+      await result.current.send();
+    });
+
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      'toast',
+      expect.objectContaining({
+        type: 'warning',
+        message: "Couldn't compress chat history; continuing with full context",
+      }),
+    );
+    expect(result.current.error).toBeNull();
+    expect(result.current.status).toBe('ready');
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({ id: 'old1', role: 'user', content: 'earlier' }),
+      expect.objectContaining({ id: 'u1', role: 'user', content: 'new question' }),
+      expect.objectContaining({ id: 'a1', role: 'assistant', content: 'still answering' }),
+    ]);
+    dispatchSpy.mockRestore();
   });
 
   it('drops the in-flight turn locally after an AbortError', async () => {
