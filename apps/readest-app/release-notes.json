@@ -1,5 +1,13 @@
 {
   "releases": {
+    "1.0.1": {
+      "date": "2026-07-22",
+      "notes": [
+        "Assistant: epubcfi citations jump into the book (including bare and inline-code forms), and are stripped when copying",
+        "Assistant: Think uses high reasoning effort; tool traces and UI polish",
+        "macOS: packaging cleanup for the Apple Silicon installer"
+      ]
+    },
     "1.0.0": {
       "date": "2026-07-22",
       "notes": [
