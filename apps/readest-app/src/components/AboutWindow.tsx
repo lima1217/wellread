@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSettingsStore } from '@/store/settingsStore';
 import { checkForAppUpdates, checkAppReleaseNotes } from '@/helpers/updater';
+import { isTauriAppPlatform } from '@/services/environment';
 import { parseWebViewInfo } from '@/utils/ua';
 import { getAppVersion } from '@/utils/version';
-import SupportLinks from './SupportLinks';
 import LegalLinks from './LegalLinks';
 import Dialog from './Dialog';
 import Link from './Link';
@@ -31,25 +31,10 @@ export const AboutWindow = () => {
   const [browserInfo, setBrowserInfo] = useState('');
   const [isOpen, setIsOpen] = useState(false);
 
-  useEffect(() => {
-    setBrowserInfo(parseWebViewInfo(appService));
-
-    const handleCustomEvent = (event: CustomEvent) => {
-      setIsOpen(event.detail.visible);
-    };
-
-    const el = document.getElementById('about_window');
-    if (el) {
-      el.addEventListener('setDialogVisibility', handleCustomEvent as EventListener);
-    }
-
-    return () => {
-      if (el) {
-        el.removeEventListener('setDialogVisibility', handleCustomEvent as EventListener);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const handleClose = () => {
+    setIsOpen(false);
+    setUpdateStatus(null);
+  };
 
   const handleCheckUpdate = async () => {
     setUpdateStatus('checking');
@@ -75,10 +60,61 @@ export const AboutWindow = () => {
     }
   };
 
-  const handleClose = () => {
-    setIsOpen(false);
-    setUpdateStatus(null);
-  };
+  const handleCheckUpdateRef = useRef(handleCheckUpdate);
+  handleCheckUpdateRef.current = handleCheckUpdate;
+  const handleShowRecentUpdatesRef = useRef(handleShowRecentUpdates);
+  handleShowRecentUpdatesRef.current = handleShowRecentUpdates;
+  const hasUpdaterRef = useRef(appService?.hasUpdater);
+  hasUpdaterRef.current = appService?.hasUpdater;
+
+  useEffect(() => {
+    setBrowserInfo(parseWebViewInfo(appService));
+
+    const handleCustomEvent = (event: CustomEvent) => {
+      setIsOpen(event.detail.visible);
+    };
+
+    const el = document.getElementById('about_window');
+    if (el) {
+      el.addEventListener('setDialogVisibility', handleCustomEvent as EventListener);
+    }
+
+    return () => {
+      if (el) {
+        el.removeEventListener('setDialogVisibility', handleCustomEvent as EventListener);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriAppPlatform() || !appService?.hasWindow) return;
+
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    const setup = async () => {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      const fn = await getCurrentWindow().listen('check-for-updates', () => {
+        setIsOpen(true);
+        if (hasUpdaterRef.current) {
+          void handleCheckUpdateRef.current();
+        } else {
+          void handleShowRecentUpdatesRef.current();
+        }
+      });
+      if (cancelled) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    };
+    void setup();
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [appService?.hasWindow]);
 
   return (
     <Dialog
@@ -146,7 +182,7 @@ export const AboutWindow = () => {
             </p>
             <p className='text-neutral-content text-xs'>
               Source code is available at{' '}
-              <Link href='https://github.com/readest/readest' className='text-blue-500 underline'>
+              <Link href='https://github.com/lima1217/wellread' className='text-blue-500 underline'>
                 GitHub
               </Link>
               .
@@ -154,7 +190,6 @@ export const AboutWindow = () => {
 
             <LegalLinks />
           </div>
-          <SupportLinks />
         </div>
       )}
     </Dialog>

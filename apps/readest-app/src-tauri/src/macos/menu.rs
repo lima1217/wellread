@@ -4,6 +4,7 @@ use tauri::menu::MenuEvent;
 use tauri::menu::{MenuItemBuilder, SubmenuBuilder, HELP_SUBMENU_ID};
 use tauri::AppHandle;
 use tauri::Emitter;
+use tauri::Manager;
 use tauri_plugin_opener::OpenerExt;
 
 #[derive(Clone, serde::Serialize)]
@@ -36,6 +37,16 @@ pub fn setup_macos_menu(app: &AppHandle) -> tauri::Result<()> {
         }
     }
 
+    // Insert right after the predefined About item in the app menu.
+    let check_update_item = MenuItemBuilder::new("Check for Updates")
+        .id("check_for_updates")
+        .build(app)?;
+    if let Some(app_menu) = global_menu.items()?.first() {
+        if let Some(app_submenu) = app_menu.as_submenu() {
+            app_submenu.insert(&check_update_item, 1)?;
+        }
+    }
+
     global_menu.append(
         &SubmenuBuilder::new(app, "Help")
             .text("privacy_policy", "Privacy Policy")
@@ -56,12 +67,26 @@ pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {
     let opener = app.opener();
     if event.id() == "open_file" {
         handle_open_file(app);
+    } else if event.id() == "check_for_updates" {
+        emit_check_for_updates(app);
     } else if event.id() == "privacy_policy" {
         let _ = opener.open_url("https://readest.com/privacy-policy", None::<&str>);
     } else if event.id() == "report_issue" {
         let _ = opener.open_url("https://github.com/readest/readest/issues", None::<&str>);
     } else if event.id() == "wellread_help" {
         let _ = opener.open_url("https://readest.com/support", None::<&str>);
+    }
+}
+
+fn emit_check_for_updates(app: &AppHandle) {
+    let windows = app.webview_windows();
+    let target = windows
+        .values()
+        .find(|w| w.is_focused().unwrap_or(false))
+        .cloned()
+        .or_else(|| app.get_webview_window("main"));
+    if let Some(window) = target {
+        let _ = window.emit("check-for-updates", ());
     }
 }
 
