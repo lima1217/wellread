@@ -107,6 +107,24 @@ export async function listEveSessions(bookId: string): Promise<EveSessionMeta[]>
   return data.sessions;
 }
 
+export type EveSkillSummary = {
+  id: string;
+  name: string;
+  description: string;
+  path: string;
+  source: 'user';
+};
+
+export async function listEveSkills(): Promise<EveSkillSummary[]> {
+  const { baseUrl, token } = base();
+  const res = await eveFetch(`${baseUrl}/eve/v1/skills`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(`list skills failed: ${res.status}`);
+  const data = (await res.json()) as { skills: EveSkillSummary[] };
+  return data.skills ?? [];
+}
+
 export async function createEveSession(input: {
   bookId: string;
   bookTitle?: string;

@@ -40,3 +40,8 @@ _Avoid_: temperature 滑杆、思考强度 UI（Low/Medium/High）、按会话�
 
 一份命名的 OpenAI 兼容云端连接：显示名、端点、模型 id、上下文窗口等。用户可保存多份，**一份激活**；composer 切换激活项。apiKey 不属于此对象，存放在 OS keychain。
 _Avoid_: ModelConfig（旧单轨名，已被多 profile 取代）、aiSettings, AI Gateway 配置, Ollama 配置
+
+## Skill（助手技能包）
+
+用户日后用 Reading Assistant 输入框 `/` 调用的扩展能力包。宿主路径 `Books/skills/<id>/SKILL.md`，模型路径 `/workspace/skills/<id>/SKILL.md`；`SKILL.md` 为 Agent Skills 形（YAML frontmatter 的 `name`/`description` + 正文 instructions）。发现由 eve sidecar 扫该目录（`GET /eve/v1/skills`）；composer 输入 `/` 时补全；发送以 `/id` 开头的消息时 sidecar 将该 skill 的 instructions 挂进当轮 system prompt。不进内建芯片；不映射 `$HOME/.agents/skills`；不经 `reedy_skills`。
+_Avoid_: 快捷动作芯片、把 skill 塞进 `.wellread/` 当主根、SkillRegistry / reedy_skills 表

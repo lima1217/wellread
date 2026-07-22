@@ -17,6 +17,7 @@ import {
 import { createHttpAbort } from '../agent/httpAbort.mjs';
 import { createSessionStore } from '../agent/sessionStore.mjs';
 import { runTurn } from '../agent/runTurn.mjs';
+import { discoverSkills } from '../agent/skills/discover.mjs';
 import { resolveLoopbackToken } from './loopbackToken.mjs';
 import {
   BadJsonError,
@@ -153,6 +154,15 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && path === '/health') {
       res.writeHead(200, { 'content-type': 'text/plain', ...corsHeaders(req) });
       res.end('ok');
+      return;
+    }
+
+    if (req.method === 'GET' && path === '/eve/v1/skills') {
+      if (!booksRootEnv) {
+        sendJson(res, 503, { error: 'books_root_unset' }, req);
+        return;
+      }
+      sendJson(res, 200, { skills: discoverSkills({ booksRoot: booksRootEnv }) }, req);
       return;
     }
 

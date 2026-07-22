@@ -405,3 +405,38 @@ export function shouldPushAgentSessionToStore(input: {
   if (previousAgentSessionId === agentSessionId) return false;
   return agentSessionId !== storeSessionId || storeBookId !== bookId;
 }
+
+/**
+ * While the composer is typing a leading `/token` (no args yet), return the
+ * query after `/`. Once a space (or newline) appears, the menu closes.
+ */
+export function getComposerSlashQuery(composer: string): string | null {
+  if (!composer.startsWith('/')) return null;
+  const after = composer.slice(1);
+  if (/[\s\n]/.test(after)) return null;
+  return after;
+}
+
+/** Filter catalog by id/name/description prefix or substring (case-insensitive). */
+export function filterSkillsForSlash<T extends { id: string; name: string; description: string }>(
+  skills: readonly T[],
+  query: string,
+): T[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [...skills];
+  return skills.filter((s) => {
+    const id = s.id.toLowerCase();
+    const name = s.name.toLowerCase();
+    const description = s.description.toLowerCase();
+    return id.startsWith(q) || name.includes(q) || description.includes(q);
+  });
+}
+
+/** Replace a leading `/partial` with `/id ` (trailing space for optional args). */
+export function applySlashSkillSelection(composer: string, skillId: string): string {
+  if (!composer.startsWith('/')) return `/${skillId} `;
+  const after = composer.slice(1);
+  const space = after.search(/\s/);
+  if (space < 0) return `/${skillId} `;
+  return `/${skillId}${after.slice(space)}`;
+}

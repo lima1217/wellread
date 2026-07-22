@@ -26,7 +26,10 @@ import {
 import { reloadEveSidecar } from '@/services/wellread/eveSidecar';
 import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
 import {
+  applySlashSkillSelection,
+  filterSkillsForSlash,
   formatWorkDuration,
+  getComposerSlashQuery,
   isExternalHttpHref,
   isReadingAssistantAvailable,
   linkifyBareEpubCfi,
@@ -45,9 +48,11 @@ import {
 import type {
   EveMessage,
   EveMessageQuote,
+  EveSkillSummary,
   EveSource,
   EveToolTrace,
 } from '@/services/wellread/assistant/eveClient';
+import { listEveSkills } from '@/services/wellread/assistant/eveClient';
 import { openExternalUrl } from '@/utils/open';
 
 interface AIAssistantProps {
@@ -510,6 +515,58 @@ const ReadingAssistantChat = ({
     thinkingMode,
   });
 
+  const [skills, setSkills] = useState<EveSkillSummary[]>([]);
+  const [skillsLoaded, setSkillsLoaded] = useState(false);
+  const [skillsError, setSkillsError] = useState(false);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [slashDismissed, setSlashDismissed] = useState(false);
+  const slashQuery = getComposerSlashQuery(agent.composer);
+  const slashOpen = slashQuery !== null && !slashDismissed;
+  const slashMatches = slashOpen ? filterSkillsForSlash(skills, slashQuery) : [];
+
+  useEffect(() => {
+    if (!slashOpen) return;
+    let cancelled = false;
+    setSkillsLoaded(false);
+    setSkillsError(false);
+    void listEveSkills()
+      .then((rows) => {
+        if (cancelled) return;
+        setSkills(rows);
+        setSkillsError(false);
+        setSkillsLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSkills([]);
+        setSkillsError(true);
+        setSkillsLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slashOpen]);
+
+  useEffect(() => {
+    setSlashIndex(0);
+  }, [slashQuery, skills]);
+
+  useEffect(() => {
+    if (slashMatches.length === 0) {
+      setSlashIndex(0);
+      return;
+    }
+    setSlashIndex((i) => Math.min(i, slashMatches.length - 1));
+  }, [slashMatches.length]);
+
+  const selectSlashSkill = useCallback(
+    (skillId: string) => {
+      agent.setComposer(applySlashSkillSelection(agent.composer, skillId));
+      setSlashIndex(0);
+    },
+    [agent],
+  );
+
   const prevAgentSessionIdRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     const previousAgentSessionId = prevAgentSessionIdRef.current;
@@ -666,7 +723,68 @@ const ReadingAssistantChat = ({
           handleSend();
         }}
       >
-        <div className='bg-base-100 eink-bordered focus-within:ring-base-content/15 flex flex-col rounded-xl focus-within:ring-2'>
+        <div className='bg-base-100 eink-bordered focus-within:ring-base-content/15 relative flex flex-col rounded-xl focus-within:ring-2'>
+          {slashOpen ? (
+            <div
+              className={clsx(
+                'border-base-200/70 bg-base-100 absolute inset-x-0 bottom-full z-10 mb-1 overflow-hidden',
+                'eink-bordered rounded-xl border shadow-[0_1px_2px_oklch(0_0_0/0.06),0_4px_14px_oklch(0_0_0/0.08)]',
+              )}
+              role='listbox'
+              aria-label={_('Skills')}
+            >
+              {!skillsLoaded ? (
+                <div className='text-base-content/45 flex items-center gap-2 px-3 py-2.5 font-sans text-[0.85em]'>
+                  <Loader2Icon size={14} className='animate-spin opacity-60' aria-hidden='true' />
+                  {_('Loading skills…')}
+                </div>
+              ) : skillsError ? (
+                <div className='text-base-content/45 px-3 py-2.5 font-sans text-[0.85em]'>
+                  {_('Could not load skills')}
+                </div>
+              ) : skills.length === 0 ? (
+                <div className='text-base-content/45 space-y-1 px-3 py-2.5 font-sans text-[0.85em] leading-snug'>
+                  <div>{_('No skills yet')}</div>
+                  <div className='text-base-content/35' translate='no'>
+                    Books/skills/&lt;id&gt;/SKILL.md
+                  </div>
+                </div>
+              ) : slashMatches.length === 0 ? (
+                <div className='text-base-content/45 px-3 py-2.5 font-sans text-[0.85em]'>
+                  {_('No matching skills')}
+                </div>
+              ) : (
+                <ul className='max-h-48 overflow-y-auto overscroll-contain p-1'>
+                  {slashMatches.map((skill, index) => {
+                    const active = index === slashIndex;
+                    return (
+                      <li key={skill.id} role='option' aria-selected={active}>
+                        <button
+                          type='button'
+                          className={clsx(
+                            composerSelectItem,
+                            focusRing,
+                            active && composerSelectItemActive,
+                          )}
+                          onMouseEnter={() => setSlashIndex(index)}
+                          onClick={() => selectSlashSkill(skill.id)}
+                        >
+                          <span className='min-w-0 flex-1 text-start'>
+                            <span className='text-base-content block truncate font-medium'>
+                              /{skill.id}
+                            </span>
+                            <span className='text-base-content/50 block truncate text-[0.85em] leading-snug'>
+                              {skill.description || skill.name}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
           <textarea
             name='assistant-message'
             aria-label={_('Message')}
@@ -677,9 +795,53 @@ const ReadingAssistantChat = ({
               messageTypeClass,
             )}
             value={agent.composer}
-            onChange={(e) => agent.setComposer(e.target.value)}
+            onChange={(e) => {
+              setSlashDismissed(false);
+              agent.setComposer(e.target.value);
+            }}
             rows={2}
             onKeyDown={(e) => {
+              if (slashOpen) {
+                if (!skillsLoaded) {
+                  if (
+                    (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) ||
+                    e.key === 'Tab' ||
+                    e.key === 'ArrowDown' ||
+                    e.key === 'ArrowUp'
+                  ) {
+                    e.preventDefault();
+                    return;
+                  }
+                } else if (slashMatches.length > 0) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setSlashIndex((i) => (i + 1) % slashMatches.length);
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setSlashIndex((i) => (i - 1 + slashMatches.length) % slashMatches.length);
+                    return;
+                  }
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    const skill = slashMatches[slashIndex];
+                    if (skill) selectSlashSkill(skill.id);
+                    return;
+                  }
+                  if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const skill = slashMatches[slashIndex];
+                    if (skill) selectSlashSkill(skill.id);
+                    return;
+                  }
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setSlashDismissed(true);
+                  return;
+                }
+              }
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 // Busy: keep typing (soft keyboard stays open); only block submit.
