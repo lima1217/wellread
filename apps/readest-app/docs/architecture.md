@@ -1,560 +1,276 @@
 # Wellread architecture
 
-This page maps how Wellread’s pieces fit together: process boundaries, hosts, and module responsibilities. Pair it with [`code-layout.md`](./code-layout.md) when you need a file path. Start here for the system picture; open that doc when you hunt for a directory.
+This page maps how Wellread’s pieces fit together today: process boundaries,
+hosts, and module responsibilities. Pair it with [`code-layout.md`](./code-layout.md)
+when you need a file path.
 
-The diagrams use [Mermaid](https://mermaid.js.org/) and render natively on
-GitHub.
+Wellread is a **local-first** fork of the Readest / Foliate lineage. The shipped
+product is a **macOS (Apple Silicon) Tauri app** with an embedded **eve sidecar**
+for the Reading Assistant. There is no Wellread cloud account, no hosted sync,
+and no billing stack.
+
+Diagrams use [Mermaid](https://mermaid.js.org/) and render on GitHub.
 
 ## 1. High-level picture
 
-Wellread is a single TypeScript/React codebase (`apps/readest-app`) compiled into
-multiple targets:
+Primary surface:
 
-- a **desktop app** (macOS via Tauri v2; other desktop targets are not packaged)
-- a **web app** running on Next.js / Cloudflare Workers (OpenNext)
-- one **side surface**: a "Send to Wellread" browser extension
-  (`apps/readest-app/extensions/send-to-readest`)
+- **Desktop app** — `apps/readest-app` UI + `src-tauri` shell, packaged with
+  `pnpm build-macos-aarch64` (`.dmg` + in-app updater tarball)
 
-The same React UI runs in all targets. What differs is the **host shell** under
-the UI and the **set of services** that the UI binds to at runtime: see
-section 4.
+Supporting surfaces (not product downloads):
+
+- **`pnpm dev-web` / `pnpm build-web`** — Next.js UI for local development and
+  debugging without compiling Rust. Not a shipped Wellread web product.
+- **Browser extension** — `apps/readest-app/extensions/send-to-readest` may still
+  exist in-tree; it is not part of the macOS release contract.
 
 ```mermaid
 flowchart LR
-    subgraph Clients
-        Desktop["Desktop app<br/>(Tauri shell + React UI)"]
-        Web["Web app<br/>(Next.js + React UI)"]
-        Ext["Browser extension<br/>(Send to Wellread)"]
+    subgraph Machine["User Mac"]
+        UI["React UI<br/>apps/readest-app/src"]
+        Tauri["Tauri host<br/>src-tauri"]
+        Eve["eve sidecar<br/>apps/eve-sidecar"]
+        Disk["Local library + settings<br/>Books / Turso / keychain"]
     end
 
-    subgraph Backend["Wellread backend (Next.js routes + Cloudflare Worker)"]
-        AppApi["src/app/api/*<br/>(App Router)"]
-        PagesApi["src/pages/api/*<br/>(Pages Router)"]
-        RuntimeCfg["/runtime-config.js<br/>(server-injected config)"]
-        Worker["workers/send-email<br/>(Cloudflare Worker)"]
+    subgraph Optional["Optional network"]
+        Model["User-chosen model API<br/>(OpenAI-compatible / …)"]
+        Catalogs["OPDS / metadata / dict / translators"]
     end
 
-    subgraph Cloud["External services"]
-        Supabase["Supabase<br/>(auth + Postgres)"]
-        S3["Object storage<br/>(S3 / R2)"]
-        Stripe["Stripe<br/>(billing)"]
-        AI["AI providers<br/>(OpenAI / Ollama / ...)"]
-        Trans["Translators<br/>(DeepL / Google / Azure / Yandex)"]
-        Meta["Metadata providers<br/>(Google Books / Open Library)"]
-        Dict["Dictionary sources<br/>(Wikipedia / Wiktionary / StarDict)"]
-        OPDS["OPDS catalogs / Calibre"]
-        Hardcover["Hardcover GraphQL"]
-        Readwise["Readwise"]
-        TTS["Edge TTS"]
-        IAP["Apple / Google IAP"]
-    end
-
-    Desktop --> Backend
-    Web --> Backend
-    Ext --> PagesApi
-
-    PagesApi --> Supabase
-    PagesApi --> S3
-    PagesApi --> Trans
-    AppApi --> Supabase
-    AppApi --> Stripe
-    AppApi --> AI
-    AppApi --> Meta
-    AppApi --> OPDS
-    AppApi --> Hardcover
-    AppApi --> TTS
-    AppApi --> IAP
-
-    Web -.direct.-> Dict
-    Desktop -.direct.-> Dict
-    Web -.direct.-> Readwise
-    Desktop -.direct.-> Readwise
+    UI -- invoke --> Tauri
+    Tauri -- spawn + loopback HTTP --> Eve
+    UI -- fetch 127.0.0.1 --> Eve
+    Tauri --> Disk
+    UI --> Disk
+    Eve -- HTTPS --> Model
+    UI -.optional.-> Catalogs
 ```
 
-The `Backend` box is **the same code on all clients**. In the web target it is
-deployed as a Cloudflare Worker (via `@opennextjs/cloudflare` and
-`wrangler.toml`). In the Tauri targets the same routes are served by a Next.js
-runtime, but most clients hit the production deployment over HTTPS.
+What was removed from the Readest-era stack (do not reintroduce in docs or
+designs without an explicit decision): Supabase auth, Stripe / IAP, S3 cloud
+library, replica cloud sync APIs, Edge/native TTS product path, Cloudflare
+`send-email` / IAP workers, and multi-platform release packaging.
 
 ## 2. Process boundaries
 
-There are three runtimes in play:
+Three processes matter on macOS:
 
 ```mermaid
 flowchart TB
-    subgraph Browser["Web runtime (browser / Tauri webview)"]
-        UI["React UI<br/>(src/app, src/components, src/hooks, src/store)"]
-        Domain["Shared domain layer<br/>(src/services, src/utils, src/libs)"]
-        Foliate["foliate-js<br/>(packages/foliate-js)"]
-        SW["Service worker (sw.ts)"]
-        TursoWasm["Turso WASM<br/>(replica DB in browser)"]
+    subgraph WebView["Tauri webview"]
+        React["React / Next UI"]
+        Domain["src/services, utils, libs"]
+        Foliate["packages/foliate-js"]
+        TursoWasm["Turso WASM / local replica DB"]
     end
 
-    subgraph Native["Tauri native host (Rust)"]
-        TauriCore["src-tauri/src/lib.rs<br/>(commands, dir_scanner, transfer_file, clip_url)"]
-        Plugins["Tauri plugins<br/>(fs, dialog, http, oauth, deep-link, opener, updater,<br/>native-bridge, native-tts, turso)"]
+    subgraph Native["Tauri native host"]
+        Lib["src-tauri/src/lib.rs"]
+        EveLife["eve_sidecar.rs<br/>spawn / reload / shutdown"]
+        Plugins["fs, dialog, http, deep-link,<br/>opener, updater, turso, …"]
     end
 
-    subgraph Server["Next.js server (Worker / Node)"]
-        Routes["App Router + Pages Router routes"]
-        Mw["middleware.ts<br/>(CORS + COOP/COEP)"]
-        RuntimeRoute["app/runtime-config.js<br/>(server-rendered config script)"]
+    subgraph Sidecar["Bundled Node sidecar"]
+        Server["loopback HTTP /eve/v1"]
+        Agent["agent turn + tools"]
+        BooksFS["scoped Books FS + search"]
     end
 
-    UI --> Domain
+    React --> Domain
     Domain --> Foliate
-    UI --> SW
     Domain --> TursoWasm
-
-    Domain -- "@tauri-apps/api invoke()" --> TauriCore
-    TauriCore --> Plugins
-
-    Domain -- "fetch(/api/...)" --> Routes
-    Browser -- "<script src=/runtime-config.js>" --> RuntimeRoute
-    Routes --> Mw
+    Domain -- "@tauri-apps/api" --> Lib
+    Lib --> Plugins
+    Lib --> EveLife
+    EveLife --> Server
+    React -- "Bearer loopback token" --> Server
+    Server --> Agent
+    Agent --> BooksFS
 ```
 
-Three things are worth calling out:
+### 2.1 Eve sidecar
 
-The same `src/services/*` code runs on both sides of the `invoke()` boundary on
-desktop/mobile and on both sides of the `fetch()` boundary on web. Which
-implementation is picked is decided at runtime by `src/services/environment.ts`
-plus the platform-specific `*AppService.ts` (`webAppService`, `nativeAppService`,
-`nodeAppService`): see section 4.
+- Source: `apps/eve-sidecar`
+- Bundled into the app via Tauri resources (`eve/.output`) and a platform Node
+  binary under `src-tauri/binaries`
+- Lifecycle owned by Rust (`src-tauri/src/eve_sidecar.rs`): bootstrap on launch,
+  `reload_eve_sidecar` when the active model profile changes, shutdown on exit
+- Frontend bridge: `src/services/wellread/eveSidecar.ts` +
+  `eveConnectionStore.ts` + `assistant/*`
+- Security model: listen on loopback only, random bearer token, book tools
+  sandboxed to the library Books tree
 
-`middleware.ts` does two things and only two things: CORS for `/api/*`, and
-`Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy:
-require-corp` on every document. The COOP/COEP pair is required so that the
-browser exposes `SharedArrayBuffer`, which the Turso WASM thread pool needs in
-order to run the in-browser replica database; without those headers
-`initThreadPool` hangs.
+### 2.2 Runtime config
 
-`/runtime-config.js` is a server route that emits
-`window.__WELLREAD_RUNTIME_CONFIG = {...}` as a JavaScript file. It is loaded as
-a `<script>` tag from `app/layout.tsx` and `pages/_document.tsx`. This is what
-lets a single Docker image be rebranded with a different Supabase project, S3
-endpoint, or quota at deploy time without rebuilding: see commit
-`9ad43aa8` and the `docker/` directory.
+`/runtime-config.js` still exists, but it only exposes optional
+`apiBaseUrl` for local/dev routing (`src/services/runtimeConfig.ts`). It is
+**not** a Supabase / S3 / quota rebranding mechanism anymore.
 
 ## 3. Frontend architecture
 
-The frontend is a Next.js 16 + React 19 app. It uses both routers:
+Next.js 16 + React 19. App Router owns most pages; the historical Pages Router
+reader entry (`src/pages/reader/[ids].tsx`) and `_document.tsx` remain for the
+reader shell / COOP-COEP document wiring.
 
-| Concern | Lives in | Why |
-|---|---|---|
-| Library, reader, auth, OPDS, send, user pages | `src/app/*` (App Router) | Standard for new pages; supports server components and the runtime-config route. |
-| Reader entry by ID list `/reader/[ids]` | `src/pages/reader/[ids].tsx` (Pages Router) | Historical entrypoint; coexists with the App Router reader. |
-| Cross-origin isolation document shell | `src/pages/_document.tsx` | Pages Router still owns `<Document>` for COOP/COEP and `runtime-config.js`. |
-| HTTP API endpoints | both `src/app/api/*` and `src/pages/api/*` | Mix of new App Router routes and legacy Pages Router routes. |
+| Concern | Lives in |
+|---|---|
+| Library | `src/app/library` |
+| Reader | `src/app/reader` (+ Pages Router entry) |
+| OPDS browser | `src/app/opds` |
+| Updater UI | `src/app/updater` |
+| Thin API proxies | `src/app/api/{hardcover,metadata,opds}` |
 
-### 3.1 UI module map
+There are **no** `app/auth`, `app/user`, or `app/send` product surfaces in the
+current tree.
 
-```mermaid
-flowchart TB
-    Layout["app/layout.tsx<br/>(root shell, runtime-config script, Providers)"]
-    Library["app/library<br/>(grid, import, sort, OPDS shelf)"]
-    Reader["app/reader<br/>(views + tooling)"]
-    Auth["app/auth<br/>(Supabase auth UI)"]
-    Send["app/send<br/>(send-to-Wellread inbox)"]
-    User["app/user<br/>(account, subscription, settings)"]
-    Updater["app/updater"]
-    Offline["app/offline"]
-    OPDS["app/opds<br/>(catalog browser)"]
-    Share["app/s, app/o<br/>(share landing pages)"]
+### 3.1 Reader cluster
 
-    Layout --> Library
-    Layout --> Reader
-    Layout --> Auth
-    Layout --> Send
-    Layout --> User
-    Layout --> OPDS
-
-    subgraph ReaderInternals["app/reader internals"]
-        ReaderPage["page.tsx"]
-        ReaderComps["components/*<br/>(BookView, Sidebar, AssistantPanel,<br/>Annotator, FootnotePopup, Translator,<br/>RSVP overlay, AIChat, ParallelView, ...)"]
-        ReaderHooks["hooks/*<br/>(useFoliateEvents, useScrollHandler,<br/>useProgressSync, useAnnotations, ...)"]
-        ReaderUtils["utils/*"]
-    end
-    Reader --> ReaderInternals
-
-    subgraph Shared["Shared UI primitives"]
-        Components["components/*<br/>(Button, Dialog, Menu, Toast,<br/>BookCover, AppLockScreen, ...)"]
-        Settings["components/settings/*<br/>(Layout/Font/Color/Custom panels)"]
-        Assistant["components/assistant/*<br/>(AI chat composer)"]
-        CmdPalette["components/command-palette"]
-    end
-```
-
-The biggest UI cluster by far is `app/reader`: roughly 80 components and 30
-hooks coordinating Foliate-based rendering, annotations, footnote popovers, the
-notebook side panel, parallel view, RSVP, AI chat, translator overlays,
-search, TTS, and the settings panels under `components/settings`.
+`src/app/reader` is the largest UI area: Foliate rendering, annotations,
+footnotes, translator overlays, RSVP, parallel view, settings panels, and the
+Reading Assistant (`components/assistant/*` + `services/wellread/*`).
 
 ### 3.2 State (Zustand)
 
-Frontend state is split across single-purpose Zustand stores in `src/store`.
-Each store maps to a clearly delimited concern, which keeps the reader from
-collapsing into one mega-context:
+Single-purpose stores under `src/store`, including:
 
 ```
-libraryStore        -> books, folders, selection, sort
-bookDataStore       -> per-book data (TOC, annotations, locations)
-readerStore         -> active views, layout, ribbon state
-parallelViewStore   -> two-pane reading
-assistantPanelStore -> Reading Assistant side panel
-settingsStore       -> user/app settings
-themeStore          -> light/dark/atmosphere
-sidebarStore        -> sidebar visibility/width
-trafficLightStore   -> macOS traffic-light positioning
-appLockStore        -> app PIN lock
-deviceStore         -> device profile
-transferStore       -> in-flight uploads/downloads
-aiChatStore         -> AI chat sessions
-proofreadStore      -> proofread side flow
-atmosphereStore     -> ambient overlay
-customDictionaryStore / customFontStore /
-  customTextureStore / customOPDSStore       -> user-imported assets
+libraryStore / bookDataStore / readerStore / readerProgressStore
+parallelViewStore / assistantPanelStore / settingsStore / themeStore
+sidebarStore / trafficLightStore / appLockStore / deviceStore
+proofreadStore / atmosphereStore / feedStore
+customDictionaryStore / customFontStore / customTextureStore / customOPDSStore
 ```
 
-### 3.3 In-browser book engine
+Reading Assistant session/stream logic lives under
+`src/services/wellread/assistant`, not a separate cloud AI store.
 
-EPUB / MOBI / KF8 / FB2 / CBZ / TXT / PDF parsing and rendering is **not**
-hand-rolled in this repo. The reader sits on top of `packages/foliate-js`, a
-forked copy of the Foliate JS engine. Wellread's reader code in `app/reader` and
-the adapters under `src/services/annotation`, `src/services/nav`,
-`src/services/transformers`, and `src/services/rsvp` wrap that engine and add
-features (annotations sync, navigation, content transforms, vertical/Warichu
-support, classic mode overlays, etc.).
+### 3.3 Book engine
 
-PDF rendering goes through `pdfjs-dist`, which is copied into
-`public/vendor/pdfjs` at build time (`pnpm setup-pdfjs`). Chinese conversion
-uses `simplecc-wasm` (`public/vendor/simplecc`), and Chinese segmentation uses
-`jieba-wasm` (`public/vendor/jieba`).
+Parsing and rendering sit on `packages/foliate-js`. PDF uses vendored
+`pdfjs-dist`. Chinese conversion / segmentation use `simplecc-wasm` and
+`jieba-wasm` under `public/vendor/*`.
 
-### 3.4 Service worker and offline
+## 4. Platform abstraction (`AppService`)
 
-`src/sw.ts` is a Serwist service worker that gives the web build offline
-support: cached static assets, cached API responses for read-only data, and an
-offline route at `/offline`.
+`src/services/appService.ts` is still the seam for filesystem, dialogs, open
+external, directory scan, deep links, etc. Implementations:
 
-## 4. The platform abstraction (`AppService`)
+- `nativeAppService.ts` — Tauri desktop (the shipped path)
+- `webAppService.ts` — browser / `dev-web`
+- `nodeAppService.ts` — Node tooling and tests
 
-The single most important abstraction in the codebase is
-`src/services/appService.ts`. Every piece of code that touches "the platform"
-(file system, native dialogs, shell open, native TTS, IAP, dir scanning,
-deep links, etc.) goes through an `AppService` interface. There are three
-implementations:
+`environment.ts` picks the implementation from build target + runtime
+detection. Database access mirrors the same split
+(`nativeDatabaseService` / `webDatabaseService` / `nodeDatabaseService`).
 
-```mermaid
-flowchart LR
-    Caller["UI code, hooks, services"]
-    AppSvc["AppService interface<br/>(services/appService.ts)"]
-    Native["nativeAppService.ts<br/>(Tauri desktop + mobile)"]
-    Web["webAppService.ts<br/>(browser / web build)"]
-    Node["nodeAppService.ts<br/>(Node tooling, tests, CLI)"]
+## 5. Remaining HTTP routes
 
-    Caller --> AppSvc
-    AppSvc --> Native
-    AppSvc --> Web
-    AppSvc --> Node
-
-    Native -- "@tauri-apps/api invoke()" --> Rust["src-tauri Rust commands"]
-    Native --> Plugins["Tauri plugins<br/>(fs, dialog, http, oauth, native-bridge, native-tts, turso)"]
-    Web --> Browser["browser APIs (File, IndexedDB, fetch)"]
-    Web --> RemoteAPI["fetch() to /api/*"]
-    Node --> Fs["node:fs, node:path"]
-```
-
-`environment.ts` decides at runtime which implementation to mount, based on the
-build target (`NEXT_PUBLIC_APP_PLATFORM`) and runtime detection (`window`,
-Tauri injection). Most callers in the codebase do
-`const appService = useEnv().appService` and never know which one they got.
-
-The same pattern repeats for the database layer in `src/services/database`:
-`webDatabaseService` (browser via Turso WASM), `nativeDatabaseService` (Tauri
-via the `tauri-plugin-turso` plugin), and `nodeDatabaseService` (Node, used by
-tests). All three share `migrate.ts` and `migrations/*`.
-
-This is why most domain code in `src/services` looks platform-agnostic: the
-platform difference has been pushed to a small number of seams.
-
-## 5. Backend (Next.js routes)
-
-There are two route trees because of historical mix between App Router and
-Pages Router. The split is pragmatic, not load-bearing: new routes go to
-`src/app/api`, legacy/sync/storage live in `src/pages/api`.
-
-### 5.1 Pages Router endpoints (`src/pages/api`)
-
-These are the long-standing server endpoints around sync, storage, and email:
+Cloud sync, storage, Stripe, IAP, TTS, and Send-inbox APIs are gone. What
+remains under `src/app/api` are thin optional proxies:
 
 ```
-sync.ts                  -> KOReader-compatible sync client (`KOSyncClient`)
-kosync.ts                -> KOSync legacy bridge
-sync/replicas.ts         -> replica sync upload/download (encrypted blobs)
-sync/replica-keys.ts     -> replica key bootstrap
-storage/upload.ts        -> presigned upload to S3/R2 for book bytes
-storage/download.ts      -> presigned download
-storage/list.ts          -> list user's objects
-storage/delete.ts        -> delete a single object
-storage/purge.ts         -> bulk wipe (account deletion path)
-storage/stats.ts         -> per-user usage/quotas
-send/inbox.ts            -> "Send to Wellread" inbox listing
-send/inbox/*             -> inbox item operations
-send/address.ts          -> per-user inbox address resolver
-send/fetch-url.ts        -> server-side URL fetcher for "send a link"
-send/senders.ts          -> sender allowlist
-deepl/translate.ts       -> DeepL translation proxy (hides API key)
-user/delete.ts           -> account deletion
+hardcover/graphql   -> Hardcover GraphQL relay
+metadata/search     -> Google Books / Open Library style lookup
+opds/proxy          -> CORS-friendly OPDS proxy
 ```
 
-The storage layer talks to S3-compatible storage through `src/utils/s3.ts`,
-which honors a `S3_PUBLIC_ENDPOINT` distinct from the internal endpoint so
-docker-compose deployments can route browsers through one origin and the
-server through another.
+Domain code for dictionaries, translators, OPDS, Readwise/Hardcover clients,
+annotations, RSVP, and transformers still lives under `src/services/*` and
+talks to the network **directly from the client** when the user enables those
+features. There is no Wellread-operated backend for library bytes or accounts.
 
-### 5.2 App Router endpoints (`src/app/api`)
+## 6. Cross-cutting subsystems (current)
 
-Newer endpoints, grouped by domain:
+### 6.1 Local library
 
-```
-ai/chat                  -> streaming AI chat (Vercel AI SDK)
-ai/embed                 -> embeddings for in-book RAG
-metadata/search          -> metadata lookup (Google Books / Open Library)
-opds/proxy               -> CORS-friendly OPDS proxy
-tts/edge                 -> Edge TTS streaming
-hardcover/graphql        -> Hardcover GraphQL relay
-stripe/checkout          -> create checkout session
-stripe/portal            -> billing portal redirect
-stripe/plans             -> plan listing
-stripe/check             -> subscription state
-stripe/webhook           -> Stripe webhook handler
-google/iap-verify        -> Google Play IAP verification
-apple/iap-verify         -> App Store IAP verification
-share/*                  -> share-link landing + read-only render
-```
+Import and library management go through `ingestService`, `bookService`, and
+`libraryService`. Books are stored on disk (hash copy under `Books/<hash>/` or
+read-in-place). No cloud upload path.
 
-### 5.3 Workers
+### 6.2 Local replica helpers
 
-`apps/readest-app/workers/send-email` is a separate Cloudflare Worker
-(deployed independently from the main app) responsible for the "Send to Wellread
-by email" path. It receives mail, normalizes attachments, and drops items into
-the user's inbox so that the in-app `Send` page can pick them up via the
-`/api/send/inbox` endpoints.
+`src/services/sync/{replicaBootstrap,replicaPersist,replicaRegistry,adapters}`
+still help apply/persist local replica-shaped settings (fonts, dictionaries,
+textures, OPDS catalogs, settings). This is **not** a hosted multi-device sync
+product.
 
-### 5.4 Runtime config
+### 6.3 Reading Assistant (AI)
 
-`src/app/runtime-config.js/route.ts` is a server route that builds a small JSON
-object (`supabaseUrl`, `supabaseAnonKey`, `apiBaseUrl`, `objectStorageType`,
-`storageFixedQuota`) from `process.env` at request
-time and serializes it as a JS payload. The client reads it through
-`getRuntimeConfig()` in `src/services/runtimeConfig.ts` (browser) or
-`getServerRuntimeConfig()` (server). This is the mechanism that makes the same
-prebuilt Docker image rebrandable per deployment.
+- UI: `src/app/reader/components/assistant`
+- Client: `src/services/wellread/assistant` (`eveClient`, `eveFetch`,
+  `useEveAgent`, session helpers)
+- Config: multi `ModelProfile` + keychain-backed API keys
+  (`modelConfig.ts`, `modelApiKey.ts`)
+- Book context: extract / CFI chunking under `services/wellread/extract`
+- Runtime: eve sidecar agent loop, tool rounds, scoped Books search
 
-## 6. Cross-cutting subsystems
+### 6.4 Dictionaries, OPDS, translators, annotations, RSVP
 
-These don't live in one file or one route; they span the frontend, the backend,
-and (sometimes) the native shell.
+Unchanged in role from the reader product: local packs + optional online
+lookups; OPDS catalogs; translator providers; Foliate annotation model;
+RSVP and content transformers. See the matching folders under `src/services`.
 
-### 6.1 Sync
-
-Two sync paths coexist:
-
-The first is **legacy KOReader-compatible sync** for reading progress,
-implemented by `src/services/sync/KOSyncClient.ts` against `pages/api/sync.ts`
-and `pages/api/kosync.ts`. It exists for compatibility with KOSync-style
-clients.
-
-The second is **replica sync**, the modern path. It encrypts each replica
-locally with a passphrase-derived key
-(`replicaCryptoMiddleware.ts`, `passphraseGate.ts`), publishes deltas to
-`pages/api/sync/replicas.ts`, pulls peer updates, and applies them through
-category adapters in `src/services/sync/adapters/*` (annotations, settings,
-dictionaries, fonts, textures, OPDS catalogs). The orchestrator is
-`replicaSyncManager.ts`. A cursor store (`replicaCursorStore.ts`) tracks "where
-I last pulled to" per category so syncs are incremental.
-
-### 6.2 Cloud library
-
-Distinct from replica sync. The cloud library handles **book bytes** (not
-metadata):
-
-- import flow: `src/services/ingestService.ts` decides whether a book is
-  imported as a hash copy under `Books/<hash>/` or kept *in place* at the
-  user's chosen path (the "in-place" mode added in commit `dd107277`).
-- upload: `cloudService.uploadBook` uses the storage layer to push bytes to S3
-  through `pages/api/storage/upload.ts`.
-- download: peers fetch via `pages/api/storage/download.ts`, materializing the
-  book into `Books/<hash>/` regardless of whether the original device kept it
-  in-place.
-- delete: symmetric local/cloud/both semantics in `cloudService.deleteBook`.
-
-### 6.3 AI / RAG
-
-`src/services/ai` provides the chat and embedding abstraction with provider
-adapters, prompt assembly, chunking, retry, and a local AI store. UI lives in
-`components/assistant` and the reader-side `app/reader/components/AIChat*`. The
-HTTP entrypoints are `src/app/api/ai/chat` (streaming) and
-`src/app/api/ai/embed`. The reader can do book-scoped RAG by embedding chapters
-locally and querying the embeddings store.
-
-### 6.4 Translation
-
-`src/services/translators` has provider adapters for DeepL, Google, Azure, and
-Yandex, plus a preprocess + cache + polish pipeline. DeepL goes through a
-server proxy (`pages/api/deepl/translate.ts`) to keep the API key server-side;
-the others can hit the providers directly from the client.
-
-### 6.5 TTS
-
-Three TTS backends behind one interface (`src/services/tts`):
-
-- `WebSpeechClient` for browsers,
-- `NativeTTSClient` for Tauri via `tauri-plugin-native-tts`,
-- `EdgeTTSClient` going through `src/app/api/tts/edge` for streaming Microsoft
-  Edge voices.
-
-### 6.6 Dictionaries
-
-`src/services/dictionaries` parses StarDict and SLOB packs locally
-(`readers/`), and integrates online sources (Wikipedia, Wiktionary,
-provider-specific). Lookup goes through a candidate generator + dedup so
-clicking a word finds all installed dictionaries and online sources in one
-roundtrip.
-
-### 6.7 OPDS / Calibre
-
-`src/services/opds` parses feeds, supports auto-download, and tracks
-subscription state. Cross-origin feeds are tunneled through
-`src/app/api/opds/proxy`. The library UI surfaces OPDS shelves alongside local
-books.
-
-### 6.8 Third-party reading services
-
-Hardcover (`src/services/hardcover` + `src/app/api/hardcover/graphql`) and
-Readwise (`src/services/readwise`) integrations let users export reading
-progress and highlights.
-
-### 6.9 Annotations
-
-`src/services/annotation` defines the canonical annotation model and provides
-adapters: a Foliate adapter (the default in-app representation) and an MR
-import/export adapter for moving annotations to and from MoonReader.
-
-### 6.10 RSVP and content transforms
-
-`src/services/rsvp` is the rapid-serial-visual-presentation reading mode.
-`src/services/transformers` contains pure functions for language detection,
-punctuation normalization, whitespace collapsing, proofread suggestions,
-sanitization, footnote rewriting, style injection, traditional/simplified
-Chinese conversion (via `simplecc-wasm`), and Warichu (Japanese ruby/rubi)
-layout. These are reused by the reader, by RSVP, and by the
-"Send to Wellread" article-to-EPUB conversion.
-
-### 6.11 Send to Wellread
-
-End-to-end pipeline:
-
-1. The browser extension (`apps/readest-app/extensions/send-to-readest`) or the
-   email-to-inbox path (`workers/send-email`) submits a URL or article HTML.
-2. `src/services/send/conversion/*` sanitizes the content and converts it to
-   EPUB (sanitization, TOC building, asset bundling, worker protocol).
-3. The result lands in the user's inbox served by `pages/api/send/inbox*`.
-4. The `app/send` page or the in-app inbox drainer
-   (`src/services/send/inboxDrainer.ts`) imports it into the library through
-   the standard ingest service.
+Article→EPUB conversion helpers may still live under `src/services/send/conversion`
+for clip-style flows; there is no hosted Send inbox or email worker.
 
 ## 7. Native shell (`src-tauri`)
 
-The Tauri host is shared by desktop and mobile. The Rust side (`src-tauri/src`)
-is small and focused:
+Focused Rust modules:
 
 ```
-lib.rs              -> command registration, scope grants, deep links, builder
-main.rs             -> entrypoint
-clip_url.rs         -> clipboard URL extraction
-dir_scanner.rs      -> recursive directory scan (used by library import)
-transfer_file.rs    -> chunked upload/download for big files
-android/, macos/,
-windows/            -> per-platform glue
+lib.rs           -> builder, commands, scopes, deep links
+eve_sidecar.rs   -> sidecar lifecycle
+epub_parser.rs / mobi_parser.rs / parser_common.rs
+dir_scanner.rs / transfer_file.rs / clip_url.rs
+macos/           -> menu and platform glue
 ```
 
-Everything else is delegated to **Tauri plugins**, mostly bundled in
-`packages/tauri-plugins/plugins`:
+Plugins (from vendored `packages/tauri-plugins` and in-tree plugins) cover fs,
+dialog, http, opener, deep-link, updater, turso, and related host capabilities.
+TTS / OAuth / IAP-oriented plugin usage is not part of the Wellread product
+contract.
 
-- standard plugins: `fs`, `dialog`, `http`, `opener`, `os`, `process`, `shell`,
-  `cli`, `deep-link`, `haptics`, `log`, `updater`, `websocket`, `oauth`,
-  `persisted-scope`, `device-info`, `sharekit`
-- in-tree custom plugins:
-  - `tauri-plugin-native-bridge`: Android-side bridges (directory picker
-    callback, open external URL, etc.)
-  - `tauri-plugin-native-tts`: native text-to-speech
-  - `tauri-plugin-turso`: embedded Turso/libSQL database for the native
-    targets, mirrored by the WASM build used in the browser
+`allow_paths_in_scopes` in `lib.rs` still matters: frontend code may only widen
+`fs` / asset scopes for paths the dialog (or persisted scope) already granted.
 
-A subtle but important detail in `lib.rs`: `allow_paths_in_scopes` is the
-frontend-callable shim that extends both `fs_scope` and `asset_protocol_scope`
-**only for paths the Tauri dialog plugin (or persisted-scope on restart)
-already granted**. Without that gate, any frontend code path (including a
-hypothetical XSS through book content, OPDS HTML, or a compromised dependency)
-could grant itself read access to the user's home directory through the asset
-protocol. The gate constrains the command to user-picked paths only.
-
-## 8. Build and deploy
+## 8. Build and release
 
 ```mermaid
 flowchart LR
-    Source["apps/readest-app (single source)"]
+    App["apps/readest-app"]
+    Eve["apps/eve-sidecar<br/>vendor-node + build"]
+    TauriBuild["tauri build<br/>aarch64-apple-darwin"]
+    Dmg["Wellread_*.dmg"]
+    Updater["*.app.tar.gz + latest.json"]
 
-    subgraph BuildTargets
-        BWeb["next build<br/>+ @opennextjs/cloudflare<br/>(.env.web)"]
-        BTauriDesk["next build → tauri build<br/>(.env.tauri)"]
-    end
-
-    subgraph DeployTargets
-        DCloudflare["Cloudflare Workers"]
-        DDocker["Docker image"]
-        DDesktop["macOS .app / dmg"]
-        DExt["browser extension package"]
-    end
-
-    Source --> BWeb
-    Source --> BTauriDesk
-
-    BWeb --> DCloudflare
-    BWeb --> DDocker
-    BTauriDesk --> DDesktop
-    Source --> DExt
+    Eve --> TauriBuild
+    App --> TauriBuild
+    TauriBuild --> Dmg
+    TauriBuild --> Updater
 ```
 
-The web target has two delivery modes: a Cloudflare Worker via OpenNext
-(`pnpm deploy`) and a self-hostable Docker image. The Docker image
-uses `docker/compose.yaml` (pull) plus `docker/compose.build.yaml` (build) and
-relies on the runtime-config mechanism described in section 5.4 so a single
-prebuilt image can be parameterized with `.env`.
+- Dev: `pnpm tauri dev` (builds sidecar first via `beforeDevCommand`)
+- Release: `pnpm build-macos-aarch64`
+- Distribution: [GitHub Releases](https://github.com/lima1217/wellread/releases)
+  (Apple Silicon installer + signed updater payload)
 
-Tauri builds use `dotenv` to switch env files (`.env.tauri`,
-`.env.tauri.local`, `.env.apple-*.local`) for code-signing configuration.
-Wellread packages the desktop target for macOS only (`pnpm build-macos-aarch64`).
+Windows / Linux / Android / iOS / App Store / Flathub / hosted web app are
+**not** Wellread release targets. Upstream Readest remains the multi-platform
+lineage if you need those.
 
 ## 9. Quick rule of thumb
 
-When trying to place a piece of behavior, ask in this order:
+1. **Reading Assistant / model I/O** → `services/wellread/*` + eve sidecar, never
+   a Wellread cloud API.
+2. **Filesystem / dialogs / updater / sidecar lifecycle** → `appService` /
+   Tauri commands / `eve_sidecar.rs`.
+3. **Book render / annotations / reader UI** → `src/app/reader`, Foliate,
+   reader services.
+4. **Optional catalogs / metadata / translation** → client-side services + the
+   thin `src/app/api` proxies above.
+5. **Library bytes** → local disk only.
 
-Does it talk to a remote service or write to durable shared storage? Then it
-ends up in `src/pages/api` or `src/app/api`, possibly fronted by a service
-under `src/services`. Does it touch the user's filesystem, native dialogs, the
-shell, or system TTS? Then it goes through `appService` and lands in
-`nativeAppService` (Tauri commands in `src-tauri/src/lib.rs`) or
-`webAppService` (browser equivalent). Does it manipulate book content, render
-the reader, or maintain UI state? Then it lives under `src/app/reader`,
-`src/components`, `src/hooks`, `src/store`, or one of the reader-side service
-folders (`annotation`, `nav`, `rsvp`, `transformers`, `dictionaries`,
-`translators`, `tts`). Is it a sync or cloud-library concern? `src/services/sync`
-plus the matching API route, or `src/services/cloudService.ts` plus
-`pages/api/storage/*`.
-
-If you can answer "which runtime owns this" in one sentence, you've placed the
-file correctly. If you can't, it's probably shared and belongs under
-`src/services`, `src/utils`, `src/libs`, or `src/types`.
+If a design assumes accounts, quotas, hosted book storage, or cross-device
+cloud sync, it describes upstream Readest history—not current Wellread.
