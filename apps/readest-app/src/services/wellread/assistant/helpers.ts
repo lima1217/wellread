@@ -156,14 +156,37 @@ function extractEpubCfi(text: string): string | null {
   } catch {
     // keep raw text when not URI-encoded
   }
-  const m = decoded.match(/epubcfi\([^)]+\)/i);
-  return m ? m[0] : null;
+  return normalizeEpubCfi(decoded);
 }
 
 function hrefFileName(href: string): string {
   const noQuery = href.split(/[?#]/)[0] ?? href;
   const parts = noQuery.split('/');
   return parts[parts.length - 1] || '';
+}
+
+function cfiIdentity(cfi: string): string {
+  return cfi.replace(/^epubcfi\(/i, '').replace(/\)$/, '');
+}
+
+/**
+ * Normalize a citation token to `epubcfi(...)`, or null if it is not a CFI.
+ * Accepts `epubcfi(/6/…)`, bare `/6/…`, and optional `cfi:` / `cfi：` prefixes.
+ */
+export function normalizeEpubCfi(raw: string): string | null {
+  let t = raw.trim();
+  if (!t) return null;
+  t = t.replace(/^cfi\s*[:：]\s*/i, '').trim();
+  const wrapped = t.match(/^epubcfi\((.+)\)$/i);
+  if (wrapped) return `epubcfi(${wrapped[1]})`;
+  // Bare EPUB CFI path (models often drop the epubcfi(…) wrapper).
+  if (/^\/\d+\//.test(t)) return `epubcfi(${t})`;
+  // Href may still contain an epubcfi(…) substring after decode.
+  const embedded = t.match(/epubcfi\([^)]+\)/i);
+  if (embedded) return normalizeEpubCfi(embedded[0]);
+  const bare = t.match(/\/\d+\/[^\s`）)'"<]+/);
+  if (bare && /^\/\d+\//.test(bare[0])) return `epubcfi(${bare[0]})`;
+  return null;
 }
 
 /**
@@ -180,7 +203,8 @@ export function resolveEveSource(
 
   const cfiFromHref = href ? extractEpubCfi(href) : null;
   if (cfiFromHref) {
-    const hit = list.find((s) => s.cfi === cfiFromHref);
+    const key = cfiIdentity(cfiFromHref);
+    const hit = list.find((s) => cfiIdentity(s.cfi) === key);
     return hit ?? { cfi: cfiFromHref };
   }
 
@@ -217,10 +241,13 @@ export function formatEveSourceLabel(source: EveSourceLike, index: number): stri
 
 const LINKIFY_SLOT = '\uE000';
 
+/** Inner EPUB CFI path, stopping before CJK/ASCII closers or whitespace. */
+const BARE_CFI_PATH = /\/\d+\/[^\s`）)'"<]+/;
+
 /**
- * Turn bare `epubcfi(...)` (and `cfi: epubcfi(...)`) in assistant prose into
- * markdown links so the reader can jump in-book. Skips fenced/inline code and
- * existing `[text](href)` links.
+ * Turn bare `epubcfi(...)`, `cfi: /6/…`, and cfi-only inline code into markdown
+ * links so the reader can jump in-book. Skips fenced code and existing
+ * `[text](href)` links.
  *
  * Link labels never embed the raw CFI — epubcfi often contains `[id]` which
  * breaks markdown link parsing. Destinations use `<...>` so nested `()` in the
@@ -231,7 +258,14 @@ export function linkifyBareEpubCfi(
   sources?: EveSourceLike[],
   fallbackLabel = 'Passage',
 ): string {
-  if (!markdown || !/epubcfi\(/i.test(markdown)) return markdown;
+  if (!markdown) return markdown;
+  if (
+    !/epubcfi\(/i.test(markdown) &&
+    !/\bcfi\s*[:：]/i.test(markdown) &&
+    !BARE_CFI_PATH.test(markdown)
+  ) {
+    return markdown;
+  }
 
   const slots: string[] = [];
   const stash = (m: string) => {
@@ -240,29 +274,88 @@ export function linkifyBareEpubCfi(
     return `${LINKIFY_SLOT}${i}${LINKIFY_SLOT}`;
   };
 
-  let text = markdown
-    .replace(/```[\s\S]*?```/g, stash)
-    .replace(/`[^`\n]+`/g, stash)
-    .replace(/\[([^\]]*)\]\(<[^>\n]*>\)/g, stash)
-    .replace(/\[([^\]]*)\]\([^()\n]*\([^()\n]*\)[^()\n]*\)/g, stash)
-    .replace(/\[([^\]]*)\]\([^)\n]+\)/g, stash);
-
-  const toLink = (cfi: string) => {
-    const hit = sources?.find((s) => s.cfi === cfi);
+  const toLink = (raw: string) => {
+    const cfi = normalizeEpubCfi(raw);
+    if (!cfi) return raw;
+    const key = cfiIdentity(cfi);
+    const hit = sources?.find((s) => cfiIdentity(s.cfi) === key);
     const rawLabel = hit?.title?.trim() || fallbackLabel;
     // Strip brackets so a title cannot terminate the markdown link early.
     const label = rawLabel.replace(/[\[\]]/g, '').trim() || fallbackLabel;
     return `[${label}](<${cfi}>)`;
   };
 
-  // Drop the "cfi:" prefix so it does not linger beside the link.
-  text = text.replace(/\bcfi:\s*(epubcfi\([^)]+\))/gi, (_m, cfi: string) => stash(toLink(cfi)));
+  const cfiOnlyInlineCode = /^(?:cfi\s*[:：]\s*)?(?:epubcfi\([^)]+\)|\/\d+\/[^\s`]+)$/i;
+
+  let text = markdown.replace(/```[\s\S]*?```/g, stash);
+
+  // `cfi: `epubcfi(...)`` / `cfi: `/6/…`` — absorb outer cfi: with the inline code.
+  text = text.replace(/\bcfi\s*[:：]\s*`([^`\n]+)`/gi, (full, code: string) => {
+    const m = code.trim().match(cfiOnlyInlineCode);
+    if (m) return stash(toLink(m[0]!));
+    return full;
+  });
+
+  // Unwrap remaining cfi-only inline code into jump links.
+  text = text.replace(/`([^`\n]+)`/g, (full, code: string) => {
+    const m = code.trim().match(cfiOnlyInlineCode);
+    if (m) return stash(toLink(m[0]!));
+    return stash(full);
+  });
+
+  text = text
+    .replace(/\[([^\]]*)\]\(<[^>\n]*>\)/g, stash)
+    .replace(/\[([^\]]*)\]\([^()\n]*\([^()\n]*\)[^()\n]*\)/g, stash)
+    .replace(/\[([^\]]*)\]\([^)\n]+\)/g, stash);
+
+  // cfi: epubcfi(...) or cfi: /6/… (drop the prefix so it does not linger).
+  text = text.replace(/\bcfi\s*[:：]\s*(?:epubcfi\([^)]+\)|\/\d+\/[^\s`）)'"<]+)/gi, (full) =>
+    stash(toLink(full)),
+  );
   text = text.replace(/epubcfi\([^)]+\)/gi, (cfi) => toLink(cfi));
 
   return text.replace(
     new RegExp(`${LINKIFY_SLOT}(\\d+)${LINKIFY_SLOT}`, 'g'),
     (_m, i: string) => slots[Number(i)]!,
   );
+}
+
+/**
+ * Plain text for the assistant copy button: drop cfi citations / jump links,
+ * keep readable prose (and section titles from markdown citation links).
+ */
+export function stripAssistantCfiCitations(markdown: string): string {
+  if (!markdown) return markdown;
+
+  let text = markdown;
+
+  // [label](<epubcfi(...)>) — keep meaningful labels, drop placeholder ones.
+  text = text.replace(/\[([^\]]*)\]\(<epubcfi\([^>]+\)>\)/gi, (_m, label: string) => {
+    const t = label.trim();
+    if (!t || /^passage$/i.test(t) || /^source\s+\d+$/i.test(t)) return '';
+    return t;
+  });
+  text = text.replace(/\[([^\]]*)\]\(epubcfi\([^)]+\)\)/gi, (_m, label: string) => {
+    const t = label.trim();
+    if (!t || /^passage$/i.test(t) || /^source\s+\d+$/i.test(t)) return '';
+    return t;
+  });
+
+  // （cfi: …） / (cfi: …) — remove the whole citation parenthesis.
+  text = text.replace(/[（(]\s*cfi\s*[:：]\s*(?:epubcfi\([^)]+\)|\/\d+\/[^）)]+?)\s*[）)]/gi, '');
+
+  // Inline code that is only a cfi token.
+  text = text.replace(/`(?:cfi\s*[:：]\s*)?(?:epubcfi\([^)]+\)|\/\d+\/[^`]+)`/gi, '');
+
+  // Leftover bare epubcfi(...).
+  text = text.replace(/epubcfi\([^)]+\)/gi, '');
+
+  text = text.replace(/（\s*）/g, '').replace(/\(\s*\)/g, '');
+  text = text.replace(/[^\S\n]{2,}/g, ' ');
+  text = text.replace(/ *([，。；！？、,.!?])/g, '$1');
+  text = text.replace(/([（(]) +/g, '$1').replace(/ +([）)])/g, '$1');
+  text = text.replace(/ *\n[^\S\n]*/g, '\n');
+  return text.trim();
 }
 
 /**

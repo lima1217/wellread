@@ -30,9 +30,11 @@ import {
   isExternalHttpHref,
   isReadingAssistantAvailable,
   linkifyBareEpubCfi,
+  normalizeEpubCfi,
   resolveEveSource,
   shouldPushAgentSessionToStore,
   shouldShowPendingReply,
+  stripAssistantCfiCitations,
   summarizeToolTrace,
 } from '@/services/wellread/assistant/helpers';
 import { useEveAgent } from '@/services/wellread/assistant/useEveAgent';
@@ -129,9 +131,40 @@ function createAssistantMarkdownComponents(opts: {
   sources?: EveSource[];
   passageLabel: string;
 }): Components {
+  const jumpButton = (cfi: string, display?: ReactNode) => {
+    const source = resolveEveSource(opts.sources, { href: cfi });
+    const label = display ?? source?.title?.trim() ?? opts.passageLabel;
+    return (
+      <button
+        type='button'
+        className={clsx(
+          'text-base-content underline decoration-from-font underline-offset-2',
+          'hover:text-base-content/80',
+          focusRing,
+        )}
+        onClick={(e) => {
+          e.preventDefault();
+          jumpToCfi(opts.bookKey, source?.cfi ?? cfi);
+        }}
+      >
+        {label}
+      </button>
+    );
+  };
+
   return {
     blockquote: ({ children }) => <MarkdownBlockquote>{children}</MarkdownBlockquote>,
     hr: () => <MarkdownRule />,
+    code: ({ children, className }) => {
+      // Fenced blocks get a language class; leave those alone.
+      if (className) {
+        return <code className={className}>{children}</code>;
+      }
+      const text = plainTextFromChildren(children).trim();
+      const cfi = normalizeEpubCfi(text);
+      if (cfi) return jumpButton(cfi);
+      return <code>{children}</code>;
+    },
     a: ({ href, children }) => {
       const label = plainTextFromChildren(children);
       const source = resolveEveSource(opts.sources, { href, label });
@@ -140,22 +173,7 @@ function createAssistantMarkdownComponents(opts: {
           /epubcfi\(/i.test(label) && extractEpubCfiFromLabel(label) === label.trim();
         const display =
           source.title?.trim() || (rawCfiLabel ? opts.passageLabel : null) || children;
-        return (
-          <button
-            type='button'
-            className={clsx(
-              'text-base-content underline decoration-from-font underline-offset-2',
-              'hover:text-base-content/80',
-              focusRing,
-            )}
-            onClick={(e) => {
-              e.preventDefault();
-              jumpToCfi(opts.bookKey, source.cfi);
-            }}
-          >
-            {display}
-          </button>
-        );
+        return jumpButton(source.cfi, display);
       }
       // Relative/file/workspace hrefs must not become target=_blank — that opens a
       // non-Tauri browser window and crashes settings sync on getCurrentWindow().
@@ -327,7 +345,7 @@ function CopyMessageButton({ content, workedMs }: { content: string; workedMs?: 
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
-    const ok = await writeTextToClipboard(content);
+    const ok = await writeTextToClipboard(stripAssistantCfiCitations(content));
     if (!ok) return;
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);

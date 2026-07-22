@@ -8,10 +8,12 @@ import {
   isExternalHttpHref,
   isReadingAssistantAvailable,
   linkifyBareEpubCfi,
+  normalizeEpubCfi,
   parsePendingQuotesFromWire,
   resolveEveSource,
   shouldPushAgentSessionToStore,
   shouldShowPendingReply,
+  stripAssistantCfiCitations,
   summarizeToolTrace,
 } from '@/services/wellread/assistant/helpers';
 
@@ -344,11 +346,20 @@ describe('formatEveSourceLabel', () => {
 
 describe('linkifyBareEpubCfi', () => {
   const cfi = 'epubcfi(/6/22!/4[7K4G0-68091712f90a44748ee492caf82b4796]/1:0)';
+  const bare = '/6/26!/4[8IL20-68091712f90a44748ee492caf82b4796]/118/1:2';
+  const bareWrapped = `epubcfi(${bare})`;
 
   it('turns bare epubcfi in prose into a markdown link with a safe label', () => {
     const input = `出自「游戏机制和事件」一节（cfi: ${cfi}）。后续论述可连起来看。`;
     expect(linkifyBareEpubCfi(input)).toBe(
       `出自「游戏机制和事件」一节（[Passage](<${cfi}>)）。后续论述可连起来看。`,
+    );
+  });
+
+  it('wraps bare cfi paths after cfi: into jump links', () => {
+    expect(linkifyBareEpubCfi(`一节（cfi: ${bare}）`)).toBe(`一节（[Passage](<${bareWrapped}>)）`);
+    expect(linkifyBareEpubCfi(`一节（cfi: \`${bare}\`）`)).toBe(
+      `一节（[Passage](<${bareWrapped}>)）`,
     );
   });
 
@@ -359,14 +370,66 @@ describe('linkifyBareEpubCfi', () => {
     );
   });
 
-  it('does not double-wrap existing markdown links or code', () => {
-    const linked = `见 [原文](<${cfi}>) 与 \`${cfi}\``;
+  it('matches sources when prose uses a bare path and sources store epubcfi(...)', () => {
+    expect(linkifyBareEpubCfi(`见（cfi: ${bare}）`, [{ cfi: bareWrapped, title: '第二节' }])).toBe(
+      `见（[第二节](<${bareWrapped}>)）`,
+    );
+  });
+
+  it('unwraps cfi-only inline code into jump links', () => {
+    expect(linkifyBareEpubCfi(`见 \`${cfi}\``)).toBe(`见 [Passage](<${cfi}>)`);
+    expect(linkifyBareEpubCfi(`见 \`cfi: ${cfi}\``)).toBe(`见 [Passage](<${cfi}>)`);
+    expect(linkifyBareEpubCfi(`见 \`cfi：${cfi}\``)).toBe(`见 [Passage](<${cfi}>)`);
+    expect(linkifyBareEpubCfi(`一节（cfi: \`${cfi}\`）`)).toBe(`一节（[Passage](<${cfi}>)）`);
+  });
+
+  it('handles fullwidth cfi colon in prose', () => {
+    expect(linkifyBareEpubCfi(`一节（cfi：${cfi}）`)).toBe(`一节（[Passage](<${cfi}>)）`);
+  });
+
+  it('does not double-wrap existing markdown links or non-cfi code', () => {
+    const linked = `见 [原文](<${cfi}>)`;
     expect(linkifyBareEpubCfi(linked)).toBe(linked);
+    expect(linkifyBareEpubCfi('用 `foo[bar]` 表示')).toBe('用 `foo[bar]` 表示');
     const fenced = `\`\`\`\n${cfi}\n\`\`\``;
     expect(linkifyBareEpubCfi(fenced)).toBe(fenced);
   });
 
   it('is a no-op when there is no epubcfi', () => {
     expect(linkifyBareEpubCfi('没有出处')).toBe('没有出处');
+  });
+});
+
+describe('normalizeEpubCfi', () => {
+  it('wraps bare paths and accepts epubcfi(...)', () => {
+    expect(normalizeEpubCfi('/6/26!/4[id]/1:0')).toBe('epubcfi(/6/26!/4[id]/1:0)');
+    expect(normalizeEpubCfi('epubcfi(/6/26!/4[id]/1:0)')).toBe('epubcfi(/6/26!/4[id]/1:0)');
+    expect(normalizeEpubCfi('cfi: /6/26!/4[id]/1:0')).toBe('epubcfi(/6/26!/4[id]/1:0)');
+    expect(normalizeEpubCfi('not a cfi')).toBe(null);
+  });
+});
+
+describe('stripAssistantCfiCitations', () => {
+  const bare = '/6/26!/4[8IL20-68091712f90a44748ee492caf82b4796]/118/1:2';
+  const cfi = `epubcfi(${bare})`;
+
+  it('removes parenthetical cfi citations and keeps prose', () => {
+    expect(
+      stripAssistantCfiCitations(
+        `这句话出自「游戏机制和事件」一节（cfi: ${bare}）。要把后续论述连起来看。`,
+      ),
+    ).toBe('这句话出自「游戏机制和事件」一节。要把后续论述连起来看。');
+  });
+
+  it('keeps section titles from epubcfi markdown links, drops Passage labels', () => {
+    expect(stripAssistantCfiCitations(`见 [游戏机制和事件](<${cfi}>) 所述。`)).toBe(
+      '见 游戏机制和事件 所述。',
+    );
+    expect(stripAssistantCfiCitations(`见 [Passage](<${cfi}>) 所述。`)).toBe('见 所述。');
+  });
+
+  it('removes bare epubcfi and cfi-only inline code', () => {
+    expect(stripAssistantCfiCitations(`文中 ${cfi} 可删。`)).toBe('文中 可删。');
+    expect(stripAssistantCfiCitations(`文中 \`cfi: ${bare}\` 可删。`)).toBe('文中 可删。');
   });
 });

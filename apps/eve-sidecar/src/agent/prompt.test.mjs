@@ -19,7 +19,10 @@ describe('buildSystemPrompt', () => {
     assert.match(prompt, /answer freely/i);
     assert.match(prompt, /\bcite\b/i);
     assert.match(prompt, /\bcfi\b/i);
-    assert.match(prompt, /in-book jumps/i);
+    assert.match(prompt, /angle brackets/i);
+    assert.match(prompt, /Never write bare paths/i);
+    assert.match(prompt, /\[section title\]/i);
+    assert.match(prompt, /epubcfi/i);
     assert.match(prompt, /write_file/);
     assert.match(prompt, /unavailable until mounted/);
     assert.match(prompt, /no emoji/i);
