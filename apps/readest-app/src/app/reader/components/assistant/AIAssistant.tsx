@@ -2,15 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, isValidElement } from 'react';
 import type { ReactElement, ReactNode } from 'react';
-import {
-  ArrowUpIcon,
-  CheckIcon,
-  ChevronUpIcon,
-  CopyIcon,
-  Loader2Icon,
-  Trash2Icon,
-  XIcon,
-} from 'lucide-react';
+import { ArrowUpIcon, CheckIcon, ChevronUpIcon, CopyIcon, Loader2Icon, XIcon } from 'lucide-react';
 import clsx from 'clsx';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -62,11 +54,6 @@ import type {
   EveToolTrace,
 } from '@/services/wellread/assistant/eveClient';
 import { listEveSkills } from '@/services/wellread/assistant/eveClient';
-import {
-  createAppServiceSkillImportFs,
-  deleteSkillPackage,
-  importSkillFromFolder,
-} from '@/services/wellread/assistant/importSkill';
 import { openExternalUrl } from '@/utils/open';
 
 interface AIAssistantProps {
@@ -506,7 +493,7 @@ const ReadingAssistantChat = ({
   bookTitle: string;
 }) => {
   const _ = useTranslation();
-  const { envConfig, appService } = useEnv();
+  const { envConfig } = useEnv();
   const { settings, setSettings, saveSettings } = useSettingsStore();
   const activeSessionId = useReadingAssistantStore((s) => s.activeSessionId);
   const activeBookId = useReadingAssistantStore((s) => s.activeBookId);
@@ -532,29 +519,11 @@ const ReadingAssistantChat = ({
   const [skills, setSkills] = useState<EveSkillSummary[]>([]);
   const [skillsLoaded, setSkillsLoaded] = useState(false);
   const [skillsError, setSkillsError] = useState(false);
-  const [importingSkill, setImportingSkill] = useState(false);
   const [slashIndex, setSlashIndex] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState(false);
   const slashQuery = getComposerSlashQuery(agent.composer);
   const slashOpen = slashQuery !== null && !slashDismissed;
   const slashMatches = slashOpen ? filterSkillsForSlash(skills, slashQuery) : [];
-
-  const refreshSkills = useCallback(async () => {
-    setSkillsLoaded(false);
-    setSkillsError(false);
-    try {
-      const rows = await listEveSkills();
-      setSkills(rows);
-      setSkillsError(false);
-      setSkillsLoaded(true);
-      return rows;
-    } catch {
-      setSkills([]);
-      setSkillsError(true);
-      setSkillsLoaded(true);
-      return [] as EveSkillSummary[];
-    }
-  }, []);
 
   useEffect(() => {
     if (!slashOpen) return;
@@ -597,81 +566,6 @@ const ReadingAssistantChat = ({
       setSlashIndex(0);
     },
     [agent],
-  );
-
-  const handleImportSkill = useCallback(async () => {
-    if (!appService || importingSkill) return;
-    setImportingSkill(true);
-    try {
-      const folder = await appService.selectDirectory('read');
-      if (!folder) return;
-      const result = await importSkillFromFolder(createAppServiceSkillImportFs(appService), folder);
-      if (!result.ok) {
-        eventDispatcher.dispatch('toast', {
-          type: 'error',
-          message: _('Failed to import skill: {{message}}', { message: result.error }),
-          timeout: 4000,
-        });
-        return;
-      }
-      await refreshSkills();
-      eventDispatcher.dispatch('toast', {
-        type: 'info',
-        message: result.replaced
-          ? _('Replaced skill {{id}}', { id: result.id })
-          : _('Imported skill {{id}}', { id: result.id }),
-        timeout: 2500,
-      });
-    } catch (error) {
-      eventDispatcher.dispatch('toast', {
-        type: 'error',
-        message: _('Failed to import skill: {{message}}', {
-          message: error instanceof Error ? error.message : String(error),
-        }),
-        timeout: 4000,
-      });
-    } finally {
-      setImportingSkill(false);
-    }
-  }, [_, appService, importingSkill, refreshSkills]);
-
-  const handleDeleteSkill = useCallback(
-    async (skillId: string) => {
-      if (!appService || importingSkill) return;
-      const confirmed = window.confirm(
-        _('Delete skill "{{id}}"? This cannot be undone.', { id: skillId }),
-      );
-      if (!confirmed) return;
-      setImportingSkill(true);
-      try {
-        const result = await deleteSkillPackage(createAppServiceSkillImportFs(appService), skillId);
-        if (!result.ok) {
-          eventDispatcher.dispatch('toast', {
-            type: 'error',
-            message: _('Failed to delete skill: {{message}}', { message: result.error }),
-            timeout: 4000,
-          });
-          return;
-        }
-        await refreshSkills();
-        eventDispatcher.dispatch('toast', {
-          type: 'info',
-          message: _('Deleted skill {{id}}', { id: result.id }),
-          timeout: 2500,
-        });
-      } catch (error) {
-        eventDispatcher.dispatch('toast', {
-          type: 'error',
-          message: _('Failed to delete skill: {{message}}', {
-            message: error instanceof Error ? error.message : String(error),
-          }),
-          timeout: 4000,
-        });
-      } finally {
-        setImportingSkill(false);
-      }
-    },
-    [_, appService, importingSkill, refreshSkills],
   );
 
   const prevAgentSessionIdRef = useRef<string | null | undefined>(undefined);
@@ -850,98 +744,42 @@ const ReadingAssistantChat = ({
                   {_('Could not load skills')}
                 </div>
               ) : skills.length === 0 ? (
-                <div>
-                  <div className='text-base-content/45 px-2 py-1.5 font-sans text-[0.85em]'>
-                    {_('No skills yet')}
-                  </div>
-                  <button
-                    type='button'
-                    className={clsx(composerSelectItem, focusRing)}
-                    disabled={importingSkill || !appService}
-                    onClick={() => void handleImportSkill()}
-                  >
-                    {importingSkill ? _('Importing…') : _('Import skill')}
-                  </button>
+                <div className='text-base-content/45 px-2 py-1.5 font-sans text-[0.85em]'>
+                  {_('No skills yet')}
                 </div>
               ) : slashMatches.length === 0 ? (
-                <div>
-                  <div className='text-base-content/45 px-2 py-1.5 font-sans text-[0.85em]'>
-                    {_('No matching skills')}
-                  </div>
-                  <button
-                    type='button'
-                    className={clsx(composerSelectItem, focusRing)}
-                    disabled={importingSkill || !appService}
-                    onClick={() => void handleImportSkill()}
-                  >
-                    {importingSkill ? _('Importing…') : _('Import skill')}
-                  </button>
+                <div className='text-base-content/45 px-2 py-1.5 font-sans text-[0.85em]'>
+                  {_('No matching skills')}
                 </div>
               ) : (
-                <div>
-                  <ul className='max-h-48 overflow-y-auto overscroll-contain'>
-                    {slashMatches.map((skill, index) => {
-                      const active = index === slashIndex;
-                      return (
-                        <li key={skill.id} role='option' aria-selected={active}>
-                          <div
-                            className={clsx(
-                              'flex items-center rounded-md',
-                              active && composerSelectItemActive,
-                            )}
-                            onMouseEnter={() => setSlashIndex(index)}
-                          >
-                            <button
-                              type='button'
-                              className={clsx(
-                                composerSelectItem,
-                                focusRing,
-                                'min-w-0 flex-1 hover:bg-transparent',
-                                active && 'hover:bg-transparent',
-                              )}
-                              onClick={() => selectSlashSkill(skill.id)}
-                            >
-                              <span className='min-w-0 flex-1 text-start'>
-                                <span className='text-base-content block truncate font-medium'>
-                                  {`/${SKILL_SLASH_PREFIX}${skill.id}`}
-                                </span>
-                                <span className='text-base-content/50 block truncate text-[0.85em] leading-snug'>
-                                  {skill.description || skill.name}
-                                </span>
-                              </span>
-                            </button>
-                            <button
-                              type='button'
-                              className={clsx(
-                                'text-base-content/45 hover:text-base-content/70',
-                                'flex size-8 shrink-0 items-center justify-center rounded-md',
-                                focusRing,
-                              )}
-                              aria-label={_('Delete skill {{id}}', { id: skill.id })}
-                              title={_('Delete')}
-                              disabled={importingSkill || !appService}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                void handleDeleteSkill(skill.id);
-                              }}
-                            >
-                              <Trash2Icon size={14} strokeWidth={2} aria-hidden='true' />
-                            </button>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  <button
-                    type='button'
-                    className={clsx(composerSelectItem, focusRing, 'text-base-content/55')}
-                    disabled={importingSkill || !appService}
-                    onClick={() => void handleImportSkill()}
-                  >
-                    {importingSkill ? _('Importing…') : _('Import skill')}
-                  </button>
-                </div>
+                <ul className='max-h-48 overflow-y-auto overscroll-contain'>
+                  {slashMatches.map((skill, index) => {
+                    const active = index === slashIndex;
+                    return (
+                      <li key={skill.id} role='option' aria-selected={active}>
+                        <button
+                          type='button'
+                          className={clsx(
+                            composerSelectItem,
+                            focusRing,
+                            active && composerSelectItemActive,
+                          )}
+                          onMouseEnter={() => setSlashIndex(index)}
+                          onClick={() => selectSlashSkill(skill.id)}
+                        >
+                          <span className='min-w-0 flex-1 text-start'>
+                            <span className='text-base-content block truncate font-medium'>
+                              {`/${SKILL_SLASH_PREFIX}${skill.id}`}
+                            </span>
+                            <span className='text-base-content/50 block truncate text-[0.85em] leading-snug'>
+                              {skill.description || skill.name}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
           ) : null}

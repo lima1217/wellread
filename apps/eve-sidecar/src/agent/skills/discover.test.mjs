@@ -5,12 +5,23 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
-import { SKILLS_DIR, discoverSkills, isValidSkillId, parseSkillMd } from './discover.mjs';
+import { afterEach, describe, it } from 'node:test';
+import {
+  SKILLS_DIR,
+  discoverSkills,
+  invalidateSkillsCache,
+  isValidSkillId,
+  parseSkillMd,
+} from './discover.mjs';
+
+afterEach(() => {
+  invalidateSkillsCache();
+});
 
 describe('isValidSkillId', () => {
   it('accepts simple slash tokens', () => {
@@ -180,6 +191,42 @@ describe('discoverSkills', () => {
     } finally {
       rmSync(booksRoot, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('invalidates when SKILL.md mtime changes, package add, or invalidateSkillsCache', () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-skills-')));
+    try {
+      const skillsRoot = join(booksRoot, 'skills');
+      const alphaMd = join(skillsRoot, 'alpha', 'SKILL.md');
+      mkdirSync(join(skillsRoot, 'alpha'), { recursive: true });
+      writeFileSync(alphaMd, '---\nname: Alpha\ndescription: First\n---\nA\n');
+
+      assert.equal(discoverSkills({ booksRoot })[0]?.description, 'First');
+
+      // In-place edit: stamp includes SKILL.md mtime → auto refresh.
+      writeFileSync(alphaMd, '---\nname: Alpha\ndescription: Edited\n---\nA\n');
+      const later = new Date(Date.now() + 2000);
+      utimesSync(alphaMd, later, later);
+      assert.equal(discoverSkills({ booksRoot })[0]?.description, 'Edited');
+
+      // Same content + same stamp stays cached until explicit invalidate.
+      const before = discoverSkills({ booksRoot });
+      assert.equal(before[0]?.description, 'Edited');
+      invalidateSkillsCache(booksRoot);
+      assert.equal(discoverSkills({ booksRoot })[0]?.description, 'Edited');
+
+      // Import-like package add → auto refresh.
+      mkdirSync(join(skillsRoot, 'beta'), { recursive: true });
+      writeFileSync(
+        join(skillsRoot, 'beta', 'SKILL.md'),
+        '---\nname: Beta\ndescription: Second\n---\nB\n',
+      );
+      const withBeta = discoverSkills({ booksRoot });
+      assert.equal(withBeta.length, 2);
+      assert.equal(withBeta.some((s) => s.id === 'beta'), true);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
     }
   });
 });

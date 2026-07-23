@@ -14,7 +14,8 @@ export function createReadingTools(options) {
 
   return {
     read_file: tool({
-      description: 'Read UTF-8 text at an absolute /workspace path (extract chunks).',
+      description:
+        'Read UTF-8 text at an absolute /workspace path (extract chunks, or /workspace/skills/<id>/SKILL.md).',
       inputSchema: z.object({
         path: z.string().describe('Absolute workspace path starting with /workspace'),
       }),

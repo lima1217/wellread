@@ -104,10 +104,11 @@ const ManageSkillsPanel: React.FC<ManageSkillsPanelProps> = ({ onBack }) => {
 
   const handleDeleteSkill = async (skillId: string) => {
     if (!appService || busy) return;
-    const confirmed = window.confirm(
-      _('Delete skill "{{id}}"? This cannot be undone.', { id: skillId }),
-    );
-    if (!confirmed) return;
+    if (
+      !(await appService.ask(_('Delete skill "{{id}}"? This cannot be undone.', { id: skillId })))
+    ) {
+      return;
+    }
     setBusy(true);
     try {
       const result = await deleteSkillPackage(createAppServiceSkillImportFs(appService), skillId);

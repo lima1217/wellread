@@ -85,7 +85,7 @@ function userTextsFromPrompt(prompt) {
 }
 
 describe('runTurn skill expansion', () => {
-  it('expands /skill:id into the user message for the model, not the system prompt', async () => {
+  it('expands /skill:id into the user message and lists the skill in the system catalog', async () => {
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-runturn-skill-')));
     try {
       mkdirSync(join(booksRoot, 'skills', 'summarize'), { recursive: true });
@@ -108,6 +108,8 @@ describe('runTurn skill expansion', () => {
       const system = systemTextFromPrompt(sink.prompt);
       assert.doesNotMatch(system, /## Active skill/);
       assert.doesNotMatch(system, /Be concise about the chapter/);
+      assert.match(system, /Available skills/);
+      assert.match(system, /- summarize: Summary \(\/workspace\/skills\/summarize\/SKILL\.md\)/);
 
       const userTexts = userTextsFromPrompt(sink.prompt);
       assert.equal(userTexts.length >= 1, true);
@@ -120,6 +122,53 @@ describe('runTurn skill expansion', () => {
       assert.equal(session.messages[0]?.content, '/skill:summarize this chapter');
       const userEvent = events.find((e) => e.type === 'message.user');
       assert.equal(userEvent?.content, '/skill:summarize this chapter');
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the skills catalog on a later turn without re-expanding the slash body', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-runturn-skill-')));
+    try {
+      mkdirSync(join(booksRoot, 'skills', 'grill-me'), { recursive: true });
+      writeFileSync(
+        join(booksRoot, 'skills', 'grill-me', 'SKILL.md'),
+        '---\nname: grill-me\ndescription: Probe causal understanding\n---\nAsk one question at a time.\n',
+      );
+      const session = emptySession();
+      session.messages.push({
+        id: 'msg_prev_u',
+        role: 'user',
+        content: '/skill:grill-me start',
+        createdAt: Date.now(),
+      });
+      session.messages.push({
+        id: 'msg_prev_a',
+        role: 'assistant',
+        content: 'Pick a target and score yourself 1-7.',
+        createdAt: Date.now(),
+      });
+      const sink = {};
+      await runTurn({
+        model: capturePromptModel(sink),
+        session,
+        userMessage: 'I pick network effects, score 5.',
+        getBooksRoot: () => booksRoot,
+        onEvent: () => {},
+        tools: {},
+        generateTextFn: async () => ({ text: '', usage: {} }),
+      });
+      const system = systemTextFromPrompt(sink.prompt);
+      assert.match(system, /Available skills/);
+      assert.match(system, /- grill-me: Probe causal understanding \(\/workspace\/skills\/grill-me\/SKILL\.md\)/);
+      assert.doesNotMatch(system, /Ask one question at a time/);
+
+      const userTexts = userTextsFromPrompt(sink.prompt);
+      assert.equal(userTexts.at(-1), 'I pick network effects, score 5.');
+      assert.equal(
+        userTexts.some((t) => t.includes('Ask one question at a time')),
+        false,
+      );
     } finally {
       rmSync(booksRoot, { recursive: true, force: true });
     }
@@ -141,6 +190,7 @@ describe('runTurn skill expansion', () => {
       });
       const system = systemTextFromPrompt(sink.prompt);
       assert.doesNotMatch(system, /## Active skill/);
+      assert.doesNotMatch(system, /Available skills/);
       const userTexts = userTextsFromPrompt(sink.prompt);
       assert.equal(userTexts.at(-1), '/skill:nope');
     } finally {

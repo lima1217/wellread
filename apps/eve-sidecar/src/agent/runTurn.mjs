@@ -9,6 +9,7 @@ import { maybeCompressSession } from './contextCompress.mjs';
 import { isAbortError } from './httpAbort.mjs';
 import { buildSystemPrompt, collectSourcesFromTools } from './prompt.mjs';
 import { maybeApplyFirstTurnTitle } from './sessionStore.mjs';
+import { discoverSkills } from './skills/discover.mjs';
 import { expandSkillCommand } from './skills/invoke.mjs';
 import { createReadingTools } from './tools.mjs';
 import { prepareToolExhaustionStep, resolveMaxToolRounds } from './toolRounds.mjs';
@@ -57,9 +58,16 @@ export async function runTurn(input) {
     return finishAborted(session, userId, onEvent, persistSession);
   }
 
+  let skills = [];
+  try {
+    skills = discoverSkills({ booksRoot: getBooksRoot() });
+  } catch {
+    // Missing books root or FS errors: omit catalog.
+  }
   const system = buildSystemPrompt({
     bookId: session.bookId,
     bookTitle: session.bookTitle,
+    skills,
   });
 
   const contextWindowTokens =
