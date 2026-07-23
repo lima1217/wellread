@@ -1,5 +1,13 @@
 {
   "releases": {
+    "1.0.2": {
+      "date": "2026-07-23",
+      "notes": [
+        "Assistant: Skills — discover, import, and invoke with /skill:id; catalog injected into the system prompt",
+        "macOS: Check for Updates menu and simplified About branding",
+        "App icon updated to Golden Gate artwork"
+      ]
+    },
     "1.0.1": {
       "date": "2026-07-22",
       "notes": [
