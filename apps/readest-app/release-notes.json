@@ -1,5 +1,14 @@
 {
   "releases": {
+    "1.1.0": {
+      "date": "2026-07-24",
+      "notes": [
+        "Assistant: Skills — discover, import, and invoke with /skill:id; catalog injected into the system prompt",
+        "Assistant: Ships bundled default skills with a user overlay and per-skill disable toggles",
+        "macOS: Check for Updates menu and simplified About branding",
+        "App icon updated to Golden Gate artwork"
+      ]
+    },
     "1.0.2": {
       "date": "2026-07-23",
       "notes": [
