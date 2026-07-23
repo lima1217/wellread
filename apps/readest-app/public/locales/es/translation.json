@@ -1969,5 +1969,8 @@
   "Show original": "Mostrar original",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "El mundo entero es un escenario, y todos los hombres y mujeres, meros actores; tienen sus entradas y sus salidas, y un hombre en su vida representa muchos papeles.",
   "— William Shakespeare, As You Like It": "— William Shakespeare, Como gustéis",
-  "Connect Wellread to external services for highlights and catalogs.": "Conecta Wellread con servicios externos para sincronización, resaltados y catálogos."
+  "Connect Wellread to external services for highlights and catalogs.": "Conecta Wellread con servicios externos para sincronización, resaltados y catálogos.",
+  "Failed to hide skill: {{message}}": "No se pudo ocultar la skill: {{message}}",
+  "No skills available.": "No hay skills disponibles.",
+  "Failed to enable skill: {{message}}": "No se pudo activar la skill: {{message}}"
 }

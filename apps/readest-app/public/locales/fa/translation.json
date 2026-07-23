@@ -1933,5 +1933,8 @@
   "Show original": "نمایش متن اصلی",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "تمام دنیا یک صحنه است و همه‌ی مردان و زنان تنها بازیگرند؛ آن‌ها را خروج‌ها و ورودهایی است، و هر کس در طول عمر خود نقش‌های بسیاری بازی می‌کند.",
   "— William Shakespeare, As You Like It": "— ویلیام شکسپیر، هرطور که دوست دارید",
-  "Connect Wellread to external services for highlights and catalogs.": "Wellread را برای همگام‌سازی، هایلایت‌ها و کاتالوگ‌ها به سرویس‌های خارجی متصل کنید."
+  "Connect Wellread to external services for highlights and catalogs.": "Wellread را برای همگام‌سازی، هایلایت‌ها و کاتالوگ‌ها به سرویس‌های خارجی متصل کنید.",
+  "Failed to hide skill: {{message}}": "پنهان‌سازی مهارت ناموفق بود: {{message}}",
+  "No skills available.": "مهارتی در دسترس نیست.",
+  "Failed to enable skill: {{message}}": "فعال‌سازی مهارت ناموفق بود: {{message}}"
 }

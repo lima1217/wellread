@@ -1933,5 +1933,8 @@
   "Show original": "Orijinali göster",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "Bütün dünya bir sahne, ve bütün kadınlar, erkekler sadece birer oyuncu; girişleri ve çıkışları var, ve bir insan ömrü boyunca birçok rol oynuyor.",
   "— William Shakespeare, As You Like It": "— William Shakespeare, Nasıl Hoşunuza Giderse",
-  "Connect Wellread to external services for highlights and catalogs.": "Senkronizasyon, vurgular ve kataloglar için Wellread'i harici hizmetlere bağlayın."
+  "Connect Wellread to external services for highlights and catalogs.": "Senkronizasyon, vurgular ve kataloglar için Wellread'i harici hizmetlere bağlayın.",
+  "Failed to hide skill: {{message}}": "Skill gizlenemedi: {{message}}",
+  "No skills available.": "Kullanılabilir skill yok.",
+  "Failed to enable skill: {{message}}": "Skill etkinleştirilemedi: {{message}}"
 }

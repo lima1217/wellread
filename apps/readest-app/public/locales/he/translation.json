@@ -1969,5 +1969,8 @@
   "Show original": "הצג מקור",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "כל העולם במה, וכל הגברים והנשים אינם אלא שחקנים; יש להם יציאות ויש להם כניסות, ואדם אחד משחק בימי חייו תפקידים רבים.",
   "— William Shakespeare, As You Like It": "— ויליאם שייקספיר, כטוב בעיניכם",
-  "Connect Wellread to external services for highlights and catalogs.": "חבר את Wellread לשירותים חיצוניים לסנכרון, הדגשות וקטלוגים."
+  "Connect Wellread to external services for highlights and catalogs.": "חבר את Wellread לשירותים חיצוניים לסנכרון, הדגשות וקטלוגים.",
+  "Failed to hide skill: {{message}}": "הסתרת ה-skill נכשלה: {{message}}",
+  "No skills available.": "אין skills זמינים.",
+  "Failed to enable skill: {{message}}": "הפעלת ה-skill נכשלה: {{message}}"
 }

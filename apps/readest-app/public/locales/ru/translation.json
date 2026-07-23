@@ -2005,5 +2005,8 @@
   "Show original": "Показать оригинал",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "Весь мир — театр, а люди в нём — актёры; у них есть свои уходы и выходы, и каждый за свою жизнь играет множество ролей.",
   "— William Shakespeare, As You Like It": "— Уильям Шекспир, «Как вам это понравится»",
-  "Connect Wellread to external services for highlights and catalogs.": "Подключите Wellread к внешним сервисам для синхронизации, выделений и каталогов."
+  "Connect Wellread to external services for highlights and catalogs.": "Подключите Wellread к внешним сервисам для синхронизации, выделений и каталогов.",
+  "Failed to hide skill: {{message}}": "Не удалось скрыть skill: {{message}}",
+  "No skills available.": "Нет доступных skill.",
+  "Failed to enable skill: {{message}}": "Не удалось включить skill: {{message}}"
 }

@@ -1897,5 +1897,8 @@
   "Show original": "원문 표시",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "온 세상은 무대이고, 모든 남자와 여자는 한낱 배우일 뿐이다. 그들에게는 퇴장이 있고 등장이 있으며, 한 사람은 살아가는 동안 여러 역을 연기한다.",
   "— William Shakespeare, As You Like It": "— 윌리엄 셰익스피어, 「뜻대로 하세요」",
-  "Connect Wellread to external services for highlights and catalogs.": "동기화, 하이라이트, 카탈로그를 위해 Wellread를 외부 서비스에 연결하세요."
+  "Connect Wellread to external services for highlights and catalogs.": "동기화, 하이라이트, 카탈로그를 위해 Wellread를 외부 서비스에 연결하세요.",
+  "Failed to hide skill: {{message}}": "skill 숨기기에 실패했습니다: {{message}}",
+  "No skills available.": "사용 가능한 skill이 없습니다.",
+  "Failed to enable skill: {{message}}": "skill 사용 설정에 실패했습니다: {{message}}"
 }

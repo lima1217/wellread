@@ -1933,5 +1933,8 @@
   "Show original": "Εμφάνιση πρωτοτύπου",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "Όλος ο κόσμος είναι μια σκηνή, και όλοι οι άντρες κι οι γυναίκες απλοί ηθοποιοί· έχουν τις εξόδους και τις εισόδους τους, κι ένας άνθρωπος στη ζωή του παίζει πολλούς ρόλους.",
   "— William Shakespeare, As You Like It": "— Ουίλιαμ Σαίξπηρ, Όπως Αγαπάτε",
-  "Connect Wellread to external services for highlights and catalogs.": "Συνδέστε το Wellread με εξωτερικές υπηρεσίες για συγχρονισμό, επισημάνσεις και καταλόγους."
+  "Connect Wellread to external services for highlights and catalogs.": "Συνδέστε το Wellread με εξωτερικές υπηρεσίες για συγχρονισμό, επισημάνσεις και καταλόγους.",
+  "Failed to hide skill: {{message}}": "Αποτυχία απόκρυψης skill: {{message}}",
+  "No skills available.": "Δεν υπάρχουν διαθέσιμα skills.",
+  "Failed to enable skill: {{message}}": "Αποτυχία ενεργοποίησης skill: {{message}}"
 }

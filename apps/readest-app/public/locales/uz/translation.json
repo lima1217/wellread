@@ -1933,5 +1933,8 @@
   "Show original": "Aslini ko'rsatish",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "Butun dunyo — sahna, va barcha erkagu ayol faqat aktyorlardir; ularning o‘z chiqishlari va kirishlari bor, va inson umri davomida ko‘p rollarni o‘ynaydi.",
   "— William Shakespeare, As You Like It": "— Uilyam Shekspir, Xohishingizga ko‘ra",
-  "Connect Wellread to external services for highlights and catalogs.": "Sinxronizatsiya, ajratishlar va kataloglar uchun Wellread'ni tashqi xizmatlarga ulang."
+  "Connect Wellread to external services for highlights and catalogs.": "Sinxronizatsiya, ajratishlar va kataloglar uchun Wellread'ni tashqi xizmatlarga ulang.",
+  "Failed to hide skill: {{message}}": "Skillni yashirish muvaffaqiyatsiz: {{message}}",
+  "No skills available.": "Mavjud skill yoʻq.",
+  "Failed to enable skill: {{message}}": "Skillni yoqish muvaffaqiyatsiz: {{message}}"
 }

@@ -3,6 +3,7 @@
  *
  * Layout:
  *   .output/server/index.mjs (+ sibling server modules, createModel, agent/*, books/*)
+ *   .output/bundled-skills/  (default Reading Assistant skill packages)
  *   .output/node_modules/   (production deps via npm, no pnpm symlinks)
  *
  * Entry imports stay relative under `.output/server/` — never `../../src/`.
@@ -82,6 +83,8 @@ export function build() {
   // Sibling modules under server/ (readJson, turnInFlight, …) must ship with the entry.
   copyRuntimeTree(join(root, 'src', 'server'), outServer);
   rewriteServerEntry(join(root, 'src', 'server', 'index.mjs'), join(outServer, 'index.mjs'));
+  // Read-only default skills: same relative path as repo (…/bundled-skills from agent/skills).
+  cpSync(join(root, 'bundled-skills'), join(outRoot, 'bundled-skills'), { recursive: true });
   installProdNodeModules();
 
   console.log('eve-sidecar build ok:', outServer);

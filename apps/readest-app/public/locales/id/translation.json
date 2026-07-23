@@ -1897,5 +1897,8 @@
   "Show original": "Tampilkan asli",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "Seluruh dunia adalah panggung, dan semua pria dan wanita hanyalah pemain; mereka punya saat keluar dan saat masuk, dan seseorang dalam hidupnya memainkan banyak peran.",
   "— William Shakespeare, As You Like It": "— William Shakespeare, As You Like It",
-  "Connect Wellread to external services for highlights and catalogs.": "Hubungkan Wellread ke layanan eksternal untuk sinkronisasi, sorotan, dan katalog."
+  "Connect Wellread to external services for highlights and catalogs.": "Hubungkan Wellread ke layanan eksternal untuk sinkronisasi, sorotan, dan katalog.",
+  "Failed to hide skill: {{message}}": "Gagal menyembunyikan skill: {{message}}",
+  "No skills available.": "Tidak ada skill tersedia.",
+  "Failed to enable skill: {{message}}": "Gagal mengaktifkan skill: {{message}}"
 }

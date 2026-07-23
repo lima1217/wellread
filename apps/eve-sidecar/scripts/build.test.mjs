@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it, before } from 'node:test';
@@ -50,6 +50,18 @@ describe('eve-sidecar build (.output packaging)', () => {
         readdirSync(nm).some((n) => n.startsWith('ai')),
       'expected ai package under .output/node_modules',
     );
+  });
+
+  it('copies bundled-skills next to the server package root', () => {
+    const bundled = join(root, '.output', 'bundled-skills');
+    const ids = readdirSync(bundled);
+    for (const id of ['explain', 'grill-me', 'socratic-check', 'translate']) {
+      assert.ok(ids.includes(id), `expected bundled skill ${id}`);
+      assert.ok(
+        existsSync(join(bundled, id, 'SKILL.md')),
+        `expected ${id}/SKILL.md in .output/bundled-skills`,
+      );
+    }
   });
 
   it('starts and prints a loopback listen URL with only packaged modules', async () => {

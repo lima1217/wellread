@@ -13,6 +13,7 @@ const skills: EveSkillSummary[] = [
     description: 'Make a chapter summary',
     path: '/workspace/skills/summarize/SKILL.md',
     source: 'user',
+    enabled: true,
   },
   {
     id: 'translate',
@@ -20,6 +21,7 @@ const skills: EveSkillSummary[] = [
     description: 'Translate a passage',
     path: '/workspace/skills/translate/SKILL.md',
     source: 'user',
+    enabled: true,
   },
 ];
 

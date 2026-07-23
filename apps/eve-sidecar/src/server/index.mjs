@@ -162,7 +162,15 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 503, { error: 'books_root_unset' }, req);
         return;
       }
-      sendJson(res, 200, { skills: discoverSkills({ booksRoot: booksRootEnv }) }, req);
+      const includeDisabled =
+        url.searchParams.get('includeDisabled') === '1' ||
+        url.searchParams.get('includeDisabled') === 'true';
+      sendJson(
+        res,
+        200,
+        { skills: discoverSkills({ booksRoot: booksRootEnv, includeDisabled }) },
+        req,
+      );
       return;
     }
 

@@ -112,17 +112,25 @@ export type EveSkillSummary = {
   name: string;
   description: string;
   path: string;
-  source: 'user';
+  source: 'user' | 'bundled';
+  /** False when a bundled default is listed for management but currently hidden. */
+  enabled: boolean;
 };
 
-export async function listEveSkills(): Promise<EveSkillSummary[]> {
+export async function listEveSkills(options?: {
+  includeDisabled?: boolean;
+}): Promise<EveSkillSummary[]> {
   const { baseUrl, token } = base();
-  const res = await eveFetch(`${baseUrl}/eve/v1/skills`, {
+  const qs = options?.includeDisabled ? '?includeDisabled=1' : '';
+  const res = await eveFetch(`${baseUrl}/eve/v1/skills${qs}`, {
     headers: authHeaders(token),
   });
   if (!res.ok) throw new Error(`list skills failed: ${res.status}`);
   const data = (await res.json()) as { skills: EveSkillSummary[] };
-  return data.skills ?? [];
+  return (data.skills ?? []).map((s) => ({
+    ...s,
+    enabled: s.enabled !== false,
+  }));
 }
 
 export async function createEveSession(input: {

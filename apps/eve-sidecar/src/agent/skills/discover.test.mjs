@@ -11,17 +11,26 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it } from 'node:test';
+import { setBundledSkillsRootForTests } from './bundledRoot.mjs';
 import {
+  DISABLED_BUNDLED_SKILLS_REL,
   SKILLS_DIR,
   discoverSkills,
   invalidateSkillsCache,
   isValidSkillId,
   parseSkillMd,
+  readBundledSkillMd,
 } from './discover.mjs';
 
 afterEach(() => {
   invalidateSkillsCache();
+  setBundledSkillsRootForTests(undefined);
 });
+
+/** Isolate user-layer tests from repo bundled-skills. */
+function withoutBundled() {
+  setBundledSkillsRootForTests(null);
+}
 
 describe('isValidSkillId', () => {
   it('accepts simple slash tokens', () => {
@@ -70,7 +79,8 @@ describe('discoverSkills', () => {
     assert.equal(SKILLS_DIR, 'skills');
   });
 
-  it('returns empty list when skills root is missing', () => {
+  it('returns empty list when skills root is missing and bundled is disabled', () => {
+    withoutBundled();
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-skills-')));
     try {
       assert.deepEqual(discoverSkills({ booksRoot }), []);
@@ -80,6 +90,7 @@ describe('discoverSkills', () => {
   });
 
   it('lists valid packages under Books/skills sorted by id', () => {
+    withoutBundled();
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-skills-')));
     try {
       const skillsRoot = join(booksRoot, 'skills');
@@ -101,6 +112,7 @@ describe('discoverSkills', () => {
           description: 'First',
           path: '/workspace/skills/alpha/SKILL.md',
           source: 'user',
+          enabled: true,
         },
         {
           id: 'zeta',
@@ -108,6 +120,7 @@ describe('discoverSkills', () => {
           description: 'Last',
           path: '/workspace/skills/zeta/SKILL.md',
           source: 'user',
+          enabled: true,
         },
       ]);
     } finally {
@@ -116,6 +129,7 @@ describe('discoverSkills', () => {
   });
 
   it('skips invalid ids, missing SKILL.md, and broken frontmatter', () => {
+    withoutBundled();
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-skills-')));
     try {
       const skillsRoot = join(booksRoot, 'skills');
@@ -145,6 +159,7 @@ describe('discoverSkills', () => {
           description: 'Ok',
           path: '/workspace/skills/good/SKILL.md',
           source: 'user',
+          enabled: true,
         },
       ]);
     } finally {
@@ -153,6 +168,7 @@ describe('discoverSkills', () => {
   });
 
   it('skips package dir symlinks and SKILL.md file symlinks', () => {
+    withoutBundled();
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-skills-')));
     const outside = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-skills-out-')));
     try {
@@ -186,6 +202,7 @@ describe('discoverSkills', () => {
           description: 'Ok',
           path: '/workspace/skills/good/SKILL.md',
           source: 'user',
+          enabled: true,
         },
       ]);
     } finally {
@@ -195,6 +212,7 @@ describe('discoverSkills', () => {
   });
 
   it('invalidates when SKILL.md mtime changes, package add, or invalidateSkillsCache', () => {
+    withoutBundled();
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-skills-')));
     try {
       const skillsRoot = join(booksRoot, 'skills');
@@ -227,6 +245,98 @@ describe('discoverSkills', () => {
       assert.equal(withBeta.some((s) => s.id === 'beta'), true);
     } finally {
       rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('merges bundled skills; user wins on same id; disabled hides bundled only', () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-skills-')));
+    const bundledRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-bundled-')));
+    try {
+      setBundledSkillsRootForTests(bundledRoot);
+      mkdirSync(join(bundledRoot, 'alpha'), { recursive: true });
+      mkdirSync(join(bundledRoot, 'beta'), { recursive: true });
+      writeFileSync(
+        join(bundledRoot, 'alpha', 'SKILL.md'),
+        '---\nname: AlphaBundled\ndescription: Bundled A\n---\nBA\n',
+      );
+      writeFileSync(
+        join(bundledRoot, 'beta', 'SKILL.md'),
+        '---\nname: BetaBundled\ndescription: Bundled B\n---\nBB\n',
+      );
+
+      assert.deepEqual(discoverSkills({ booksRoot }), [
+        {
+          id: 'alpha',
+          name: 'AlphaBundled',
+          description: 'Bundled A',
+          path: '/workspace/skills/alpha/SKILL.md',
+          source: 'bundled',
+          enabled: true,
+        },
+        {
+          id: 'beta',
+          name: 'BetaBundled',
+          description: 'Bundled B',
+          path: '/workspace/skills/beta/SKILL.md',
+          source: 'bundled',
+          enabled: true,
+        },
+      ]);
+
+      mkdirSync(join(booksRoot, 'skills', 'alpha'), { recursive: true });
+      writeFileSync(
+        join(booksRoot, 'skills', 'alpha', 'SKILL.md'),
+        '---\nname: AlphaUser\ndescription: User A\n---\nUA\n',
+      );
+      assert.deepEqual(
+        discoverSkills({ booksRoot }).find((s) => s.id === 'alpha'),
+        {
+          id: 'alpha',
+          name: 'AlphaUser',
+          description: 'User A',
+          path: '/workspace/skills/alpha/SKILL.md',
+          source: 'user',
+          enabled: true,
+        },
+      );
+
+      mkdirSync(join(booksRoot, '.wellread'), { recursive: true });
+      writeFileSync(join(booksRoot, DISABLED_BUNDLED_SKILLS_REL), JSON.stringify(['beta']));
+      const afterDisable = discoverSkills({ booksRoot });
+      assert.equal(afterDisable.some((s) => s.id === 'beta'), false);
+      assert.equal(afterDisable.some((s) => s.id === 'alpha' && s.source === 'user'), true);
+
+      const withHidden = discoverSkills({ booksRoot, includeDisabled: true });
+      assert.deepEqual(
+        withHidden.find((s) => s.id === 'beta'),
+        {
+          id: 'beta',
+          name: 'BetaBundled',
+          description: 'Bundled B',
+          path: '/workspace/skills/beta/SKILL.md',
+          source: 'bundled',
+          enabled: false,
+        },
+      );
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+      rmSync(bundledRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('readBundledSkillMd reads from the resolved bundled root', () => {
+    const bundledRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-bundled-')));
+    try {
+      setBundledSkillsRootForTests(bundledRoot);
+      mkdirSync(join(bundledRoot, 'demo'), { recursive: true });
+      writeFileSync(
+        join(bundledRoot, 'demo', 'SKILL.md'),
+        '---\nname: Demo\ndescription: D\n---\nBody\n',
+      );
+      assert.match(readBundledSkillMd('demo') || '', /Body/);
+      assert.equal(readBundledSkillMd('missing'), null);
+    } finally {
+      rmSync(bundledRoot, { recursive: true, force: true });
     }
   });
 });

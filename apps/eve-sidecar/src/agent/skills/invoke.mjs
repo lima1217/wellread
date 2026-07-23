@@ -10,7 +10,10 @@ import {
   isRegularSkillDir,
   isValidSkillId,
   parseSkillMd,
+  readBundledSkillMd,
+  readDisabledBundledSkillIds,
   readSkillMdFile,
+  skillWorkspacePath,
 } from './discover.mjs';
 
 /**
@@ -20,7 +23,7 @@ import {
  *   description: string,
  *   instructions: string,
  *   path: string,
- *   source: 'user',
+ *   source: 'user' | 'bundled',
  * }} SkillPackage
  */
 
@@ -83,25 +86,45 @@ function replaceSlashQuestion(message, expandedQuestion) {
 }
 
 /**
+ * Load user package first; else bundled (unless disabled without user overlay).
  * @param {string} booksRoot
  * @param {string} id
  * @returns {SkillPackage | null}
  */
 export function loadSkillPackage(booksRoot, id) {
   if (!booksRoot || !isValidSkillId(id)) return null;
+
   const packageDir = join(booksRoot, SKILLS_DIR, id);
-  if (!isRegularSkillDir(packageDir)) return null;
-  const raw = readSkillMdFile(join(packageDir, 'SKILL.md'));
-  if (raw == null) return null;
-  const parsed = parseSkillMd(raw);
+  if (isRegularSkillDir(packageDir)) {
+    const raw = readSkillMdFile(join(packageDir, 'SKILL.md'));
+    if (raw != null) {
+      const parsed = parseSkillMd(raw);
+      if (parsed) {
+        return {
+          id,
+          name: parsed.name,
+          description: parsed.description,
+          instructions: parsed.instructions,
+          path: skillWorkspacePath(id),
+          source: 'user',
+        };
+      }
+    }
+  }
+
+  if (readDisabledBundledSkillIds(booksRoot).has(id)) return null;
+
+  const bundledRaw = readBundledSkillMd(id);
+  if (bundledRaw == null) return null;
+  const parsed = parseSkillMd(bundledRaw);
   if (!parsed) return null;
   return {
     id,
     name: parsed.name,
     description: parsed.description,
     instructions: parsed.instructions,
-    path: `${WORKSPACE_ROOT}/${SKILLS_DIR}/${id}/SKILL.md`,
-    source: 'user',
+    path: skillWorkspacePath(id),
+    source: 'bundled',
   };
 }
 

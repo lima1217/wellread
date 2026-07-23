@@ -2,8 +2,15 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { afterEach, describe, it } from 'node:test';
 import { runTurn } from './runTurn.mjs';
+import { invalidateSkillsCache } from './skills/discover.mjs';
+import { setBundledSkillsRootForTests } from './skills/bundledRoot.mjs';
+
+afterEach(() => {
+  setBundledSkillsRootForTests(undefined);
+  invalidateSkillsCache();
+});
 
 function emptySession() {
   return {
@@ -190,9 +197,14 @@ describe('runTurn skill expansion', () => {
       });
       const system = systemTextFromPrompt(sink.prompt);
       assert.doesNotMatch(system, /## Active skill/);
-      assert.doesNotMatch(system, /Available skills/);
+      // Bundled defaults may still appear in the catalog; unknown ids must not expand.
+      assert.doesNotMatch(system, /- nope:/);
       const userTexts = userTextsFromPrompt(sink.prompt);
       assert.equal(userTexts.at(-1), '/skill:nope');
+      assert.equal(
+        userTexts.some((t) => t.includes('<skill name="nope"')),
+        false,
+      );
     } finally {
       rmSync(booksRoot, { recursive: true, force: true });
     }

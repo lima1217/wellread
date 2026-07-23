@@ -8,6 +8,8 @@ import { getFilename } from '@/utils/path';
 
 export const SKILLS_DIR = 'skills';
 export const SKILL_FILE = 'SKILL.md';
+/** Relative to Books root — hides bundled defaults without deleting user packages. */
+export const DISABLED_BUNDLED_SKILLS_REL = '.wellread/disabled-bundled-skills.json';
 
 /** Slash token: letter/digit start; then alnum, underscore, hyphen. */
 export function isValidSkillId(id: string): boolean {
@@ -212,8 +214,68 @@ export async function deleteSkillPackage(
   return { ok: true, id };
 }
 
+export type SkillHideResult = { ok: true; id: string } | { ok: false; error: string };
+
+type SkillDisableFs = Pick<SkillImportFs, 'exists' | 'createDir' | 'readFile'> & {
+  writeFile(path: string, base: BaseDir, content: string): Promise<void>;
+};
+
+/**
+ * Hide a bundled default skill via Books/.wellread/disabled-bundled-skills.json.
+ * Does not remove user packages; discover ignores disabled ids only when no user overlay.
+ */
+export async function hideBundledSkill(fs: SkillDisableFs, id: string): Promise<SkillHideResult> {
+  if (!isValidSkillId(id)) {
+    return { ok: false, error: `Invalid skill id "${id}".` };
+  }
+
+  const current = await readDisabledBundledIds(fs);
+  if (!current.includes(id)) {
+    current.push(id);
+    current.sort();
+  }
+  await writeDisabledBundledIds(fs, current);
+  return { ok: true, id };
+}
+
+/**
+ * Re-enable a previously hidden bundled default by removing its id from the disable list.
+ */
+export async function unhideBundledSkill(fs: SkillDisableFs, id: string): Promise<SkillHideResult> {
+  if (!isValidSkillId(id)) {
+    return { ok: false, error: `Invalid skill id "${id}".` };
+  }
+
+  const current = await readDisabledBundledIds(fs);
+  const next = current.filter((item) => item !== id);
+  await writeDisabledBundledIds(fs, next);
+  return { ok: true, id };
+}
+
+async function readDisabledBundledIds(fs: SkillDisableFs): Promise<string[]> {
+  if (!(await fs.exists(DISABLED_BUNDLED_SKILLS_REL, 'Books'))) return [];
+  try {
+    const raw = await fs.readFile(DISABLED_BUNDLED_SKILLS_REL, 'Books', 'text');
+    if (typeof raw !== 'string') return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === 'string');
+  } catch {
+    return [];
+  }
+}
+
+async function writeDisabledBundledIds(fs: SkillDisableFs, ids: string[]): Promise<void> {
+  if (!(await fs.exists('.wellread', 'Books'))) {
+    await fs.createDir('.wellread', 'Books', true);
+  }
+  await fs.writeFile(DISABLED_BUNDLED_SKILLS_REL, 'Books', `${JSON.stringify(ids, null, 2)}\n`);
+}
+
 /** Thin AppService adapter for {@link importSkillFromFolder}. */
-export function createAppServiceSkillImportFs(appService: AppService): SkillImportFs {
+export function createAppServiceSkillImportFs(appService: AppService): SkillImportFs & {
+  writeFile(path: string, base: BaseDir, content: string): Promise<void>;
+} {
   return {
     readDirectory: (path, base) => appService.readDirectory(path, base),
     readFile: (path, base, mode) => appService.readFile(path, base, mode),
@@ -222,6 +284,7 @@ export function createAppServiceSkillImportFs(appService: AppService): SkillImpo
     deleteDir: (path, base, recursive = true) => appService.deleteDir(path, base, recursive),
     copyFile: (srcPath, srcBase, dstPath, dstBase) =>
       appService.copyFile(srcPath, srcBase, dstPath, dstBase),
+    writeFile: (path, base, content) => appService.writeFile(path, base, content),
   };
 }
 

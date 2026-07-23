@@ -1897,5 +1897,8 @@
   "Show original": "Hiển thị bản gốc",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "Cả thế giới là một sân khấu, và tất cả đàn ông đàn bà chỉ là những diễn viên; họ có lúc ra và lúc vào, và một người trong đời mình đóng nhiều vai.",
   "— William Shakespeare, As You Like It": "— William Shakespeare, Theo Ý Thích",
-  "Connect Wellread to external services for highlights and catalogs.": "Kết nối Wellread với các dịch vụ bên ngoài để đồng bộ, đánh dấu và danh mục."
+  "Connect Wellread to external services for highlights and catalogs.": "Kết nối Wellread với các dịch vụ bên ngoài để đồng bộ, đánh dấu và danh mục.",
+  "Failed to hide skill: {{message}}": "Ẩn skill thất bại: {{message}}",
+  "No skills available.": "Không có skill nào.",
+  "Failed to enable skill: {{message}}": "Bật skill thất bại: {{message}}"
 }

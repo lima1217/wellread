@@ -1897,5 +1897,8 @@
   "Show original": "原文を表示",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "この世はすべて舞台、男も女もみな役者にすぎない。彼らには退場があり登場があり、一人の人間はその一生でいくつもの役を演じる。",
   "— William Shakespeare, As You Like It": "— ウィリアム・シェイクスピア『お気に召すまま』",
-  "Connect Wellread to external services for highlights and catalogs.": "同期、ハイライト、カタログのために Wellread を外部サービスに接続します。"
+  "Connect Wellread to external services for highlights and catalogs.": "同期、ハイライト、カタログのために Wellread を外部サービスに接続します。",
+  "Failed to hide skill: {{message}}": "skill の非表示に失敗しました：{{message}}",
+  "No skills available.": "利用可能な skill がありません。",
+  "Failed to enable skill: {{message}}": "skill の有効化に失敗しました：{{message}}"
 }

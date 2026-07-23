@@ -1897,5 +1897,8 @@
   "Show original": "แสดงต้นฉบับ",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "โลกทั้งใบคือเวที และชายหญิงทั้งปวงล้วนเป็นเพียงนักแสดง พวกเขาต่างมีวาระเข้าและออก และคนหนึ่งในชั่วชีวิตของเขาย่อมสวมบทบาทมากมาย",
   "— William Shakespeare, As You Like It": "— วิลเลียม เชกสเปียร์, As You Like It",
-  "Connect Wellread to external services for highlights and catalogs.": "เชื่อมต่อ Wellread กับบริการภายนอกเพื่อการซิงค์ ไฮไลต์ และแคตตาล็อก"
+  "Connect Wellread to external services for highlights and catalogs.": "เชื่อมต่อ Wellread กับบริการภายนอกเพื่อการซิงค์ ไฮไลต์ และแคตตาล็อก",
+  "Failed to hide skill: {{message}}": "ซ่อน skill ไม่สำเร็จ: {{message}}",
+  "No skills available.": "ไม่มี skill ที่ใช้ได้",
+  "Failed to enable skill: {{message}}": "เปิดใช้ skill ไม่สำเร็จ: {{message}}"
 }

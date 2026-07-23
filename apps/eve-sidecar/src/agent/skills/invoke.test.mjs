@@ -9,7 +9,8 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { afterEach, describe, it } from 'node:test';
+import { setBundledSkillsRootForTests } from './bundledRoot.mjs';
 import {
   expandSkillCommand,
   formatSkillInvocation,
@@ -18,6 +19,10 @@ import {
   parseSlashInvocation,
   resolveSkillForMessage,
 } from './invoke.mjs';
+
+afterEach(() => {
+  setBundledSkillsRootForTests(undefined);
+});
 
 describe('parseSlashInvocation', () => {
   it('parses /skill:id and optional rest', () => {
@@ -55,6 +60,7 @@ describe('parseSlashInvocation', () => {
 
 describe('loadSkillPackage / resolveSkillForMessage', () => {
   it('loads instructions from Books/skills/<id>/SKILL.md', () => {
+    setBundledSkillsRootForTests(null);
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-invoke-')));
     try {
       mkdirSync(join(booksRoot, 'skills', 'summarize'), { recursive: true });
@@ -67,6 +73,7 @@ describe('loadSkillPackage / resolveSkillForMessage', () => {
       assert.equal(skill?.name, 'Summarize');
       assert.equal(skill?.instructions, 'Be concise.');
       assert.equal(skill?.path, '/workspace/skills/summarize/SKILL.md');
+      assert.equal(skill?.source, 'user');
 
       assert.equal(resolveSkillForMessage('/missing', booksRoot), null);
       assert.equal(resolveSkillForMessage('/skill:missing', booksRoot), null);
@@ -77,7 +84,28 @@ describe('loadSkillPackage / resolveSkillForMessage', () => {
     }
   });
 
+  it('loads bundled skill when Books has no package', () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-invoke-')));
+    const bundledRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-bundled-')));
+    try {
+      setBundledSkillsRootForTests(bundledRoot);
+      mkdirSync(join(bundledRoot, 'explain'), { recursive: true });
+      writeFileSync(
+        join(bundledRoot, 'explain', 'SKILL.md'),
+        '---\nname: explain\ndescription: Explain\n---\nClarify.\n',
+      );
+      const skill = loadSkillPackage(booksRoot, 'explain');
+      assert.equal(skill?.source, 'bundled');
+      assert.equal(skill?.instructions, 'Clarify.');
+      assert.equal(skill?.path, '/workspace/skills/explain/SKILL.md');
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+      rmSync(bundledRoot, { recursive: true, force: true });
+    }
+  });
+
   it('refuses package dir symlinks and SKILL.md file symlinks', () => {
+    setBundledSkillsRootForTests(null);
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-invoke-')));
     const outside = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-invoke-out-')));
     try {

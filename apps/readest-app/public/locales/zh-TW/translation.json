@@ -1926,5 +1926,8 @@
   "Deleted skill {{id}}": "已刪除 skill {{id}}",
   "LLM Providers": "LLM 服務商",
   "Manage LLM Providers": "管理 LLM 服務商",
-  "Add and manage LLM provider profiles for the reading assistant.": "為閱讀助手新增和管理 LLM 服務商設定檔。"
+  "Add and manage LLM provider profiles for the reading assistant.": "為閱讀助手新增和管理 LLM 服務商設定檔。",
+  "Failed to hide skill: {{message}}": "隱藏 skill 失敗：{{message}}",
+  "No skills available.": "暫無可用 skill。",
+  "Failed to enable skill: {{message}}": "啟用 skill 失敗：{{message}}"
 }

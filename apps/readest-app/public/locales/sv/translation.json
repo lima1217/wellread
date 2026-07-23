@@ -1933,5 +1933,8 @@
   "Show original": "Visa original",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "Hela världen är en scen, och alla människor, män som kvinnor, blott skådespelare; de har sina sortier och sina entréer, och en människa spelar under sin tid många roller.",
   "— William Shakespeare, As You Like It": "— William Shakespeare, Som ni behagar",
-  "Connect Wellread to external services for highlights and catalogs.": "Anslut Wellread till externa tjänster för synkronisering, markeringar och kataloger."
+  "Connect Wellread to external services for highlights and catalogs.": "Anslut Wellread till externa tjänster för synkronisering, markeringar och kataloger.",
+  "Failed to hide skill: {{message}}": "Kunde inte dölja skill: {{message}}",
+  "No skills available.": "Inga skills tillgängliga.",
+  "Failed to enable skill: {{message}}": "Kunde inte aktivera skill: {{message}}"
 }

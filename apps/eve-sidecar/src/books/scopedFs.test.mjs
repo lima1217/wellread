@@ -6,13 +6,19 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { afterEach, describe, it } from 'node:test';
+import { setBundledSkillsRootForTests } from '../agent/skills/bundledRoot.mjs';
 import { createBooksFsSession } from './booksFsSession.mjs';
 import { createNodeRealpathLookup } from './nodeLookup.mjs';
 import { WORKSPACE_ROOT, authorizeWrite } from './scopedFs.mjs';
+
+afterEach(() => {
+  setBundledSkillsRootForTests(undefined);
+});
 
 describe('scopedFs', () => {
   it('WORKSPACE_ROOT is /workspace', () => {
@@ -68,6 +74,48 @@ describe('createBooksFsSession', () => {
     } finally {
       rmSync(booksRoot, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('readFile falls back to bundled SKILL.md for catalog paths', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-books-')));
+    const bundledRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-bundled-')));
+    try {
+      setBundledSkillsRootForTests(bundledRoot);
+      mkdirSync(join(bundledRoot, 'translate'), { recursive: true });
+      writeFileSync(
+        join(bundledRoot, 'translate', 'SKILL.md'),
+        '---\nname: Translate\ndescription: Zh\n---\n译成中文。\n',
+      );
+      const session = createBooksFsSession({ getBooksRoot: () => booksRoot });
+      const bytes = await session.readFile({ path: '/workspace/skills/translate/SKILL.md' });
+      assert.ok(bytes);
+      assert.match(new TextDecoder().decode(bytes), /译成中文/);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+      rmSync(bundledRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('readFile ignores unparseable user SKILL.md and serves bundled', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-books-')));
+    const bundledRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-bundled-')));
+    try {
+      setBundledSkillsRootForTests(bundledRoot);
+      mkdirSync(join(bundledRoot, 'translate'), { recursive: true });
+      writeFileSync(
+        join(bundledRoot, 'translate', 'SKILL.md'),
+        '---\nname: Translate\ndescription: Bundled\n---\nBUNDLED_BODY\n',
+      );
+      mkdirSync(join(booksRoot, 'skills', 'translate'), { recursive: true });
+      writeFileSync(join(booksRoot, 'skills', 'translate', 'SKILL.md'), 'not valid skill md\n');
+      const session = createBooksFsSession({ getBooksRoot: () => booksRoot });
+      const bytes = await session.readFile({ path: '/workspace/skills/translate/SKILL.md' });
+      assert.ok(bytes);
+      assert.match(new TextDecoder().decode(bytes), /BUNDLED_BODY/);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+      rmSync(bundledRoot, { recursive: true, force: true });
     }
   });
 });

@@ -1,30 +1,39 @@
 /**
  * Skill discovery for Reading Assistant `/skill:<id>` invocation (catalog only).
  *
- * Product root: Books/skills/ ↔ /workspace/skills/
- * Package shape: skills/<id>/SKILL.md with Agent Skills frontmatter.
+ * Layers:
+ *   user:    Books/skills/<id>/SKILL.md  (source: 'user')
+ *   bundled: <sidecar>/bundled-skills/<id>/SKILL.md  (source: 'bundled')
+ * Same id: user wins. Disabled bundled ids live in
+ * Books/.wellread/disabled-bundled-skills.json (ignored when a user package exists).
  *
  * Catalog results are cached in-process and invalidated when the catalog stamp
- * changes (`skills/` mtime plus each package `SKILL.md` mtime) or via
- * {@link invalidateSkillsCache}.
+ * changes or via {@link invalidateSkillsCache}.
  */
 
 import { lstatSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { WORKSPACE_ROOT } from '../../books/scopedFs.mjs';
+import { WORKSPACE_ROOT, WRITABLE_DIR } from '../../books/scopedFs.mjs';
+import { resolveBundledSkillsRoot } from './bundledRoot.mjs';
 
 /** Host / workspace directory name under Books root. */
 export const SKILLS_DIR = 'skills';
 
+/** Relative to Books root. */
+export const DISABLED_BUNDLED_SKILLS_REL = `${WRITABLE_DIR}/disabled-bundled-skills.json`;
+
 const SKILL_FILE = 'SKILL.md';
 
 /**
+ * @typedef {'user' | 'bundled'} SkillSource
+ *
  * @typedef {{
  *   id: string,
  *   name: string,
  *   description: string,
  *   path: string,
- *   source: 'user',
+ *   source: SkillSource,
+ *   enabled: boolean,
  * }} SkillSummary
  *
  * @typedef {{ stamp: string, skills: SkillSummary[] }} SkillsCacheEntry
@@ -40,7 +49,7 @@ export function isValidSkillId(id) {
 
 /**
  * Drop cached catalog for one Books root, or all roots when omitted.
- * Call after same-process mutations that may not bump `skills/` mtime.
+ * Call after same-process mutations that may not bump stamp inputs.
  * @param {string} [booksRoot]
  */
 export function invalidateSkillsCache(booksRoot) {
@@ -110,31 +119,123 @@ export function parseSkillMd(raw) {
 }
 
 /**
- * @param {{ booksRoot: string }} input
+ * Workspace path advertised in the catalog (same for user and bundled).
+ * @param {string} id
+ */
+export function skillWorkspacePath(id) {
+  return `${WORKSPACE_ROOT}/${SKILLS_DIR}/${id}/${SKILL_FILE}`;
+}
+
+/**
+ * Ids listed in Books/.wellread/disabled-bundled-skills.json.
+ * @param {string} booksRoot
+ * @returns {Set<string>}
+ */
+export function readDisabledBundledSkillIds(booksRoot) {
+  if (!booksRoot || typeof booksRoot !== 'string') return new Set();
+  const path = join(booksRoot, DISABLED_BUNDLED_SKILLS_REL);
+  try {
+    const st = lstatSync(path);
+    if (st.isSymbolicLink() || !st.isFile()) return new Set();
+    const raw = readFileSync(path, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    /** @type {Set<string>} */
+    const ids = new Set();
+    for (const item of parsed) {
+      if (typeof item === 'string' && isValidSkillId(item)) ids.add(item);
+    }
+    return ids;
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Absolute host path to a bundled package's SKILL.md, or null.
+ * @param {string} id
+ * @returns {string | null}
+ */
+export function bundledSkillMdHostPath(id) {
+  if (!isValidSkillId(id)) return null;
+  const root = resolveBundledSkillsRoot();
+  if (!root) return null;
+  return join(root, id, SKILL_FILE);
+}
+
+/**
+ * Read bundled SKILL.md body for sandbox / load fallback.
+ * @param {string} id
+ * @returns {string | null}
+ */
+export function readBundledSkillMd(id) {
+  const path = bundledSkillMdHostPath(id);
+  if (!path) return null;
+  return readSkillMdFile(path);
+}
+
+/**
+ * @param {{ booksRoot: string, includeDisabled?: boolean }} input
  * @returns {SkillSummary[]}
  */
 export function discoverSkills(input) {
   const booksRoot = input?.booksRoot;
   if (!booksRoot || typeof booksRoot !== 'string') return [];
+  const includeDisabled = Boolean(input?.includeDisabled);
 
   const key = cacheKeyFor(booksRoot);
-  const skillsRoot = join(booksRoot, SKILLS_DIR);
-  const stamp = skillsDirStamp(skillsRoot);
+  const stamp = catalogStamp(booksRoot);
   const hit = skillsCatalogCache.get(key);
+  /** @type {SkillSummary[]} */
+  let skills;
   if (hit && hit.stamp === stamp) {
-    return hit.skills.map(cloneSkillSummary);
+    skills = hit.skills;
+  } else {
+    skills = mergeSkillLayers(booksRoot);
+    skillsCatalogCache.set(key, { stamp, skills });
   }
 
-  const skills = scanSkillsRoot(skillsRoot);
-  skillsCatalogCache.set(key, { stamp, skills });
-  return skills.map(cloneSkillSummary);
+  const visible = includeDisabled ? skills : skills.filter((s) => s.enabled);
+  return visible.map(cloneSkillSummary);
+}
+
+/**
+ * Full merge including disabled bundled rows (`enabled: false`).
+ * @param {string} booksRoot
+ * @returns {SkillSummary[]}
+ */
+function mergeSkillLayers(booksRoot) {
+  /** @type {Map<string, SkillSummary>} */
+  const byId = new Map();
+
+  for (const skill of scanSkillsRoot(join(booksRoot, SKILLS_DIR), 'user')) {
+    byId.set(skill.id, { ...skill, enabled: true });
+  }
+
+  const disabled = readDisabledBundledSkillIds(booksRoot);
+  const bundledRoot = resolveBundledSkillsRoot();
+  if (bundledRoot) {
+    for (const skill of scanSkillsRoot(bundledRoot, 'bundled')) {
+      if (byId.has(skill.id)) continue;
+      if (disabled.has(skill.id)) {
+        byId.set(skill.id, { ...skill, enabled: false });
+        continue;
+      }
+      byId.set(skill.id, { ...skill, enabled: true });
+    }
+  }
+
+  const skills = [...byId.values()];
+  skills.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return skills;
 }
 
 /**
  * @param {string} skillsRoot
+ * @param {SkillSource} source
  * @returns {SkillSummary[]}
  */
-function scanSkillsRoot(skillsRoot) {
+function scanSkillsRoot(skillsRoot, source) {
   let entries;
   try {
     entries = readdirSync(skillsRoot, { withFileTypes: true });
@@ -162,22 +263,50 @@ function scanSkillsRoot(skillsRoot) {
       id,
       name: parsed.name,
       description: parsed.description,
-      path: `${WORKSPACE_ROOT}/${SKILLS_DIR}/${id}/${SKILL_FILE}`,
-      source: 'user',
+      path: skillWorkspacePath(id),
+      source,
+      // Caller sets enabled when merging layers.
+      enabled: true,
     });
   }
 
-  skills.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return skills;
 }
 
 /**
+ * Catalog stamp: user skills/ + disabled file + bundled root package mtimes.
+ * @param {string} booksRoot
+ */
+function catalogStamp(booksRoot) {
+  const parts = [
+    `user:${skillsDirStamp(join(booksRoot, SKILLS_DIR))}`,
+    `disabled:${disabledStamp(booksRoot)}`,
+    `bundled:${skillsDirStamp(resolveBundledSkillsRoot() || '')}`,
+  ];
+  return parts.join('||');
+}
+
+/**
+ * @param {string} booksRoot
+ */
+function disabledStamp(booksRoot) {
+  const path = join(booksRoot, DISABLED_BUNDLED_SKILLS_REL);
+  try {
+    const st = lstatSync(path);
+    if (st.isSymbolicLink() || !st.isFile()) return 'bad';
+    return String(st.mtimeMs);
+  } catch (error) {
+    if (error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) return 'absent';
+    throw error;
+  }
+}
+
+/**
  * Catalog stamp: `skills/` mtime plus each valid package's SKILL.md mtime.
- * Covers import/delete (dir mtime) and in-place SKILL.md edits (file mtime).
- * Callers may also {@link invalidateSkillsCache}.
  * @param {string} skillsRoot
  */
 function skillsDirStamp(skillsRoot) {
+  if (!skillsRoot) return 'absent';
   try {
     const st = statSync(skillsRoot);
     if (!st.isDirectory()) return 'absent';
@@ -246,6 +375,7 @@ function cloneSkillSummary(skill) {
     description: skill.description,
     path: skill.path,
     source: skill.source,
+    enabled: skill.enabled,
   };
 }
 

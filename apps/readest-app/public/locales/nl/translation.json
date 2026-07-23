@@ -1933,5 +1933,8 @@
   "Show original": "Origineel tonen",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "De hele wereld is een toneel, en alle mannen en vrouwen slechts spelers; zij hebben hun aftredens en hun optredens, en één mens speelt in zijn leven vele rollen.",
   "— William Shakespeare, As You Like It": "— William Shakespeare, Zoals u het wilt",
-  "Connect Wellread to external services for highlights and catalogs.": "Verbind Wellread met externe diensten voor synchronisatie, markeringen en catalogi."
+  "Connect Wellread to external services for highlights and catalogs.": "Verbind Wellread met externe diensten voor synchronisatie, markeringen en catalogi.",
+  "Failed to hide skill: {{message}}": "Skill verbergen mislukt: {{message}}",
+  "No skills available.": "Geen skills beschikbaar.",
+  "Failed to enable skill: {{message}}": "Skill inschakelen mislukt: {{message}}"
 }

@@ -2077,5 +2077,8 @@
   "Show original": "إظهار الأصل",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "العالم كله مسرح، وكل الرجال والنساء مجرد ممثلين؛ لهم مخارجهم ومداخلهم، والمرء الواحد في زمنه يؤدي أدوارًا كثيرة.",
   "— William Shakespeare, As You Like It": "— ويليام شكسبير، كما تشاء",
-  "Connect Wellread to external services for highlights and catalogs.": "اربط Wellread بخدمات خارجية للمزامنة والإبرازات والفهارس."
+  "Connect Wellread to external services for highlights and catalogs.": "اربط Wellread بخدمات خارجية للمزامنة والإبرازات والفهارس.",
+  "Failed to hide skill: {{message}}": "فشل إخفاء المهارة: {{message}}",
+  "No skills available.": "لا توجد مهارات متاحة.",
+  "Failed to enable skill: {{message}}": "فشل تفعيل المهارة: {{message}}"
 }

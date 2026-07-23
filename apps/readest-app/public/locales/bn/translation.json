@@ -1933,5 +1933,8 @@
   "Show original": "মূল দেখান",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "সমগ্র বিশ্বই একটি রঙ্গমঞ্চ, আর সব নারী-পুরুষ কেবল অভিনেতা; তাদের আছে প্রস্থান আর প্রবেশ, আর একজন মানুষ তার জীবনে বহু ভূমিকায় অভিনয় করে।",
   "— William Shakespeare, As You Like It": "— উইলিয়াম শেক্সপিয়ার, অ্যাজ ইউ লাইক ইট",
-  "Connect Wellread to external services for highlights and catalogs.": "সিঙ্ক, হাইলাইট এবং ক্যাটালগের জন্য Wellread-কে বাহ্যিক পরিষেবার সাথে সংযুক্ত করুন।"
+  "Connect Wellread to external services for highlights and catalogs.": "সিঙ্ক, হাইলাইট এবং ক্যাটালগের জন্য Wellread-কে বাহ্যিক পরিষেবার সাথে সংযুক্ত করুন।",
+  "Failed to hide skill: {{message}}": "skill লুকাতে ব্যর্থ: {{message}}",
+  "No skills available.": "কোনো skill নেই।",
+  "Failed to enable skill: {{message}}": "skill সক্রিয় করতে ব্যর্থ: {{message}}"
 }

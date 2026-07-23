@@ -1933,5 +1933,8 @@
   "Show original": "Eredeti megjelenítése",
   "All the world’s a stage, and all the men and women merely players; they have their exits and their entrances, and one man in his time plays many parts.": "Színház az egész világ, és színész benne minden férfi és nő; megvannak a maguk kilépői és belépői, és egy ember életében sok szerepet játszik el.",
   "— William Shakespeare, As You Like It": "— William Shakespeare, Ahogy tetszik",
-  "Connect Wellread to external services for highlights and catalogs.": "Csatlakoztassa a Wellread-et külső szolgáltatásokhoz szinkronizálás, kiemelések és katalógusok használatához."
+  "Connect Wellread to external services for highlights and catalogs.": "Csatlakoztassa a Wellread-et külső szolgáltatásokhoz szinkronizálás, kiemelések és katalógusok használatához.",
+  "Failed to hide skill: {{message}}": "A skill elrejtése sikertelen: {{message}}",
+  "No skills available.": "Nincs elérhető skill.",
+  "Failed to enable skill: {{message}}": "A skill engedélyezése sikertelen: {{message}}"
 }

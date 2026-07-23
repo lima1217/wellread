@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { BaseDir, FileItem } from '@/types/system';
 import {
+  DISABLED_BUNDLED_SKILLS_REL,
   deleteSkillPackage,
+  hideBundledSkill,
   importSkillFromFolder,
   isValidSkillId,
   parseSkillMd,
   planSkillImportFromFolder,
   skillFolderBasename,
+  unhideBundledSkill,
   type SkillImportFs,
 } from '@/services/wellread/assistant/importSkill';
 
@@ -275,5 +278,103 @@ describe('deleteSkillPackage', () => {
     };
     expect(await deleteSkillPackage(fs, 'bad id')).toMatchObject({ ok: false });
     expect(await deleteSkillPackage(fs, 'missing')).toMatchObject({ ok: false });
+  });
+});
+
+describe('hideBundledSkill', () => {
+  it('writes and merges Books/.wellread/disabled-bundled-skills.json', async () => {
+    const books = new Map<string, string>();
+    const existing = new Set<string>();
+    const fs = {
+      async readDirectory() {
+        return [] as FileItem[];
+      },
+      async readFile(path: string, base: BaseDir) {
+        if (base !== 'Books') throw new Error('unexpected base');
+        const v = books.get(path);
+        if (v == null) throw new Error('missing');
+        return v;
+      },
+      async exists(path: string, base: BaseDir) {
+        return base === 'Books' && (existing.has(path) || books.has(path));
+      },
+      async createDir(path: string, base: BaseDir) {
+        if (base === 'Books') existing.add(path);
+      },
+      async deleteDir() {},
+      async copyFile() {},
+      async writeFile(path: string, base: BaseDir, content: string) {
+        if (base !== 'Books') return;
+        books.set(path, content);
+        existing.add(path);
+      },
+    };
+
+    expect(await hideBundledSkill(fs, 'translate')).toEqual({ ok: true, id: 'translate' });
+    expect(JSON.parse(books.get(DISABLED_BUNDLED_SKILLS_REL)!)).toEqual(['translate']);
+
+    expect(await hideBundledSkill(fs, 'explain')).toEqual({ ok: true, id: 'explain' });
+    expect(JSON.parse(books.get(DISABLED_BUNDLED_SKILLS_REL)!)).toEqual(['explain', 'translate']);
+
+    expect(await hideBundledSkill(fs, 'translate')).toEqual({ ok: true, id: 'translate' });
+    expect(JSON.parse(books.get(DISABLED_BUNDLED_SKILLS_REL)!)).toEqual(['explain', 'translate']);
+  });
+
+  it('rejects invalid ids', async () => {
+    const fs = {
+      async readDirectory() {
+        return [] as FileItem[];
+      },
+      async readFile() {
+        throw new Error('unused');
+      },
+      async exists() {
+        return false;
+      },
+      async createDir() {},
+      async deleteDir() {},
+      async copyFile() {},
+      async writeFile() {},
+    };
+    expect(await hideBundledSkill(fs, 'bad id')).toMatchObject({ ok: false });
+  });
+});
+
+describe('unhideBundledSkill', () => {
+  it('removes an id from disabled-bundled-skills.json', async () => {
+    const books = new Map<string, string>([
+      [DISABLED_BUNDLED_SKILLS_REL, JSON.stringify(['explain', 'translate'], null, 2) + '\n'],
+    ]);
+    const existing = new Set<string>(['.wellread', DISABLED_BUNDLED_SKILLS_REL]);
+    const fs = {
+      async readDirectory() {
+        return [] as FileItem[];
+      },
+      async readFile(path: string, base: BaseDir) {
+        if (base !== 'Books') throw new Error('unexpected base');
+        const v = books.get(path);
+        if (v == null) throw new Error('missing');
+        return v;
+      },
+      async exists(path: string, base: BaseDir) {
+        return base === 'Books' && (existing.has(path) || books.has(path));
+      },
+      async createDir(path: string, base: BaseDir) {
+        if (base === 'Books') existing.add(path);
+      },
+      async deleteDir() {},
+      async copyFile() {},
+      async writeFile(path: string, base: BaseDir, content: string) {
+        if (base !== 'Books') return;
+        books.set(path, content);
+        existing.add(path);
+      },
+    };
+
+    expect(await unhideBundledSkill(fs, 'translate')).toEqual({ ok: true, id: 'translate' });
+    expect(JSON.parse(books.get(DISABLED_BUNDLED_SKILLS_REL)!)).toEqual(['explain']);
+
+    expect(await unhideBundledSkill(fs, 'explain')).toEqual({ ok: true, id: 'explain' });
+    expect(JSON.parse(books.get(DISABLED_BUNDLED_SKILLS_REL)!)).toEqual([]);
   });
 });
