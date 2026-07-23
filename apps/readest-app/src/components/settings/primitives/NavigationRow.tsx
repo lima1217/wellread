@@ -42,23 +42,36 @@ const NavigationRow: React.FC<NavigationRowProps> = ({
       disabled={disabled}
       data-setting-id={dataSettingId}
       className={clsx(
-        'group flex w-full items-center gap-3 py-4 pe-4 text-left',
-        'transition-colors duration-150',
+        // Bleed past BoxedList's ps-4 so hover/press fills the card edge-to-edge;
+        // pe-3.5: optical balance — trailing chevron needs ~2px less than the text side
+        'group -ms-4 flex min-h-14 w-[calc(100%+1rem)] items-center gap-3 py-3.5 ps-4 pe-3.5 text-left',
+        'transition-colors duration-150 ease-out',
+        'hover:bg-base-200/40 active:bg-base-200/60',
         'focus-visible:ring-base-content/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset',
-        disabled && 'cursor-not-allowed opacity-50',
+        disabled && 'cursor-not-allowed opacity-50 hover:bg-transparent active:bg-transparent',
         className,
       )}
     >
       {Icon && (
-        <span className='bg-base-200 text-base-content/70 group-hover:bg-base-300/70 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full transition-colors duration-150'>
-          <Icon className='h-5 w-5' />
+        <span
+          className={clsx(
+            'bg-base-200 text-base-content/70 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
+            'transition-colors duration-150 ease-out',
+            'group-hover:bg-base-300/70',
+          )}
+        >
+          <Icon className='h-5 w-5' aria-hidden='true' />
         </span>
       )}
       <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
         <SettingLabel>{title}</SettingLabel>
         {status && <span className='text-base-content/65 truncate text-[0.85em]'>{status}</span>}
       </div>
-      <MdChevronRight className='text-base-content/50 h-5 w-5 flex-shrink-0' />
+      {/* Optical nudge: MdChevronRight's visual weight sits left of its geometric center */}
+      <MdChevronRight
+        className='text-base-content/50 ms-0.5 h-5 w-5 flex-shrink-0'
+        aria-hidden='true'
+      />
     </button>
   );
 };

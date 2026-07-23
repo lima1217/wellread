@@ -406,14 +406,22 @@ export function shouldPushAgentSessionToStore(input: {
   return agentSessionId !== storeSessionId || storeBookId !== bookId;
 }
 
+/** Pi-style skill slash namespace: `/skill:<id>`. */
+export const SKILL_SLASH_PREFIX = 'skill:';
+
 /**
- * While the composer is typing a leading `/token` (no args yet), return the
- * query after `/`. Once a space (or newline) appears, the menu closes.
+ * While the composer is typing a leading `/…` skill token (no args yet), return
+ * the filter query. `/skill:sum` → `sum`; bare `/sum` still filters. Once a
+ * space (or newline) appears, the menu closes.
  */
 export function getComposerSlashQuery(composer: string): string | null {
   if (!composer.startsWith('/')) return null;
   const after = composer.slice(1);
   if (/[\s\n]/.test(after)) return null;
+  const lower = after.toLowerCase();
+  if (lower.startsWith(SKILL_SLASH_PREFIX)) {
+    return after.slice(SKILL_SLASH_PREFIX.length);
+  }
   return after;
 }
 
@@ -432,11 +440,12 @@ export function filterSkillsForSlash<T extends { id: string; name: string; descr
   });
 }
 
-/** Replace a leading `/partial` with `/id ` (trailing space for optional args). */
+/** Replace a leading `/partial` with `/skill:<id> ` (trailing space for optional args). */
 export function applySlashSkillSelection(composer: string, skillId: string): string {
-  if (!composer.startsWith('/')) return `/${skillId} `;
+  const inserted = `/${SKILL_SLASH_PREFIX}${skillId}`;
+  if (!composer.startsWith('/')) return `${inserted} `;
   const after = composer.slice(1);
   const space = after.search(/\s/);
-  if (space < 0) return `/${skillId} `;
-  return `/${skillId}${after.slice(space)}`;
+  if (space < 0) return `${inserted} `;
+  return `${inserted}${after.slice(space)}`;
 }

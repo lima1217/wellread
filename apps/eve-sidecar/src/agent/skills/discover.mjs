@@ -1,5 +1,5 @@
 /**
- * Skill discovery for Reading Assistant `/` invocation (catalog only).
+ * Skill discovery for Reading Assistant `/skill:<id>` invocation (catalog only).
  *
  * Product root: Books/skills/ ↔ /workspace/skills/
  * Package shape: skills/<id>/SKILL.md with Agent Skills frontmatter.

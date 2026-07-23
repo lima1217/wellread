@@ -24,15 +24,17 @@ const skills: EveSkillSummary[] = [
 ];
 
 describe('getComposerSlashQuery', () => {
-  it('returns the token while typing a leading slash command', () => {
+  it('returns the filter while typing a leading slash command', () => {
     expect(getComposerSlashQuery('/')).toBe('');
     expect(getComposerSlashQuery('/sum')).toBe('sum');
+    expect(getComposerSlashQuery('/skill:')).toBe('');
+    expect(getComposerSlashQuery('/skill:sum')).toBe('sum');
   });
 
   it('closes once args or non-slash text appear', () => {
-    expect(getComposerSlashQuery('/summarize ')).toBeNull();
+    expect(getComposerSlashQuery('/skill:summarize ')).toBeNull();
     expect(getComposerSlashQuery('hello')).toBeNull();
-    expect(getComposerSlashQuery(' /sum')).toBeNull();
+    expect(getComposerSlashQuery(' /skill:sum')).toBeNull();
   });
 });
 
@@ -45,8 +47,11 @@ describe('filterSkillsForSlash', () => {
 });
 
 describe('applySlashSkillSelection', () => {
-  it('replaces the leading token and leaves a trailing space', () => {
-    expect(applySlashSkillSelection('/sum', 'summarize')).toBe('/summarize ');
-    expect(applySlashSkillSelection('/summarize extra', 'summarize')).toBe('/summarize extra');
+  it('replaces the leading token with /skill:<id> and leaves a trailing space', () => {
+    expect(applySlashSkillSelection('/sum', 'summarize')).toBe('/skill:summarize ');
+    expect(applySlashSkillSelection('/skill:sum', 'summarize')).toBe('/skill:summarize ');
+    expect(applySlashSkillSelection('/skill:summarize extra', 'summarize')).toBe(
+      '/skill:summarize extra',
+    );
   });
 });

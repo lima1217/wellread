@@ -9,10 +9,7 @@ import { maybeCompressSession } from './contextCompress.mjs';
 import { isAbortError } from './httpAbort.mjs';
 import { buildSystemPrompt, collectSourcesFromTools } from './prompt.mjs';
 import { maybeApplyFirstTurnTitle } from './sessionStore.mjs';
-import {
-  appendActiveSkillPrompt,
-  resolveSkillForMessage,
-} from './skills/invoke.mjs';
+import { expandSkillCommand } from './skills/invoke.mjs';
 import { createReadingTools } from './tools.mjs';
 import { prepareToolExhaustionStep, resolveMaxToolRounds } from './toolRounds.mjs';
 
@@ -39,6 +36,13 @@ export async function runTurn(input) {
   const { model, session, userMessage, getBooksRoot, onEvent, abortSignal } = input;
   const persistSession = input.persistSession;
   const thinkingMode = normalizeThinkingMode(input.thinkingMode);
+  // Session / UI keep the slash form; only the model turn is expanded (Pi-style).
+  let modelUserMessage = userMessage;
+  try {
+    modelUserMessage = expandSkillCommand(userMessage, getBooksRoot()).modelMessage;
+  } catch {
+    // Missing books root or FS errors: send the original slash text.
+  }
   const userId = `msg_${randomBytes(6).toString('hex')}`;
   const userMsg = {
     id: userId,
@@ -53,18 +57,10 @@ export async function runTurn(input) {
     return finishAborted(session, userId, onEvent, persistSession);
   }
 
-  let system = buildSystemPrompt({
+  const system = buildSystemPrompt({
     bookId: session.bookId,
     bookTitle: session.bookTitle,
   });
-  try {
-    const skill = resolveSkillForMessage(userMessage, getBooksRoot());
-    if (skill) {
-      system = appendActiveSkillPrompt(system, skill);
-    }
-  } catch {
-    // Missing books root or FS errors: continue without a skill mount.
-  }
 
   const contextWindowTokens =
     Number(input.contextWindowTokens) > 0
@@ -136,7 +132,7 @@ export async function runTurn(input) {
         const result = streamText({
           model,
           system,
-          messages: [...history, { role: 'user', content: userMessage }],
+          messages: [...history, { role: 'user', content: modelUserMessage }],
           tools,
           abortSignal,
           // N tool-capable steps + 1 soft-landing answer (tools disabled).

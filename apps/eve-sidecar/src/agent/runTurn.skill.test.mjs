@@ -17,7 +17,7 @@ function emptySession() {
   };
 }
 
-function captureSystemModel(sink) {
+function capturePromptModel(sink) {
   return {
     specificationVersion: 'v2',
     provider: 'test',
@@ -63,8 +63,29 @@ function systemTextFromPrompt(prompt) {
   return JSON.stringify(prompt);
 }
 
-describe('runTurn skill mount', () => {
-  it('injects Active skill into the system prompt for /id messages', async () => {
+/** Collect user-role text parts from an AI SDK prompt capture. */
+function userTextsFromPrompt(prompt) {
+  const texts = [];
+  if (!Array.isArray(prompt)) return texts;
+  for (const part of prompt) {
+    if (!part || part.role !== 'user') continue;
+    if (typeof part.content === 'string') {
+      texts.push(part.content);
+      continue;
+    }
+    if (Array.isArray(part.content)) {
+      for (const block of part.content) {
+        if (block && block.type === 'text' && typeof block.text === 'string') {
+          texts.push(block.text);
+        }
+      }
+    }
+  }
+  return texts;
+}
+
+describe('runTurn skill expansion', () => {
+  it('expands /skill:id into the user message for the model, not the system prompt', async () => {
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-runturn-skill-')));
     try {
       mkdirSync(join(booksRoot, 'skills', 'summarize'), { recursive: true });
@@ -74,33 +95,45 @@ describe('runTurn skill mount', () => {
       );
       const sink = {};
       const events = [];
+      const session = emptySession();
       await runTurn({
-        model: captureSystemModel(sink),
-        session: emptySession(),
-        userMessage: '/summarize this chapter',
+        model: capturePromptModel(sink),
+        session,
+        userMessage: '/skill:summarize this chapter',
         getBooksRoot: () => booksRoot,
         onEvent: (e) => events.push(e),
         tools: {},
         generateTextFn: async () => ({ text: '', usage: {} }),
       });
       const system = systemTextFromPrompt(sink.prompt);
-      assert.match(system, /## Active skill \/summarize \(Summarize\)/);
-      assert.match(system, /Be concise about the chapter/);
-      assert.equal(events.some((e) => e.type === 'message.user'), true);
+      assert.doesNotMatch(system, /## Active skill/);
+      assert.doesNotMatch(system, /Be concise about the chapter/);
+
+      const userTexts = userTextsFromPrompt(sink.prompt);
+      assert.equal(userTexts.length >= 1, true);
+      const modelUser = userTexts[userTexts.length - 1] || '';
+      assert.match(modelUser, /^<skill name="summarize"/);
+      assert.match(modelUser, /Be concise about the chapter/);
+      assert.match(modelUser, /\n\nthis chapter$/);
+
+      // Session / wire event keep the slash short form for UI.
+      assert.equal(session.messages[0]?.content, '/skill:summarize this chapter');
+      const userEvent = events.find((e) => e.type === 'message.user');
+      assert.equal(userEvent?.content, '/skill:summarize this chapter');
     } finally {
       rmSync(booksRoot, { recursive: true, force: true });
     }
   });
 
-  it('does not mount when the slash id is unknown', async () => {
+  it('does not expand when the slash id is unknown', async () => {
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-runturn-skill-')));
     try {
       mkdirSync(join(booksRoot, 'skills'), { recursive: true });
       const sink = {};
       await runTurn({
-        model: captureSystemModel(sink),
+        model: capturePromptModel(sink),
         session: emptySession(),
-        userMessage: '/nope',
+        userMessage: '/skill:nope',
         getBooksRoot: () => booksRoot,
         onEvent: () => {},
         tools: {},
@@ -108,6 +141,8 @@ describe('runTurn skill mount', () => {
       });
       const system = systemTextFromPrompt(sink.prompt);
       assert.doesNotMatch(system, /## Active skill/);
+      const userTexts = userTextsFromPrompt(sink.prompt);
+      assert.equal(userTexts.at(-1), '/skill:nope');
     } finally {
       rmSync(booksRoot, { recursive: true, force: true });
     }

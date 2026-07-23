@@ -43,5 +43,5 @@ _Avoid_: ModelConfig（旧单轨名，已被多 profile 取代）、aiSettings, 
 
 ## Skill（助手技能包）
 
-用户日后用 Reading Assistant 输入框 `/` 调用的扩展能力包。宿主路径 `Books/skills/<id>/SKILL.md`，模型路径 `/workspace/skills/<id>/SKILL.md`；`SKILL.md` 为 Agent Skills 形（YAML frontmatter 的 `name`/`description` + 正文 instructions）。发现由 eve sidecar 扫该目录（`GET /eve/v1/skills`）；composer 输入 `/` 时补全；发送以 `/id` 开头的消息时 sidecar 将该 skill 的 instructions 挂进当轮 system prompt。不进内建芯片；不映射 `$HOME/.agents/skills`；不经 `reedy_skills`。
+用户日后用 Reading Assistant 输入框 `/` 调用的扩展能力包。宿主路径 `Books/skills/<id>/SKILL.md`，模型路径 `/workspace/skills/<id>/SKILL.md`；`SKILL.md` 为 Agent Skills 形（YAML frontmatter 的 `name`/`description` + 正文 instructions）。发现由 eve sidecar 扫该目录（`GET /eve/v1/skills`）；composer 输入 `/` 时补全为 `/skill:<id>`；发送以 `/skill:<id>` 开头的消息时 sidecar 在发给模型前把完整 instructions 展开进当轮 user message（`<skill name="…" location="…">…</skill>` + args），session/UI 仍保留 `/skill:<id>` 短形式。不进内建芯片；不映射 `$HOME/.agents/skills`；不经 `reedy_skills`。
 _Avoid_: 快捷动作芯片、把 skill 塞进 `.wellread/` 当主根、SkillRegistry / reedy_skills 表
