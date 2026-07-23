@@ -42,8 +42,8 @@ export function parseSkillMd(raw: string): {
     fields[m[1]!] = unquoteYamlScalar(m[2]!.trim());
   }
 
-  const name = (fields.name || '').trim();
-  const description = (fields.description || '').trim();
+  const name = (fields['name'] || '').trim();
+  const description = (fields['description'] || '').trim();
   if (!name || !description) return null;
 
   return {
