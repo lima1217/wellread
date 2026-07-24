@@ -92,6 +92,71 @@ function userTextsFromPrompt(prompt) {
 }
 
 describe('runTurn skill expansion', () => {
+  it('puts Pending Quotes into reading_context and expands /skill: without quote blocks', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-runturn-skill-')));
+    try {
+      mkdirSync(join(booksRoot, 'skills', 'summarize'), { recursive: true });
+      writeFileSync(
+        join(booksRoot, 'skills', 'summarize', 'SKILL.md'),
+        '---\nname: Summarize\ndescription: Summary\n---\nBe concise about the chapter.\n',
+      );
+      const sink = {};
+      const session = emptySession();
+      const wire =
+        '> Call me Ishmael.\n> — 《Loomings》\n\n/skill:summarize this chapter';
+      await runTurn({
+        model: capturePromptModel(sink),
+        session,
+        userMessage: wire,
+        getBooksRoot: () => booksRoot,
+        onEvent: () => {},
+        tools: {},
+        readerState: { chapter: 'Loomings', cfi: 'epubcfi(/6/2!)' },
+        generateTextFn: async () => ({ text: '', usage: {} }),
+      });
+      const system = systemTextFromPrompt(sink.prompt);
+      assert.match(system, /<reading_context>/);
+      assert.match(system, /Call me Ishmael/);
+      assert.match(system, /position: \(client-reported, may be stale\)/);
+      assert.match(system, /epubcfi\(\/6\/2!\)/);
+
+      const userTexts = userTextsFromPrompt(sink.prompt);
+      const modelUser = userTexts[userTexts.length - 1] || '';
+      assert.match(modelUser, /^<skill name="summarize"/);
+      assert.doesNotMatch(modelUser, /^>/);
+      assert.doesNotMatch(modelUser, /Call me Ishmael/);
+      assert.equal(session.messages[0]?.content, wire);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps quote-only turns quote-free in model user text (envelope only)', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-runturn-quote-')));
+    try {
+      const sink = {};
+      const session = emptySession();
+      const wire = '> Call me Ishmael.\n> — 《Loomings》';
+      await runTurn({
+        model: capturePromptModel(sink),
+        session,
+        userMessage: wire,
+        getBooksRoot: () => booksRoot,
+        onEvent: () => {},
+        tools: {},
+        generateTextFn: async () => ({ text: 'ok', usage: {} }),
+      });
+      const system = systemTextFromPrompt(sink.prompt);
+      assert.match(system, /Call me Ishmael/);
+      const userTexts = userTextsFromPrompt(sink.prompt);
+      const modelUser = userTexts[userTexts.length - 1] || '';
+      assert.equal(modelUser, '');
+      assert.doesNotMatch(modelUser, /Call me Ishmael/);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+
   it('expands /skill:id into the user message and lists the skill in the system catalog', async () => {
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-runturn-skill-')));
     try {

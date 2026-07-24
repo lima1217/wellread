@@ -146,10 +146,68 @@ export function buildCompressPrompt(input) {
   const maxChars = Math.max(200, input.summaryBudgetTokens * 4);
   return [
     `Compress the reading-assistant chat about "${title}" into a continuity summary for a future turn.`,
-    'Keep: user goals, key questions, conclusions, named characters/plot points, CFIs or chapter refs, unresolved threads.',
-    'Drop: chit-chat and repeated tool narration.',
-    `At most ${maxChars} characters. Plain prose, no markdown headings.`,
+    'Output exactly these labeled lines (omit a line only if empty):',
+    'goals: …',
+    'conclusions: …',
+    'open_questions: …',
+    'cfi_refs: …',
+    'Keep: user goals, key conclusions, named characters/plot points, CFIs or chapter refs, unresolved threads.',
+    'Drop: chit-chat, repeated tool narration, and tool errors that were later resolved.',
+    `At most ${maxChars} characters total. Plain labeled lines only — no markdown headings, no bullet lists.`,
   ].join(' ');
+}
+
+/**
+ * Normalize summarizer output into the labeled continuity block stored on disk.
+ * Accepts already-labeled text or free prose (falls back to conclusions:).
+ * @param {string} raw
+ * @returns {string}
+ */
+export function formatStructuredSummary(raw) {
+  const text = typeof raw === 'string' ? raw.trim() : '';
+  if (!text) return '';
+
+  const fields = {
+    goals: '',
+    conclusions: '',
+    open_questions: '',
+    cfi_refs: '',
+  };
+  const labelRe =
+    /^(goals|conclusions|open_questions|cfi_refs)\s*:\s*/i;
+  /** @type {keyof typeof fields | null} */
+  let current = null;
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(labelRe);
+    if (m) {
+      current = /** @type {keyof typeof fields} */ (m[1].toLowerCase());
+      fields[current] = line.slice(m[0].length).trim();
+      continue;
+    }
+    if (current && line.trim()) {
+      fields[current] = fields[current]
+        ? `${fields[current]} ${line.trim()}`
+        : line.trim();
+    }
+  }
+
+  const hasLabeled = Object.values(fields).some(Boolean);
+  if (!hasLabeled) {
+    fields.conclusions = text.replace(/\s+/g, ' ').trim();
+  }
+
+  /** @type {string[]} */
+  const lines = [];
+  for (const key of /** @type {const} */ ([
+    'goals',
+    'conclusions',
+    'open_questions',
+    'cfi_refs',
+  ])) {
+    const v = fields[key].replace(/\s+/g, ' ').trim();
+    if (v) lines.push(`${key}: ${v}`);
+  }
+  return lines.join('\n');
 }
 
 /**
@@ -214,6 +272,8 @@ export async function maybeCompressSession(input) {
     });
     return false;
   }
+
+  summaryText = formatStructuredSummary(summaryText);
 
   const summaryId = `msg_${randomBytes(6).toString('hex')}`;
   input.session.messages = applyCompressionPlan({

@@ -16,6 +16,7 @@ import {
 } from '../createModel.mjs';
 import { createHttpAbort } from '../agent/httpAbort.mjs';
 import { createSessionStore } from '../agent/sessionStore.mjs';
+import { isSafeBookIdSegment } from '../agent/prompt.mjs';
 import { runTurn } from '../agent/runTurn.mjs';
 import { discoverSkills } from '../agent/skills/discover.mjs';
 import { resolveLoopbackToken } from './loopbackToken.mjs';
@@ -117,6 +118,28 @@ function sendBodyError(res, req, error) {
   return false;
 }
 
+/**
+ * Optional client reading position for the reading-context envelope.
+ * @param {unknown} raw
+ * @returns {{ chapter?: string, cfi?: string } | null}
+ */
+function normalizeReaderState(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const chapter =
+    typeof /** @type {{ chapter?: unknown }} */ (raw).chapter === 'string'
+      ? /** @type {{ chapter: string }} */ (raw).chapter.trim()
+      : '';
+  const cfi =
+    typeof /** @type {{ cfi?: unknown }} */ (raw).cfi === 'string'
+      ? /** @type {{ cfi: string }} */ (raw).cfi.trim()
+      : '';
+  if (!chapter && !cfi) return null;
+  return {
+    ...(chapter ? { chapter } : {}),
+    ...(cfi ? { cfi } : {}),
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   // Preflight before auth — browsers omit Authorization on OPTIONS.
   if (req.method === 'OPTIONS') {
@@ -186,6 +209,10 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: 'bookId_required' }, req);
         return;
       }
+      if (!isSafeBookIdSegment(body.bookId)) {
+        sendJson(res, 400, { error: 'bookId_invalid' }, req);
+        return;
+      }
       const session = sessions.create({
         bookId: body.bookId,
         bookTitle: body.bookTitle,
@@ -252,6 +279,7 @@ const server = http.createServer(async (req, res) => {
           return;
         }
         const thinkingMode = normalizeThinkingMode(body.thinkingMode);
+        const readerState = normalizeReaderState(body.readerState);
 
         res.writeHead(200, {
           'content-type': 'application/x-ndjson; charset=utf-8',
@@ -282,6 +310,7 @@ const server = http.createServer(async (req, res) => {
             abortSignal,
             contextWindowTokens: modelContextWindowTokens,
             thinkingMode,
+            readerState,
             persistSession: (s) => sessions.save(s),
           });
           sessions.save(session);

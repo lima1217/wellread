@@ -514,6 +514,14 @@ const ReadingAssistantChat = ({
     bookTitle,
     sessionId,
     thinkingMode,
+    getReaderState: () => {
+      const progress = useReaderStore.getState().getProgress(bookKey);
+      if (!progress?.location && !progress?.sectionLabel) return null;
+      return {
+        ...(progress.sectionLabel ? { chapter: progress.sectionLabel } : {}),
+        ...(progress.location ? { cfi: progress.location } : {}),
+      };
+    },
   });
 
   const [skills, setSkills] = useState<EveSkillSummary[]>([]);

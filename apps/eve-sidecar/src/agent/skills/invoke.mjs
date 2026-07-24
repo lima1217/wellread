@@ -5,6 +5,7 @@
 
 import { join } from 'node:path';
 import { WORKSPACE_ROOT } from '../../books/scopedFs.mjs';
+import { peelLeadingQuoteWire } from '../prompt.mjs';
 import {
   SKILLS_DIR,
   isRegularSkillDir,
@@ -34,7 +35,7 @@ import {
 export function parseSlashInvocation(message) {
   if (typeof message !== 'string') return null;
   const trimmed = message.trim();
-  const candidate = slashCandidateFromTurn(trimmed);
+  const candidate = peelLeadingQuoteWire(trimmed).content;
   const match = candidate.match(/^\/skill:([A-Za-z0-9][A-Za-z0-9_-]*)(?:\s+([\s\S]*))?$/);
   if (!match) return null;
   return {
@@ -44,43 +45,12 @@ export function parseSlashInvocation(message) {
 }
 
 /**
- * Pending Quote wire puts `> …` blocks before the question. Slash commands
- * live in the question only. Mirrors client `parsePendingQuotesFromWire`:
- * peel leading quote blocks; the remainder (joined) is the question.
- * @param {string} trimmed
- */
-function slashCandidateFromTurn(trimmed) {
-  if (!trimmed.startsWith('>')) return trimmed;
-  const parts = trimmed.split(/\n\n+/);
-  let i = 0;
-  for (; i < parts.length; i++) {
-    const block = (parts[i] || '').trim();
-    if (!block) continue;
-    const lines = block.split('\n');
-    if (!lines.every((line) => line.startsWith('>'))) break;
-  }
-  return parts.slice(i).join('\n\n').trim();
-}
-
-/**
  * Keep leading Pending Quote blocks; replace the question (slash) segment.
  * @param {string} message
  * @param {string} expandedQuestion
  */
 function replaceSlashQuestion(message, expandedQuestion) {
-  const trimmed = typeof message === 'string' ? message.trim() : '';
-  if (!trimmed.startsWith('>')) return expandedQuestion;
-
-  const parts = trimmed.split(/\n\n+/);
-  const quoteParts = [];
-  let i = 0;
-  for (; i < parts.length; i++) {
-    const block = (parts[i] || '').trim();
-    if (!block) continue;
-    const lines = block.split('\n');
-    if (!lines.every((line) => line.startsWith('>'))) break;
-    quoteParts.push(parts[i]);
-  }
+  const { quoteParts } = peelLeadingQuoteWire(message);
   if (quoteParts.length === 0) return expandedQuestion;
   return [...quoteParts, expandedQuestion].join('\n\n');
 }

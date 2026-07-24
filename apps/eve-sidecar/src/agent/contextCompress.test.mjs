@@ -7,6 +7,8 @@ import {
   estimateTokens,
   planCompression,
   applyCompressionPlan,
+  buildCompressPrompt,
+  formatStructuredSummary,
 } from './contextCompress.mjs';
 
 describe('contextCompress estimates', () => {
@@ -123,6 +125,49 @@ describe('applyCompressionPlan', () => {
     assert.match(next[0].content, /Prior chat/);
     assert.equal(next[0].compacted, true);
     assert.equal(next[1].id, 'c');
+  });
+});
+
+describe('formatStructuredSummary / buildCompressPrompt', () => {
+  it('asks for labeled fields and drops resolved tool errors', () => {
+    const prompt = buildCompressPrompt({
+      bookTitle: 'Moby Dick',
+      summaryBudgetTokens: 100,
+    });
+    assert.match(prompt, /goals:/);
+    assert.match(prompt, /conclusions:/);
+    assert.match(prompt, /open_questions:/);
+    assert.match(prompt, /cfi_refs:/);
+    assert.match(prompt, /tool errors that were later resolved/i);
+  });
+
+  it('normalizes labeled summarizer output', () => {
+    const out = formatStructuredSummary(
+      'goals: understand Ahab\nconclusions: He hunts the whale\nopen_questions: Why?\ncfi_refs: epubcfi(/6/2!)',
+    );
+    assert.equal(
+      out,
+      [
+        'goals: understand Ahab',
+        'conclusions: He hunts the whale',
+        'open_questions: Why?',
+        'cfi_refs: epubcfi(/6/2!)',
+      ].join('\n'),
+    );
+  });
+
+  it('wraps free prose as conclusions', () => {
+    assert.equal(
+      formatStructuredSummary('User asked about Ahab.'),
+      'conclusions: User asked about Ahab.',
+    );
+  });
+
+  it('omits empty labeled lines', () => {
+    assert.equal(
+      formatStructuredSummary('goals: find theme\nconclusions:\nopen_questions:'),
+      'goals: find theme',
+    );
   });
 });
 

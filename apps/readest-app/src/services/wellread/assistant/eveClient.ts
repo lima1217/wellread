@@ -11,6 +11,12 @@ export type EveSource = {
   path?: string;
 };
 
+/** Client-reported reading position for the sidecar reading-context envelope. */
+export type EveReaderState = {
+  chapter?: string;
+  cfi?: string;
+};
+
 export type EveToolTrace = {
   id: string;
   name: string;
@@ -170,14 +176,25 @@ export async function* streamEveTurn(
   sessionId: string,
   message: string,
   signal?: AbortSignal,
-  options?: { thinkingMode?: ThinkingMode },
+  options?: {
+    thinkingMode?: ThinkingMode;
+    readerState?: EveReaderState | null;
+  },
 ): AsyncGenerator<EveStreamEvent> {
   const { baseUrl, token } = base();
   const thinkingMode = options?.thinkingMode === 'think' ? 'think' : 'fast';
+  const readerState = options?.readerState ?? undefined;
+  const body: Record<string, unknown> = { message, thinkingMode };
+  if (readerState && (readerState.chapter || readerState.cfi)) {
+    body.readerState = {
+      ...(readerState.chapter ? { chapter: readerState.chapter } : {}),
+      ...(readerState.cfi ? { cfi: readerState.cfi } : {}),
+    };
+  }
   const res = await eveFetch(`${baseUrl}/eve/v1/sessions/${encodeURIComponent(sessionId)}/turns`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...authHeaders(token) },
-    body: JSON.stringify({ message, thinkingMode }),
+    body: JSON.stringify(body),
     signal,
   });
   if (!res.ok || !res.body) {

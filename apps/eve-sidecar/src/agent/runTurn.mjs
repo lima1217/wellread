@@ -7,7 +7,16 @@ import { randomBytes } from 'node:crypto';
 import { normalizeThinkingMode, turnFetchContext } from '../createModel.mjs';
 import { maybeCompressSession } from './contextCompress.mjs';
 import { isAbortError } from './httpAbort.mjs';
-import { buildSystemPrompt, collectSourcesFromTools } from './prompt.mjs';
+import {
+  appendReadingContext,
+  buildReadingContextEnvelope,
+  buildSystemPrompt,
+  collectPriorSources,
+  collectSourcesFromTools,
+  listNotesIndex,
+  parsePendingQuotesFromWire,
+  stripLeadingQuoteBlocks,
+} from './prompt.mjs';
 import { maybeApplyFirstTurnTitle } from './sessionStore.mjs';
 import { discoverSkills } from './skills/discover.mjs';
 import { expandSkillCommand } from './skills/invoke.mjs';
@@ -28,6 +37,7 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   abortSignal?: AbortSignal,
  *   contextWindowTokens?: number,
  *   thinkingMode?: 'think' | 'fast',
+ *   readerState?: { chapter?: string | null, cfi?: string | null } | null,
  *   generateTextFn?: import('ai').generateText,
  *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
  *   tools?: import('ai').ToolSet,
@@ -37,13 +47,17 @@ export async function runTurn(input) {
   const { model, session, userMessage, getBooksRoot, onEvent, abortSignal } = input;
   const persistSession = input.persistSession;
   const thinkingMode = normalizeThinkingMode(input.thinkingMode);
+  const { quotes: turnQuotes } = parsePendingQuotesFromWire(userMessage);
   // Session / UI keep the slash form; only the model turn is expanded (Pi-style).
+  // Quotes move into <reading_context>; model user text is quote-free.
   let modelUserMessage = userMessage;
   try {
     modelUserMessage = expandSkillCommand(userMessage, getBooksRoot()).modelMessage;
   } catch {
     // Missing books root or FS errors: send the original slash text.
   }
+  // Empty is intentional when the turn is quote-only — quotes live in the envelope.
+  modelUserMessage = stripLeadingQuoteBlocks(modelUserMessage);
   const userId = `msg_${randomBytes(6).toString('hex')}`;
   const userMsg = {
     id: userId,
@@ -59,16 +73,35 @@ export async function runTurn(input) {
   }
 
   let skills = [];
+  let booksRoot = '';
   try {
-    skills = discoverSkills({ booksRoot: getBooksRoot() });
+    booksRoot = getBooksRoot();
+    skills = discoverSkills({ booksRoot });
   } catch {
-    // Missing books root or FS errors: omit catalog.
+    // Missing books root or FS errors: omit catalog / notes index.
   }
-  const system = buildSystemPrompt({
+  const priorSources = collectPriorSources(
+    session.messages.filter((m) => m.id !== userId),
+  );
+  const notesIndex = booksRoot
+    ? listNotesIndex(booksRoot, session.bookId)
+    : [];
+  const envelope = buildReadingContextEnvelope({
     bookId: session.bookId,
     bookTitle: session.bookTitle,
-    skills,
+    readerState: input.readerState,
+    quotes: turnQuotes,
+    priorSources,
+    notesIndex,
   });
+  const system = appendReadingContext(
+    buildSystemPrompt({
+      bookId: session.bookId,
+      bookTitle: session.bookTitle,
+      skills,
+    }),
+    envelope,
+  );
 
   const contextWindowTokens =
     Number(input.contextWindowTokens) > 0

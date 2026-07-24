@@ -8,6 +8,7 @@ import {
   getEveSession,
   streamEveTurn,
   type EveMessage,
+  type EveReaderState,
   type EveToolTrace,
   type ThinkingMode,
 } from './eveClient';
@@ -22,6 +23,8 @@ export type UseEveAgentOptions = {
   sessionId?: string | null;
   /** Composer Thinking Mode for the next turn (default fast). */
   thinkingMode?: ThinkingMode;
+  /** Optional snapshot of the reader's current chapter/CFI for this turn. */
+  getReaderState?: () => EveReaderState | null | undefined;
 };
 
 export type SendTurnInput = {
@@ -36,7 +39,7 @@ export type SendTurnInput = {
  * Lightweight useEveAgent-shaped hook over the wellread eve-compatible sidecar.
  */
 export function useEveAgent(options: UseEveAgentOptions) {
-  const { bookId, bookTitle, sessionId } = options;
+  const { bookId, bookTitle, sessionId, getReaderState } = options;
   const thinkingMode: ThinkingMode = options.thinkingMode === 'think' ? 'think' : 'fast';
   const [messages, setMessages] = useState<EveMessage[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionId ?? null);
@@ -50,6 +53,9 @@ export function useEveAgent(options: UseEveAgentOptions) {
   /** Session this hook instance created during send — skip disk reload for that id. */
   const createdSessionIdRef = useRef<string | null>(null);
   const loadedSessionIdRef = useRef<string | null | undefined>(undefined);
+  /** Always call latest getReaderState without putting it in sendTurn deps. */
+  const getReaderStateRef = useRef(getReaderState);
+  getReaderStateRef.current = getReaderState;
 
   useEffect(() => {
     let cancelled = false;
@@ -195,8 +201,10 @@ export function useEveAgent(options: UseEveAgentOptions) {
       let needsReconcile = false;
 
       try {
+        const readerState = getReaderStateRef.current?.() ?? undefined;
         for await (const event of streamEveTurn(sessionIdForTurn, wireText, controller.signal, {
           thinkingMode,
+          readerState: readerState ?? undefined,
         })) {
           if (event.type === 'message.user') {
             userCommitted = true;
