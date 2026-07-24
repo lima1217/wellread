@@ -46,8 +46,7 @@ benchmark should:
 - To benchmark upstream libraries' performance (e.g., raw Turso function
   throughput). That belongs in the upstream project's bench suite.
 - To gate CI on performance thresholds. CI variance makes that flaky; use
-  production telemetry (`reedy_metrics` table) for regression detection
-  against real workloads.
+  production telemetry for regression detection against real workloads.
 
 ## Existing benchmarks
 

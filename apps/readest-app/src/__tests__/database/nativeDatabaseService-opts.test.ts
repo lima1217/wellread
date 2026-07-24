@@ -46,13 +46,13 @@ describe('NativeDatabaseService.open forwards opts to tauri-plugin-turso', () =>
   it('translates experimental opts into LoadOptions and forwards as a single object', async () => {
     const { NativeDatabaseService } = await import('@/services/database/nativeDatabaseService');
     const opts: DatabaseOpts = { experimental: ['index_method'] };
-    await NativeDatabaseService.open('sqlite:reedy.db', opts);
+    await NativeDatabaseService.open('sqlite:opts-forward.db', opts);
 
     const mod = await import('tauri-plugin-turso');
     const loadCalls = (mod as unknown as { __loadCalls: Array<string | LoadOptions> }).__loadCalls;
     expect(loadCalls).toHaveLength(1);
     expect(loadCalls[0]).toEqual({
-      path: 'sqlite:reedy.db',
+      path: 'sqlite:opts-forward.db',
       experimental: ['index_method'],
     });
   });

@@ -194,4 +194,9 @@ describe('getMigrations()', () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(0);
   });
+
+  it('does not ship the retired Reedy agent schema', async () => {
+    const { getMigrations } = await import('@/services/database/migrations');
+    expect(getMigrations('reedy')).toEqual([]);
+  });
 });
