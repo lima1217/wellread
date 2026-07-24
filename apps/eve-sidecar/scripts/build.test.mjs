@@ -55,13 +55,25 @@ describe('eve-sidecar build (.output packaging)', () => {
   it('copies bundled-skills next to the server package root', () => {
     const bundled = join(root, '.output', 'bundled-skills');
     const ids = readdirSync(bundled);
-    for (const id of ['explain', 'grill-me', 'socratic-check', 'translate']) {
+    for (const id of ['explain', 'grill-me', 'note', 'socratic-check', 'translate']) {
       assert.ok(ids.includes(id), `expected bundled skill ${id}`);
       assert.ok(
         existsSync(join(bundled, id, 'SKILL.md')),
         `expected ${id}/SKILL.md in .output/bundled-skills`,
       );
     }
+    assert.ok(
+      existsSync(join(bundled, 'note', 'PACKAGE.md')),
+      'expected note/PACKAGE.md in .output/bundled-skills',
+    );
+    assert.ok(
+      existsSync(join(bundled, 'note', 'AGENTS.md')),
+      'expected note/AGENTS.md in .output/bundled-skills',
+    );
+    assert.ok(
+      existsSync(join(bundled, 'note', 'tools', 'validate_okf_wiki.py')),
+      'expected note/tools/validate_okf_wiki.py in .output/bundled-skills',
+    );
   });
 
   it('starts and prints a loopback listen URL with only packaged modules', async () => {

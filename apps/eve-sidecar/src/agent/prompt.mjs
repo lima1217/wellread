@@ -5,12 +5,18 @@
 
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
+import { isSafeBookIdSegment } from './notesOkf.mjs';
+
+export { isSafeBookIdSegment } from './notesOkf.mjs';
 
 /** Max prior CFI sources replayed into the reading-context envelope. */
 export const PRIOR_SOURCES_MAX = 12;
 
 /** Max note file paths listed in the envelope (names only). */
 export const NOTES_INDEX_MAX = 24;
+
+/** Cap filesystem visits while building notes_index (DoS / large OKF trees). */
+export const NOTES_INDEX_WALK_MAX = 400;
 
 /** Max chars per Pending Quote text in the envelope. */
 export const ENVELOPE_QUOTE_TEXT_MAX = 500;
@@ -33,7 +39,7 @@ export function buildSystemPrompt(input) {
     `Current book: "${title}" (bookId=${input.bookId}).`,
     `Extract: ${extractRoot} — you may use glob, grep, and read_file on that tree when helpful; UTF-8 extract text only (not epub/pdf binaries).`,
     "Grounding is optional: answer freely when you already know enough; search the extract when you need this book's text; cite locations when you reference specific passages.",
-    `Notes: ${notesRoot} — write_file only on an explicit user ask to save; use fixed paths (summary.md, outline.md, chapters/<slug>.md) and overwrite in place; no confirmation prompts.`,
+    `Notes: ${notesRoot} — this book's notes wiki (OKF tree: index.md, log.md, sources|chapters|concepts|frameworks|claims|glossary|questions). Read with glob/grep/read_file; write_file only on an explicit user ask to save; overwrite in place; no confirmation prompts. AGENTS.md and tools/validators live under /workspace/skills/note/ (read-only); do not write_file them into notes.`,
     'When you cite a passage, write a markdown link: [section title](<epubcfi(...)>) using the full chunk frontmatter cfi including the epubcfi(…) wrapper (angle brackets required). Never write bare paths like cfi: /6/… and never wrap cfi in backticks — the reader jumps from the link.',
     "Reply in the user's language. Plain prose only — no emoji.",
     'Answer with mounted tools only; translation pipelines, wiki packs, and cross-book search are unavailable until mounted.',
@@ -154,20 +160,9 @@ export function collectPriorSources(messages, max = PRIOR_SOURCES_MAX) {
 }
 
 /**
- * bookId must be a single path segment (no separators / traversal).
- * @param {unknown} bookId
- */
-export function isSafeBookIdSegment(bookId) {
-  if (typeof bookId !== 'string' || !bookId) return false;
-  if (bookId !== bookId.trim()) return false;
-  if (bookId === '.' || bookId === '..') return false;
-  if (/[/\\]/.test(bookId)) return false;
-  if (/[\r\n\u0000]/.test(bookId)) return false;
-  return true;
-}
-
-/**
- * List note file paths relative to the book notes root (names only, no body).
+ * List note .md paths relative to the book notes root (names only, no body).
+ * Prefers navigation spine (root index.md, then dir index.md) before content
+ * pages so NOTES_INDEX_MAX does not bury the OKF entry points. Walk is capped.
  * @param {string} booksRoot
  * @param {string} bookId
  * @param {number} [max]
@@ -180,23 +175,53 @@ export function listNotesIndex(booksRoot, bookId, max = NOTES_INDEX_MAX) {
   const root = resolve(join(notesBase, bookId));
   if (root !== notesBase && !root.startsWith(`${notesBase}${sep}`)) return [];
   /** @type {string[]} */
-  const files = [];
+  const spine = [];
+  /** @type {string[]} */
+  const rest = [];
+  const state = { visited: 0, stop: false };
   try {
-    walkNotes(root, root, files, limit);
+    walkNotes(root, root, spine, rest, state);
   } catch {
     return [];
   }
-  return files;
+  const byName = (a, b) => a.localeCompare(b);
+  spine.sort((a, b) => {
+    const d = notesIndexRank(a) - notesIndexRank(b);
+    return d !== 0 ? d : byName(a, b);
+  });
+  rest.sort(byName);
+  return [...spine, ...rest].slice(0, limit);
+}
+
+/** Root spine first, then per-directory index.md, then other pages. */
+function notesIndexRank(rel) {
+  if (rel === 'index.md') return 0;
+  if (rel.endsWith('/index.md')) return 10;
+  return 100;
+}
+
+/**
+ * @param {string} rel posix-relative path under notes root
+ */
+function isNotesIndexCandidate(rel) {
+  if (!rel || rel.startsWith('..') || /[\r\n\u0000]/.test(rel)) return false;
+  if (!rel.toLowerCase().endsWith('.md')) return false;
+  const parts = rel.split('/');
+  if (parts[0] === 'tools') return false;
+  if (parts[parts.length - 1] === 'log.md') return false;
+  if (parts[parts.length - 1] === 'AGENTS.md') return false;
+  return true;
 }
 
 /**
  * @param {string} dir
  * @param {string} root
- * @param {string[]} out
- * @param {number} limit
+ * @param {string[]} spine
+ * @param {string[]} rest
+ * @param {{ visited: number, stop: boolean }} state
  */
-function walkNotes(dir, root, out, limit) {
-  if (out.length >= limit) return;
+function walkNotes(dir, root, spine, rest, state) {
+  if (state.stop) return;
   let entries;
   try {
     entries = readdirSync(dir, { withFileTypes: true });
@@ -205,23 +230,29 @@ function walkNotes(dir, root, out, limit) {
   }
   entries.sort((a, b) => a.name.localeCompare(b.name));
   for (const ent of entries) {
-    if (out.length >= limit) return;
+    if (state.stop) return;
     if (ent.name.startsWith('.')) continue;
+    if (ent.name === 'tools' && ent.isDirectory()) continue;
     const abs = join(dir, ent.name);
     if (ent.isDirectory()) {
-      walkNotes(abs, root, out, limit);
+      walkNotes(abs, root, spine, rest, state);
       continue;
     }
     if (!ent.isFile()) continue;
+    state.visited += 1;
+    if (state.visited > NOTES_INDEX_WALK_MAX) {
+      state.stop = true;
+      return;
+    }
     try {
       if (!statSync(abs).isFile()) continue;
     } catch {
       continue;
     }
     const rel = relative(root, abs).split('\\').join('/');
-    // Skip traversal escapes and control chars that would break envelope lines.
-    if (!rel || rel.startsWith('..') || /[\r\n\u0000]/.test(rel)) continue;
-    out.push(rel);
+    if (!isNotesIndexCandidate(rel)) continue;
+    if (notesIndexRank(rel) < 100) spine.push(rel);
+    else rest.push(rel);
   }
 }
 
@@ -421,8 +452,9 @@ export function collectSourcesFromTools(tools) {
   const seen = new Set();
   for (const t of tools) {
     if (t.name !== 'read_file' || !t.result || typeof t.result !== 'object') continue;
-    const result = /** @type {{ path?: string, content?: string | null }} */ (t.result);
-    if (!result.content) continue;
+    const result =
+      /** @type {{ ok?: boolean, path?: string, content?: string | null }} */ (t.result);
+    if (result.ok === false || !result.content) continue;
     for (const src of extractSourcesFromChunkMarkdown(result.content, result.path)) {
       if (seen.has(src.cfi)) continue;
       seen.add(src.cfi);

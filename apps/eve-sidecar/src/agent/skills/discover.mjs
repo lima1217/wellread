@@ -2,18 +2,20 @@
  * Skill discovery for Reading Assistant `/skill:<id>` invocation (catalog only).
  *
  * Layers:
- *   user:    Books/skills/<id>/SKILL.md  (source: 'user')
- *   bundled: <sidecar>/bundled-skills/<id>/SKILL.md  (source: 'bundled')
+ *   user:    Books/skills/<id>/…  (source: 'user'; catalog path …/SKILL.md)
+ *   bundled: <sidecar>/bundled-skills/<id>/…  (source: 'bundled')
  * Same id: user wins. Disabled bundled ids live in
  * Books/.wellread/disabled-bundled-skills.json (ignored when a user package exists).
+ * Sandbox may read_file package files; PACKAGE.md / AGENTS.md / tools/* always
+ * prefer the bundled copy (user Books overlay ignored for those paths).
  *
  * Catalog results are cached in-process and invalidated when the catalog stamp
  * changes or via {@link invalidateSkillsCache}.
  */
 
 import { lstatSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import { WORKSPACE_ROOT, WRITABLE_DIR } from '../../books/scopedFs.mjs';
+import { join, resolve, sep } from 'node:path';
+import { WORKSPACE_ROOT, WRITABLE_DIR, normalizeAbsolute } from '../../books/scopedFs.mjs';
 import { resolveBundledSkillsRoot } from './bundledRoot.mjs';
 
 /** Host / workspace directory name under Books root. */
@@ -152,15 +154,83 @@ export function readDisabledBundledSkillIds(booksRoot) {
 }
 
 /**
+ * Parse `/workspace/skills/<id>/<rel>` into id + package-relative path.
+ * Rejects `..` / empty segments. Catalog entry remains `…/SKILL.md`.
+ * @param {string} workspacePath
+ * @returns {{ id: string, relPath: string } | null}
+ */
+export function parseSkillPackagePath(workspacePath) {
+  if (typeof workspacePath !== 'string' || !workspacePath) return null;
+  let ws;
+  try {
+    ws = normalizeAbsolute(workspacePath.startsWith('/') ? workspacePath : `/${workspacePath}`);
+  } catch {
+    return null;
+  }
+  const prefix = `${WORKSPACE_ROOT}/${SKILLS_DIR}/`;
+  if (!ws.startsWith(prefix)) return null;
+  const parts = ws.slice(prefix.length).split('/').filter(Boolean);
+  if (parts.length < 2) return null;
+  const id = parts[0];
+  if (!isValidSkillId(id)) return null;
+  const relParts = parts.slice(1);
+  if (relParts.some((p) => p === '.' || p === '..')) return null;
+  return { id, relPath: relParts.join('/') };
+}
+
+/**
+ * Absolute host path to a file inside a bundled skill package, or null.
+ * @param {string} id
+ * @param {string} [relPath] defaults to SKILL.md
+ * @returns {string | null}
+ */
+export function bundledSkillFileHostPath(id, relPath = SKILL_FILE) {
+  if (!isValidSkillId(id) || typeof relPath !== 'string' || !relPath) return null;
+  if (relPath.split('/').some((p) => !p || p === '.' || p === '..')) return null;
+  const root = resolveBundledSkillsRoot();
+  if (!root) return null;
+  const packageRoot = resolve(root, id);
+  const full = resolve(packageRoot, ...relPath.split('/'));
+  if (full !== packageRoot && !full.startsWith(`${packageRoot}${sep}`)) return null;
+  return full;
+}
+
+/**
  * Absolute host path to a bundled package's SKILL.md, or null.
  * @param {string} id
  * @returns {string | null}
  */
 export function bundledSkillMdHostPath(id) {
-  if (!isValidSkillId(id)) return null;
+  return bundledSkillFileHostPath(id, SKILL_FILE);
+}
+
+/**
+ * Read a regular file from a bundled skill package (symlink refused).
+ * Package root must be a real directory under the bundled skills root
+ * (same rule as catalog scan — no package-dir symlink escape).
+ * @param {string} id
+ * @param {string} [relPath]
+ * @returns {string | null}
+ */
+export function readBundledSkillFile(id, relPath = SKILL_FILE) {
   const root = resolveBundledSkillsRoot();
   if (!root) return null;
-  return join(root, id, SKILL_FILE);
+  const packageRoot = resolve(root, id);
+  if (!isRegularSkillDir(packageRoot)) return null;
+  let realRoot;
+  let realPackage;
+  try {
+    realRoot = realpathSync(root);
+    realPackage = realpathSync(packageRoot);
+  } catch {
+    return null;
+  }
+  if (realPackage !== realRoot && !realPackage.startsWith(`${realRoot}${sep}`)) {
+    return null;
+  }
+  const path = bundledSkillFileHostPath(id, relPath);
+  if (!path) return null;
+  return readSkillMdFile(path);
 }
 
 /**
@@ -169,9 +239,7 @@ export function bundledSkillMdHostPath(id) {
  * @returns {string | null}
  */
 export function readBundledSkillMd(id) {
-  const path = bundledSkillMdHostPath(id);
-  if (!path) return null;
-  return readSkillMdFile(path);
+  return readBundledSkillFile(id, SKILL_FILE);
 }
 
 /**

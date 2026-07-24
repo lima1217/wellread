@@ -103,6 +103,11 @@ function underRoot(realPath, root) {
   return p === r || p.startsWith(`${r}/`);
 }
 
+/** @param {string} realPath @param {string} root */
+export function isPathUnderRoot(realPath, root) {
+  return underRoot(realPath, root);
+}
+
 export function authorizeRead(workspacePath, booksRoot, lookup) {
   const mapped = workspaceToHost(workspacePath, booksRoot);
   if (!mapped.ok) return mapped;

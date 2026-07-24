@@ -8,12 +8,12 @@
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { isSafeBookIdSegment } from '../agent/notesOkf.mjs';
 import {
-  isValidSkillId,
   parseSkillMd,
-  readBundledSkillMd,
+  parseSkillPackagePath,
+  readBundledSkillFile,
   readDisabledBundledSkillIds,
-  SKILLS_DIR,
 } from '../agent/skills/discover.mjs';
 import { createNodeRealpathLookup } from './nodeLookup.mjs';
 import {
@@ -22,6 +22,7 @@ import {
   authorizeExistingWritePrefix,
   authorizeRead,
   authorizeWrite,
+  isPathUnderRoot,
   normalizeAbsolute,
   workspaceToHost,
 } from './scopedFs.mjs';
@@ -29,19 +30,14 @@ import {
 const SKILL_MD = 'SKILL.md';
 
 /**
- * `/workspace/skills/<id>/SKILL.md` → skill id, or null when not that shape.
- * @param {string} workspacePath
- * @returns {string | null}
+ * Skill package paths that must not be overridden by Books/skills user files
+ * (instruction / validator surface — always prefer bundled).
+ * @param {string} relPath
  */
-function skillIdFromWorkspacePath(workspacePath) {
-  const ws = normalizeAbsolute(workspacePath);
-  const prefix = `${WORKSPACE_ROOT}/${SKILLS_DIR}/`;
-  if (!ws.startsWith(prefix)) return null;
-  const rest = ws.slice(prefix.length);
-  const parts = rest.split('/');
-  if (parts.length !== 2 || parts[1] !== SKILL_MD) return null;
-  const id = parts[0];
-  return isValidSkillId(id) ? id : null;
+export function preferBundledSkillRel(relPath) {
+  if (relPath === 'PACKAGE.md' || relPath === 'AGENTS.md') return true;
+  if (relPath === 'tools' || relPath.startsWith('tools/')) return true;
+  return false;
 }
 
 function resolveWorkspacePath(path) {
@@ -78,29 +74,42 @@ export function createBooksFsSession(options) {
     async readFile({ path }) {
       const workspacePath = resolveWorkspacePath(path);
       const booksRoot = normalizeAbsolute(options.getBooksRoot());
-      const skillId = skillIdFromWorkspacePath(workspacePath);
+      const skillRef = parseSkillPackagePath(workspacePath);
+      const isSkillMd = Boolean(skillRef && skillRef.relPath === SKILL_MD);
+      const bundledOnly = Boolean(skillRef && preferBundledSkillRel(skillRef.relPath));
+      const disabled = skillRef
+        ? readDisabledBundledSkillIds(booksRoot).has(skillRef.id)
+        : false;
+
+      // PACKAGE.md / AGENTS.md / tools/* — never serve user overlay (instruction injection).
+      if (skillRef && bundledOnly && !disabled) {
+        const bundled = readBundledSkillFile(skillRef.id, skillRef.relPath);
+        if (bundled != null) {
+          return new Uint8Array(Buffer.from(bundled, 'utf8'));
+        }
+        return null;
+      }
 
       const auth = authorizeRead(workspacePath, booksRoot, lookup);
       if (auth.ok) {
         try {
           const bytes = new Uint8Array(readFileSync(auth.realPath));
-          // Skill catalog paths: only a parseable SKILL.md counts as user overlay
+          // Skill catalog SKILL.md: only a parseable package counts as user overlay
           // (same gate as loadSkillPackage / discoverSkills). Broken user files
           // fall through to the bundled copy instead of poisoning read_file.
-          if (!skillId || parseSkillMd(new TextDecoder().decode(bytes))) {
+          if (!isSkillMd || parseSkillMd(new TextDecoder().decode(bytes))) {
             return bytes;
           }
         } catch (err) {
           if (err.code !== 'ENOENT') throw err;
         }
-      } else if (!skillId) {
+      } else if (!skillRef) {
         throw new Error(auth.reason);
       }
 
-      // Catalog path is always /workspace/skills/<id>/SKILL.md; when Books has
-      // no valid package, serve the read-only bundled copy (if any and not disabled).
-      if (skillId && !readDisabledBundledSkillIds(booksRoot).has(skillId)) {
-        const bundled = readBundledSkillMd(skillId);
+      // /workspace/skills/<id>/… — Books miss or bad SKILL.md → bundled package file.
+      if (skillRef && !disabled) {
+        const bundled = readBundledSkillFile(skillRef.id, skillRef.relPath);
         if (bundled != null) {
           return new Uint8Array(Buffer.from(bundled, 'utf8'));
         }
@@ -110,7 +119,10 @@ export function createBooksFsSession(options) {
       return null;
     },
 
-    async writeFile({ path, content }) {
+    /**
+     * @param {{ path: string, content: Uint8Array | Buffer | string, confineNotesBookId?: string }} input
+     */
+    async writeFile({ path, content, confineNotesBookId }) {
       const workspacePath = resolveWorkspacePath(path);
       const booksRoot = normalizeAbsolute(options.getBooksRoot());
       if (!isLexicallyWritable(workspacePath)) {
@@ -125,6 +137,19 @@ export function createBooksFsSession(options) {
       mkdirSync(dirname(mapped.hostPath), { recursive: true });
       const auth = authorizeWrite(workspacePath, booksRoot, lookup);
       if (!auth.ok) throw new Error(auth.reason);
+      if (confineNotesBookId !== undefined) {
+        if (!isSafeBookIdSegment(confineNotesBookId)) {
+          throw new Error('write_file requires a valid session bookId');
+        }
+        const notesHost = normalizeAbsolute(
+          `${booksRoot}/${WRITABLE_DIR}/notes/${confineNotesBookId}`,
+        );
+        if (!isPathUnderRoot(auth.realPath, notesHost)) {
+          throw new Error(
+            `writes only under ${WORKSPACE_ROOT}/${WRITABLE_DIR}/notes/${confineNotesBookId}/ (realpath escaped)`,
+          );
+        }
+      }
       writeFileSync(auth.realPath, content);
     },
 

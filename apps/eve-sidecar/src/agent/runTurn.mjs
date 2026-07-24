@@ -133,7 +133,8 @@ export async function runTurn(input) {
     return finishAborted(session, userId, onEvent, persistSession);
   }
 
-  const tools = input.tools ?? createReadingTools({ getBooksRoot });
+  const tools =
+    input.tools ?? createReadingTools({ getBooksRoot, bookId: session.bookId });
   /** @type {Array<{ id: string, name: string, args?: unknown, result?: unknown }>} */
   const toolTrace = [];
 

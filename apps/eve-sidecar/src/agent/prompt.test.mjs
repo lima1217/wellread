@@ -203,7 +203,7 @@ describe('buildReadingContextEnvelope', () => {
           path: '/workspace/.wellread/extract/bk1/a.md',
         },
       ],
-      notesIndex: ['summary.md', 'chapters/one.md'],
+      notesIndex: ['index.md', 'chapters/one.md'],
     });
     assert.match(env, /position: \(client-reported, may be stale\)/);
     assert.match(env, /chapter: "Ch 1"/);
@@ -214,7 +214,7 @@ describe('buildReadingContextEnvelope', () => {
     assert.match(env, /prior_sources:/);
     assert.match(env, /title: "Later"/);
     assert.match(env, /path: "\/workspace\/\.wellread\/extract\/bk1\/a\.md"/);
-    assert.match(env, /notes_index: "summary\.md", "chapters\/one\.md"/);
+    assert.match(env, /notes_index: "index\.md", "chapters\/one\.md"/);
     assert.match(env, /<\/reading_context>/);
   });
 
@@ -245,10 +245,39 @@ describe('listNotesIndex', () => {
     const root = mkdtempSync(join(tmpdir(), 'eve-notes-'));
     const notes = join(root, '.wellread', 'notes', 'bk1');
     mkdirSync(join(notes, 'chapters'), { recursive: true });
-    writeFileSync(join(notes, 'summary.md'), '# s');
+    writeFileSync(join(notes, 'index.md'), '# i');
     writeFileSync(join(notes, 'chapters', 'one.md'), '# c');
     const listed = listNotesIndex(root, 'bk1');
-    assert.deepEqual(listed, ['chapters/one.md', 'summary.md']);
+    assert.deepEqual(listed, ['index.md', 'chapters/one.md']);
+  });
+
+  it('prefers OKF spine over deep content and skips log/tools noise', () => {
+    const root = mkdtempSync(join(tmpdir(), 'eve-notes-okf-'));
+    const notes = join(root, '.wellread', 'notes', 'bk1');
+    mkdirSync(join(notes, 'chapters'), { recursive: true });
+    mkdirSync(join(notes, 'concepts'), { recursive: true });
+    mkdirSync(join(notes, 'tools'), { recursive: true });
+    for (let i = 0; i < 2; i++) {
+      writeFileSync(join(notes, 'chapters', `第${String(i).padStart(2, '0')}章.md`), '# c');
+    }
+    writeFileSync(join(notes, 'index.md'), '# i');
+    writeFileSync(join(notes, 'AGENTS.md'), '# a');
+    writeFileSync(join(notes, 'chapters', 'index.md'), '# ci');
+    writeFileSync(join(notes, 'concepts', '网络效应.md'), '# n');
+    writeFileSync(join(notes, 'log.md'), '# log');
+    writeFileSync(join(notes, 'chapters', 'log.md'), '# clog');
+    writeFileSync(join(notes, 'tools', 'validate_okf_wiki.py'), 'print(1)');
+    writeFileSync(join(notes, 'readme.txt'), 'skip');
+
+    const listed = listNotesIndex(root, 'bk1', 10);
+    assert.deepEqual(listed.slice(0, 2), ['index.md', 'chapters/index.md']);
+    assert.ok(listed.includes('concepts/网络效应.md'));
+    assert.ok(!listed.some((p) => p === 'log.md' || p.endsWith('/log.md')));
+    assert.ok(!listed.some((p) => p === 'AGENTS.md' || p.startsWith('tools/')));
+    assert.ok(!listed.some((p) => p.endsWith('.txt') || p.endsWith('.py')));
+
+    const truncated = listNotesIndex(root, 'bk1', 2);
+    assert.deepEqual(truncated, ['index.md', 'chapters/index.md']);
   });
 
   it('returns [] when the notes dir is missing', () => {

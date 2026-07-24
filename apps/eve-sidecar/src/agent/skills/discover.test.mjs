@@ -19,6 +19,7 @@ import {
   invalidateSkillsCache,
   isValidSkillId,
   parseSkillMd,
+  parseSkillPackagePath,
   readBundledSkillMd,
 } from './discover.mjs';
 
@@ -44,6 +45,30 @@ describe('isValidSkillId', () => {
     assert.equal(isValidSkillId('a/b'), false);
     assert.equal(isValidSkillId('.hidden'), false);
     assert.equal(isValidSkillId(''), false);
+  });
+});
+
+describe('parseSkillPackagePath', () => {
+  it('parses catalog and sibling package paths', () => {
+    assert.deepEqual(parseSkillPackagePath('/workspace/skills/note/SKILL.md'), {
+      id: 'note',
+      relPath: 'SKILL.md',
+    });
+    assert.deepEqual(parseSkillPackagePath('/workspace/skills/note/PACKAGE.md'), {
+      id: 'note',
+      relPath: 'PACKAGE.md',
+    });
+    assert.deepEqual(parseSkillPackagePath('/workspace/skills/note/tools/validate_okf_wiki.py'), {
+      id: 'note',
+      relPath: 'tools/validate_okf_wiki.py',
+    });
+  });
+
+  it('rejects traversal and non-skill paths', () => {
+    // `..` is normalized; escaping the skills root yields null.
+    assert.equal(parseSkillPackagePath('/workspace/skills/../.wellread/notes/x.md'), null);
+    assert.equal(parseSkillPackagePath('/workspace/.wellread/notes/x/SKILL.md'), null);
+    assert.equal(parseSkillPackagePath('/workspace/skills/note'), null);
   });
 });
 

@@ -5,6 +5,7 @@ export {
   normalizeAbsolute,
   workspaceToHost,
   realpath,
+  isPathUnderRoot,
   authorizeRead,
   authorizeWrite,
   authorizeWellreadSearch,

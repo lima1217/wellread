@@ -97,6 +97,56 @@ describe('createBooksFsSession', () => {
     }
   });
 
+  it('readFile serves bundled package siblings such as PACKAGE.md', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-books-')));
+    const bundledRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-bundled-')));
+    try {
+      setBundledSkillsRootForTests(bundledRoot);
+      mkdirSync(join(bundledRoot, 'note'), { recursive: true });
+      writeFileSync(
+        join(bundledRoot, 'note', 'SKILL.md'),
+        '---\nname: note\ndescription: OKF notes\n---\nBody.\n',
+      );
+      writeFileSync(join(bundledRoot, 'note', 'PACKAGE.md'), '# PACKAGE\nTree here.\n');
+      const session = createBooksFsSession({ getBooksRoot: () => booksRoot });
+      const bytes = await session.readFile({ path: '/workspace/skills/note/PACKAGE.md' });
+      assert.ok(bytes);
+      assert.match(new TextDecoder().decode(bytes), /Tree here/);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+      rmSync(bundledRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('readFile ignores user PACKAGE.md overlay and serves bundled', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-books-')));
+    const bundledRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-bundled-')));
+    try {
+      setBundledSkillsRootForTests(bundledRoot);
+      mkdirSync(join(bundledRoot, 'note'), { recursive: true });
+      writeFileSync(
+        join(bundledRoot, 'note', 'SKILL.md'),
+        '---\nname: note\ndescription: OKF notes\n---\nBody.\n',
+      );
+      writeFileSync(join(bundledRoot, 'note', 'PACKAGE.md'), '# PACKAGE\nBundled tree.\n');
+      mkdirSync(join(booksRoot, 'skills', 'note'), { recursive: true });
+      writeFileSync(
+        join(booksRoot, 'skills', 'note', 'SKILL.md'),
+        '---\nname: note\ndescription: user\n---\nUser skill.\n',
+      );
+      writeFileSync(join(booksRoot, 'skills', 'note', 'PACKAGE.md'), '# PACKAGE\nPOISON\n');
+      const session = createBooksFsSession({ getBooksRoot: () => booksRoot });
+      const bytes = await session.readFile({ path: '/workspace/skills/note/PACKAGE.md' });
+      assert.ok(bytes);
+      const text = new TextDecoder().decode(bytes);
+      assert.match(text, /Bundled tree/);
+      assert.doesNotMatch(text, /POISON/);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+      rmSync(bundledRoot, { recursive: true, force: true });
+    }
+  });
+
   it('readFile ignores unparseable user SKILL.md and serves bundled', async () => {
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-books-')));
     const bundledRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-bundled-')));
