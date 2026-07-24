@@ -186,7 +186,7 @@ export async function* streamEveTurn(
   const readerState = options?.readerState ?? undefined;
   const body: Record<string, unknown> = { message, thinkingMode };
   if (readerState && (readerState.chapter || readerState.cfi)) {
-    body.readerState = {
+    body['readerState'] = {
       ...(readerState.chapter ? { chapter: readerState.chapter } : {}),
       ...(readerState.cfi ? { cfi: readerState.cfi } : {}),
     };
