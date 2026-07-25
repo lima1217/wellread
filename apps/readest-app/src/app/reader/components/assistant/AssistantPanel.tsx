@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import React, { useCallback, useEffect, useState } from 'react';
+import { useMediaQuery } from 'react-responsive';
 
 import { useSettingsStore } from '@/store/settingsStore';
 import { useBookDataStore } from '@/store/bookDataStore';
@@ -47,7 +48,7 @@ const AssistantPanel: React.FC = ({}) => {
   const setActiveSession = useReadingAssistantStore((s) => s.setActiveSession);
   const clearPendingQuotes = useReadingAssistantStore((s) => s.clearPendingQuotes);
 
-  const isMobile = window.innerWidth < 640;
+  const isMobile = useMediaQuery({ maxWidth: 639 });
   const [isFullHeightInMobile, setIsFullHeightInMobile] = useState(isMobile);
   const [pane, setPane] = useState<AssistantPane>('chat');
 

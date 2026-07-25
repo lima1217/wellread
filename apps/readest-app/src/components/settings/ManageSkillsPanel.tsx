@@ -17,7 +17,7 @@ import {
 } from '@/services/wellread/assistant/importSkill';
 import { eventDispatcher } from '@/utils/event';
 import SubPageHeader from './SubPageHeader';
-import { SettingLabel } from './primitives';
+import SettingLabel from './primitives/SettingLabel';
 
 const importBtnClass = clsx(
   'eink-bordered group flex h-11 w-full items-center justify-center gap-2.5',

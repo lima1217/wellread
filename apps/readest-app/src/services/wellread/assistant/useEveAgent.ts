@@ -55,7 +55,9 @@ export function useEveAgent(options: UseEveAgentOptions) {
   const loadedSessionIdRef = useRef<string | null | undefined>(undefined);
   /** Always call latest getReaderState without putting it in sendTurn deps. */
   const getReaderStateRef = useRef(getReaderState);
-  getReaderStateRef.current = getReaderState;
+  useEffect(() => {
+    getReaderStateRef.current = getReaderState;
+  });
 
   useEffect(() => {
     let cancelled = false;

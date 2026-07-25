@@ -30,18 +30,16 @@ export function formatPendingQuotesForTurn(
   userText: string,
 ): string {
   const question = userText.trim();
-  const blocks = quotes
-    .map((q) => {
-      const text = q.text.trim();
-      if (!text) return '';
-      const lines = [`> ${text}`];
-      const chapter = q.chapterTitle?.trim();
-      if (chapter) {
-        lines.push(`> — 《${chapter}》`);
-      }
-      return lines.join('\n');
-    })
-    .filter(Boolean);
+  const blocks = quotes.flatMap((q) => {
+    const text = q.text.trim();
+    if (!text) return [];
+    const lines = [`> ${text}`];
+    const chapter = q.chapterTitle?.trim();
+    if (chapter) {
+      lines.push(`> — 《${chapter}》`);
+    }
+    return [lines.join('\n')];
+  });
   return [...blocks, question].filter(Boolean).join('\n\n');
 }
 

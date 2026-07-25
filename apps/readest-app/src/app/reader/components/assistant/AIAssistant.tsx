@@ -78,7 +78,7 @@ const composerSelectMenu = clsx(
   '!shadow-[0_1px_2px_oklch(0_0_0/0.06),0_4px_14px_oklch(0_0_0/0.08)]',
 );
 const composerSelectItem = clsx(
-  'hover:bg-base-200/80 flex w-full items-center gap-2 rounded-md px-2 py-1.5',
+  'hover:bg-base-200/80 flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5',
   'text-start text-[0.85em] leading-snug transition-colors duration-150',
 );
 const composerSelectItemActive = 'bg-base-200/70 text-base-content hover:bg-base-200/80';
@@ -273,12 +273,12 @@ function QuoteStack({ quotes }: { quotes: EveMessageQuote[] }) {
   if (!quotes.length) return null;
   return (
     <div className='mb-1.5 flex flex-col gap-1 pb-0.5'>
-      {quotes.map((q, i) => {
+      {quotes.map((q) => {
         const chapter = q.chapterTitle?.trim();
         const full = chapter ? `${q.text} — 《${chapter}》` : q.text;
         return (
           <div
-            key={`${q.text}-${i}`}
+            key={`${chapter ?? ''}:${q.text}`}
             title={full}
             className='border-base-content/25 text-base-content/70 line-clamp-2 border-s-2 ps-1.5 text-[0.85em] leading-snug'
           >
@@ -532,6 +532,8 @@ const ReadingAssistantChat = ({
   const slashQuery = getComposerSlashQuery(agent.composer);
   const slashOpen = slashQuery !== null && !slashDismissed;
   const slashMatches = slashOpen ? filterSkillsForSlash(skills, slashQuery) : [];
+  const activeSlashIndex =
+    slashMatches.length === 0 ? 0 : Math.min(slashIndex, slashMatches.length - 1);
 
   useEffect(() => {
     if (!slashOpen) return;
@@ -542,12 +544,14 @@ const ReadingAssistantChat = ({
       .then((rows) => {
         if (cancelled) return;
         setSkills(rows);
+        setSlashIndex(0);
         setSkillsError(false);
         setSkillsLoaded(true);
       })
       .catch(() => {
         if (cancelled) return;
         setSkills([]);
+        setSlashIndex(0);
         setSkillsError(true);
         setSkillsLoaded(true);
       });
@@ -555,18 +559,6 @@ const ReadingAssistantChat = ({
       cancelled = true;
     };
   }, [slashOpen]);
-
-  useEffect(() => {
-    setSlashIndex(0);
-  }, [slashQuery, skills]);
-
-  useEffect(() => {
-    if (slashMatches.length === 0) {
-      setSlashIndex(0);
-      return;
-    }
-    setSlashIndex((i) => Math.min(i, slashMatches.length - 1));
-  }, [slashMatches.length]);
 
   const selectSlashSkill = useCallback(
     (skillId: string) => {
@@ -762,28 +754,35 @@ const ReadingAssistantChat = ({
               ) : (
                 <ul className='max-h-48 overflow-y-auto overscroll-contain'>
                   {slashMatches.map((skill, index) => {
-                    const active = index === slashIndex;
+                    const active = index === activeSlashIndex;
                     return (
-                      <li key={skill.id} role='option' aria-selected={active}>
-                        <button
-                          type='button'
-                          className={clsx(
-                            composerSelectItem,
-                            focusRing,
-                            active && composerSelectItemActive,
-                          )}
-                          onMouseEnter={() => setSlashIndex(index)}
-                          onClick={() => selectSlashSkill(skill.id)}
-                        >
-                          <span className='min-w-0 flex-1 text-start'>
-                            <span className='text-base-content block truncate font-medium'>
-                              {`/${SKILL_SLASH_PREFIX}${skill.id}`}
-                            </span>
-                            <span className='text-base-content/50 block truncate text-[0.85em] leading-snug'>
-                              {skill.description || skill.name}
-                            </span>
+                      <li
+                        key={skill.id}
+                        role='option'
+                        aria-selected={active}
+                        tabIndex={0}
+                        className={clsx(
+                          composerSelectItem,
+                          focusRing,
+                          active && composerSelectItemActive,
+                        )}
+                        onMouseEnter={() => setSlashIndex(index)}
+                        onClick={() => selectSlashSkill(skill.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            selectSlashSkill(skill.id);
+                          }
+                        }}
+                      >
+                        <span className='min-w-0 flex-1 text-start'>
+                          <span className='text-base-content block truncate font-medium'>
+                            {`/${SKILL_SLASH_PREFIX}${skill.id}`}
                           </span>
-                        </button>
+                          <span className='text-base-content/50 block truncate text-[0.85em] leading-snug'>
+                            {skill.description || skill.name}
+                          </span>
+                        </span>
                       </li>
                     );
                   })}
@@ -803,6 +802,7 @@ const ReadingAssistantChat = ({
             value={agent.composer}
             onChange={(e) => {
               setSlashDismissed(false);
+              setSlashIndex(0);
               agent.setComposer(e.target.value);
             }}
             rows={2}
@@ -831,13 +831,13 @@ const ReadingAssistantChat = ({
                   }
                   if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
-                    const skill = slashMatches[slashIndex];
+                    const skill = slashMatches[activeSlashIndex];
                     if (skill) selectSlashSkill(skill.id);
                     return;
                   }
                   if (e.key === 'Tab') {
                     e.preventDefault();
-                    const skill = slashMatches[slashIndex];
+                    const skill = slashMatches[activeSlashIndex];
                     if (skill) selectSlashSkill(skill.id);
                     return;
                   }
@@ -882,24 +882,32 @@ const ReadingAssistantChat = ({
                 {modelConfig.profiles.map((profile) => {
                   const isActive = profile.id === modelConfig.activeProfileId;
                   return (
-                    <li key={profile.id} role='option' aria-selected={isActive}>
-                      <button
-                        type='button'
-                        className={clsx(
-                          composerSelectItem,
-                          focusRing,
-                          isActive && composerSelectItemActive,
-                        )}
-                        onClick={() => {
+                    <li
+                      key={profile.id}
+                      role='option'
+                      aria-selected={isActive}
+                      tabIndex={0}
+                      className={clsx(
+                        composerSelectItem,
+                        focusRing,
+                        isActive && composerSelectItemActive,
+                      )}
+                      onClick={() => {
+                        void handleSelectProfile(profile.id);
+                        (document.activeElement as HTMLElement | null)?.blur();
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
                           void handleSelectProfile(profile.id);
                           (document.activeElement as HTMLElement | null)?.blur();
-                        }}
-                      >
-                        <ComposerSelectCheck active={isActive} />
-                        <span className='min-w-0 flex-1 truncate' translate='no'>
-                          {profile.modelId}
-                        </span>
-                      </button>
+                        }
+                      }}
+                    >
+                      <ComposerSelectCheck active={isActive} />
+                      <span className='min-w-0 flex-1 truncate' translate='no'>
+                        {profile.modelId}
+                      </span>
                     </li>
                   );
                 })}
@@ -935,22 +943,30 @@ const ReadingAssistantChat = ({
                 ).map((option) => {
                   const isActive = option.id === thinkingMode;
                   return (
-                    <li key={option.id} role='option' aria-selected={isActive}>
-                      <button
-                        type='button'
-                        className={clsx(
-                          composerSelectItem,
-                          focusRing,
-                          isActive && composerSelectItemActive,
-                        )}
-                        onClick={() => {
+                    <li
+                      key={option.id}
+                      role='option'
+                      aria-selected={isActive}
+                      tabIndex={0}
+                      className={clsx(
+                        composerSelectItem,
+                        focusRing,
+                        isActive && composerSelectItemActive,
+                      )}
+                      onClick={() => {
+                        handleSelectThinkingMode(option.id);
+                        (document.activeElement as HTMLElement | null)?.blur();
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
                           handleSelectThinkingMode(option.id);
                           (document.activeElement as HTMLElement | null)?.blur();
-                        }}
-                      >
-                        <ComposerSelectCheck active={isActive} />
-                        <span className='min-w-0 flex-1 truncate'>{option.label}</span>
-                      </button>
+                        }
+                      }}
+                    >
+                      <ComposerSelectCheck active={isActive} />
+                      <span className='min-w-0 flex-1 truncate'>{option.label}</span>
                     </li>
                   );
                 })}

@@ -14,7 +14,9 @@ import {
 import { getModelApiKey } from '@/services/wellread/modelApiKey';
 import { reloadEveSidecar } from '@/services/wellread/eveSidecar';
 import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
-import { BoxedList, NavigationRow, SettingsSwitchRow } from './primitives';
+import BoxedList from './primitives/BoxedList';
+import NavigationRow from './primitives/NavigationRow';
+import SettingsSwitchRow from './primitives/SettingsSwitchRow';
 import ModelProvidersPanel from './ModelProvidersPanel';
 import ManageSkillsPanel from './ManageSkillsPanel';
 

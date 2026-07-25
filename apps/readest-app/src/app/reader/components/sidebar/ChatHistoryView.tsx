@@ -22,13 +22,22 @@ interface ChatHistoryViewProps {
   onSessionOpen: () => void;
 }
 
-function formatSessionTime(updatedAt: string | number | Date): string {
-  return new Intl.DateTimeFormat(getLocale(), {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(updatedAt));
+const SESSION_TIME_FORMAT: Intl.DateTimeFormatOptions = {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+};
+
+const sessionTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function getSessionTimeFormatter(locale: string): Intl.DateTimeFormat {
+  let formatter = sessionTimeFormatters.get(locale);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, SESSION_TIME_FORMAT);
+    sessionTimeFormatters.set(locale, formatter);
+  }
+  return formatter;
 }
 
 const pressScaleClass =
@@ -45,6 +54,20 @@ const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({ bookKey, onSessionOpe
 
   const [sessions, setSessions] = useState<EveSessionMeta[]>([]);
   const [loading, setLoading] = useState(false);
+  /** Client locale after mount — avoids SSR/browser Intl hydration mismatch. */
+  const [timeLocale, setTimeLocale] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTimeLocale(getLocale());
+  }, []);
+
+  const formatSessionTime = useCallback(
+    (updatedAt: string | number | Date): string => {
+      if (!timeLocale) return '';
+      return getSessionTimeFormatter(timeLocale).format(new Date(updatedAt));
+    },
+    [timeLocale],
+  );
 
   useEffect(() => {
     if (ready) return;

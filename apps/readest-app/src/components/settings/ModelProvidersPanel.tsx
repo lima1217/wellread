@@ -26,7 +26,8 @@ import { testModelConnection } from '@/services/wellread/testModelConnection';
 import { reloadEveSidecar } from '@/services/wellread/eveSidecar';
 import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
 import SubPageHeader from './SubPageHeader';
-import { SectionTitle, SettingLabel } from './primitives';
+import SectionTitle from './primitives/SectionTitle';
+import SettingLabel from './primitives/SettingLabel';
 
 type ConnectionStatus = 'idle' | 'testing' | 'success' | 'error';
 
