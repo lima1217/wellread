@@ -4,7 +4,7 @@
 
 包根：`/workspace/.wellread/notes/<bookId>/`（`<bookId>` 来自本轮 Reading Assistant）。自包含 OKF 包；书文留在 extract，本包用 cfi **traceable** 回溯。
 
-代理规程只读：`/workspace/skills/note/AGENTS.md`。校验器只读：`/workspace/skills/note/tools/validate_okf_wiki.py`（**禁止**写入 notes）。
+写盘规程：`/workspace/skills/note/AGENTS.md`。校验器：`/workspace/skills/note/tools/validate_okf_wiki.py`（只读引用，不入 notes 包）。
 
 ## Naming
 
