@@ -42,6 +42,7 @@ describe('buildSystemPrompt', () => {
     assert.match(prompt, /write_file/);
     assert.match(prompt, /unavailable until mounted/);
     assert.match(prompt, /no emoji/i);
+    assert.match(prompt, /Do not narrate tool use/i);
     assert.doesNotMatch(prompt, /Available skills/);
   });
 

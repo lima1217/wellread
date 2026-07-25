@@ -77,6 +77,294 @@ function toolThenAnswerModel() {
   };
 }
 
+/**
+ * Step 1 narrates then calls a tool; step 2 returns the real answer.
+ * Visible content must not include the narration.
+ */
+function narrateThenToolThenAnswerModel() {
+  let callCount = 0;
+  return {
+    specificationVersion: 'v2',
+    provider: 'test',
+    modelId: 'narration-test',
+    supportedUrls: {},
+    doGenerate: async () => {
+      throw new Error('doGenerate unused');
+    },
+    doStream: async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 't0' });
+              controller.enqueue({
+                type: 'text-delta',
+                id: 't0',
+                delta: '让我继续读第一章。',
+              });
+              controller.enqueue({ type: 'text-end', id: 't0' });
+              controller.enqueue({
+                type: 'tool-call',
+                toolCallId: 'tc_lookup',
+                toolName: 'lookup',
+                input: JSON.stringify({ q: 'exponential' }),
+              });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      }
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 't1' });
+            controller.enqueue({
+              type: 'text-delta',
+              id: 't1',
+              delta: '指数型技术。',
+            });
+            controller.enqueue({ type: 'text-end', id: 't1' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  };
+}
+
+/** Single step: answer text + write_file (recoverable mixed). */
+function answerWithWriteFileModel() {
+  let callCount = 0;
+  return {
+    specificationVersion: 'v2',
+    provider: 'test',
+    modelId: 'write-mixed-test',
+    supportedUrls: {},
+    doGenerate: async () => {
+      throw new Error('doGenerate unused');
+    },
+    doStream: async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 't0' });
+              controller.enqueue({
+                type: 'text-delta',
+                id: 't0',
+                delta: '已写入笔记。',
+              });
+              controller.enqueue({ type: 'text-end', id: 't0' });
+              controller.enqueue({
+                type: 'tool-call',
+                toolCallId: 'tc_write',
+                toolName: 'write_file',
+                input: JSON.stringify({ path: 'log.md', content: 'x' }),
+              });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      }
+      // Soft-landing after write: empty on purpose so recovery must come from
+      // the write_file-mixed step, not a later tool-free step.
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 0, totalTokens: 1 },
+            });
+            controller.close();
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  };
+}
+
+/** Research narration + grep, then empty soft-landing (must not recover). */
+function narrateWithGrepOnlyModel() {
+  let callCount = 0;
+  return {
+    specificationVersion: 'v2',
+    provider: 'test',
+    modelId: 'grep-narration-test',
+    supportedUrls: {},
+    doGenerate: async () => {
+      throw new Error('doGenerate unused');
+    },
+    doStream: async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 't0' });
+              controller.enqueue({
+                type: 'text-delta',
+                id: 't0',
+                delta: '让我继续搜。',
+              });
+              controller.enqueue({ type: 'text-end', id: 't0' });
+              controller.enqueue({
+                type: 'tool-call',
+                toolCallId: 'tc_grep',
+                toolName: 'grep',
+                input: JSON.stringify({ q: 'whale' }),
+              });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      }
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 0, totalTokens: 1 },
+            });
+            controller.close();
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  };
+}
+
+describe('runTurn answer content gating', () => {
+  it('omits tool-step narration from the visible assistant answer', async () => {
+    const session = emptySession();
+    /** @type {Array<Record<string, unknown>>} */
+    const events = [];
+    const tools = {
+      lookup: tool({
+        description: 'lookup',
+        inputSchema: z.object({ q: z.string() }),
+        execute: async ({ q }) => ({ hits: [q] }),
+      }),
+    };
+
+    const result = await runTurn({
+      model: /** @type {any} */ (narrateThenToolThenAnswerModel()),
+      session,
+      userMessage: '1968 到今天发生了什么？',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools,
+      maxToolRounds: 2,
+      onEvent: (event) => events.push(event),
+    });
+
+    assert.ok(result);
+    assert.equal(result.content, '指数型技术。');
+    assert.equal(
+      result.content.includes('让我继续读'),
+      false,
+      'tool-step narration must not enter content',
+    );
+    const deltas = events
+      .filter((e) => e.type === 'message.assistant.delta')
+      .map((e) => e.delta)
+      .join('');
+    assert.equal(deltas.includes('让我继续读'), false);
+    assert.equal(deltas.includes('指数型技术。'), true);
+  });
+
+  it('recovers answer text that shared a write_file call', async () => {
+    const session = emptySession();
+    /** @type {Array<Record<string, unknown>>} */
+    const events = [];
+    const tools = {
+      write_file: tool({
+        description: 'write',
+        inputSchema: z.object({ path: z.string(), content: z.string() }),
+        execute: async () => ({ ok: true }),
+      }),
+    };
+
+    const result = await runTurn({
+      model: /** @type {any} */ (answerWithWriteFileModel()),
+      session,
+      userMessage: '保存这条笔记',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools,
+      maxToolRounds: 2,
+      onEvent: (event) => events.push(event),
+    });
+
+    assert.ok(result);
+    assert.equal(result.content, '已写入笔记。');
+    assert.equal(session.messages.at(-1)?.content, '已写入笔记。');
+  });
+
+  it('does not recover research-tool narration when there is no final answer', async () => {
+    const session = emptySession();
+    /** @type {Array<Record<string, unknown>>} */
+    const events = [];
+    const tools = {
+      grep: tool({
+        description: 'grep',
+        inputSchema: z.object({ q: z.string() }),
+        execute: async ({ q }) => ({ hits: [q] }),
+      }),
+    };
+
+    const result = await runTurn({
+      model: /** @type {any} */ (narrateWithGrepOnlyModel()),
+      session,
+      userMessage: '搜一下',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools,
+      maxToolRounds: 1,
+      onEvent: (event) => events.push(event),
+    });
+
+    assert.equal(result, null);
+    assert.equal(
+      events.some((e) => e.type === 'error'),
+      true,
+    );
+    assert.equal(session.messages.length, 0);
+  });
+});
+
 describe('runTurn tool trace timing', () => {
   it('emits tool.start while the tool is still running, before tool.end', async () => {
     const session = emptySession();

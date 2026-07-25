@@ -5,6 +5,10 @@
 import { streamText, stepCountIs } from 'ai';
 import { randomBytes } from 'node:crypto';
 import { normalizeThinkingMode, turnFetchContext } from '../createModel.mjs';
+import {
+  createAnswerContentGate,
+  pickAnswerFromSteps,
+} from './answerContent.mjs';
 import { maybeCompressSession } from './contextCompress.mjs';
 import { isAbortError } from './httpAbort.mjs';
 import {
@@ -183,7 +187,11 @@ export async function runTurn(input) {
             prepareToolExhaustionStep({ stepNumber, maxToolRounds, system }),
         });
 
-        let content = '';
+        // Visible answer = tool-free steps only. Narration that shares a step
+        // with tool calls stays out of content (and thus out of history).
+        const answerGate = createAnswerContentGate((delta) => {
+          onEvent({ type: 'message.assistant.delta', id: assistantId, delta });
+        });
         /** Captured from fullStream `error` parts — AI SDK yields these instead of throwing. */
         let streamError = /** @type {unknown} */ (null);
         for await (const part of result.fullStream) {
@@ -194,13 +202,16 @@ export async function runTurn(input) {
             streamError = part.error;
             continue;
           }
+          if (part.type === 'start-step') {
+            answerGate.startStep();
+            continue;
+          }
           if (part.type === 'text-delta') {
-            const delta = part.text;
-            content += delta;
-            onEvent({ type: 'message.assistant.delta', id: assistantId, delta });
+            answerGate.onTextDelta(part.text);
             continue;
           }
           if (part.type === 'tool-call') {
+            answerGate.onToolCall(part.toolName);
             const id = part.toolCallId || `tool_${randomBytes(4).toString('hex')}`;
             const entry = {
               id,
@@ -240,6 +251,10 @@ export async function runTurn(input) {
               name: part.toolName,
               result: errResult,
             });
+            continue;
+          }
+          if (part.type === 'finish-step') {
+            answerGate.finishStep();
           }
         }
 
@@ -261,13 +276,20 @@ export async function runTurn(input) {
           return null;
         }
 
-        // Residual text only — never promote reasoning into the answer body.
+        let content = answerGate.getContent();
+        // Never use result.text here — it concatenates every step, including
+        // research-tool narration. Recover only write_file-mixed answer text
+        // (gate first, then steps) so save confirmations are not blanked.
         if (!content.trim()) {
           try {
-            const fallback = await result.text;
-            if (typeof fallback === 'string' && fallback.trim()) {
-              content = fallback;
-              onEvent({ type: 'message.assistant.delta', id: assistantId, delta: fallback });
+            const fromGate = answerGate.fallbackText();
+            const fromSteps = fromGate
+              ? ''
+              : pickAnswerFromSteps(await result.steps);
+            const fallback = fromGate || fromSteps;
+            if (fallback.trim()) {
+              answerGate.adoptFallback(fallback);
+              content = answerGate.getContent();
             }
           } catch (error) {
             if (isAbortError(error) || abortSignal?.aborted) {

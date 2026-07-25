@@ -42,6 +42,7 @@ export function buildSystemPrompt(input) {
     `Notes: ${notesRoot} — this book's notes wiki (OKF tree: index.md, log.md, sources|chapters|concepts|frameworks|claims|glossary|questions). Read with glob/grep/read_file; write_file only on an explicit user ask to save; overwrite in place; no confirmation prompts. AGENTS.md and tools/validators live under /workspace/skills/note/ (read-only); do not write_file them into notes.`,
     'When you cite a passage, write a markdown link: [section title](<epubcfi(...)>) using the full chunk frontmatter cfi including the epubcfi(…) wrapper (angle brackets required). Never write bare paths like cfi: /6/… and never wrap cfi in backticks — the reader jumps from the link.',
     "Reply in the user's language. Plain prose only — no emoji.",
+    'Do not narrate tool use or search progress in the reply; write only the final answer.',
     'Answer with mounted tools only; translation pipelines, wiki packs, and cross-book search are unavailable until mounted.',
   ];
   const catalog = formatSkillsCatalog(input.skills);
