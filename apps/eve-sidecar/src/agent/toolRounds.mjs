@@ -13,7 +13,7 @@ export const HARD_MAX_TOOL_ROUNDS = 24;
 export const SOFT_LANDING_PATHS_MAX = 80;
 
 export const TOOLS_EXHAUSTED_SYSTEM_PROMPT =
-  '工具调用次数已用尽。禁止再说「让我继续」「请继续」「继续阅读」或任何过程旁白；不要假装还在读文件。基于已获取的信息直接作答；末尾用一行列出仍缺或无法确认的部分。';
+  '工具调用次数已用尽。不要再输出过程旁白或长文；可见回复将由已执行工具的路径台账生成。若仍有未完成项，在内心记下即可。';
 
 /**
  * @param {unknown} [limit]
@@ -46,7 +46,8 @@ export function formatReadPathsBlock(paths) {
 
 /**
  * AI SDK prepareStep soft-landing: after maxToolRounds tool-capable steps,
- * disable tools and nudge a final grounded answer with paths already read.
+ * disable tools. Visible reply is a toolTrace ledger (see toolLedger.mjs);
+ * the path block only grounds the discarded model step.
  *
  * @param {{
  *   stepNumber: number,

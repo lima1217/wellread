@@ -2,21 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   createAnswerContentGate,
-  isRecoverableMixedTools,
   pickAnswerFromSteps,
 } from './answerContent.mjs';
-
-describe('isRecoverableMixedTools', () => {
-  it('allows write_file-only mixed steps', () => {
-    assert.equal(isRecoverableMixedTools(['write_file']), true);
-  });
-
-  it('rejects research tools and empty lists', () => {
-    assert.equal(isRecoverableMixedTools(['grep']), false);
-    assert.equal(isRecoverableMixedTools(['write_file', 'grep']), false);
-    assert.equal(isRecoverableMixedTools([]), false);
-  });
-});
 
 describe('createAnswerContentGate', () => {
   it('drops text that shares a step with tool calls', () => {
@@ -45,24 +32,21 @@ describe('createAnswerContentGate', () => {
     assert.equal(gate.getContent(), 'Hello');
   });
 
-  it('fallback recovers last step when answer shared write_file', () => {
+  it('does not promote soft-landing text when promote is false', () => {
+    const gate = createAnswerContentGate();
+    gate.startStep();
+    gate.onTextDelta('正在写入 claims/index.md。'.repeat(20));
+    gate.finishStep({ promote: false });
+    assert.equal(gate.getContent(), '');
+  });
+
+  it('does not recover write_file narration via fallback (removed)', () => {
     const gate = createAnswerContentGate();
     gate.startStep();
     gate.onTextDelta('Saved to notes.');
     gate.onToolCall('write_file');
     gate.finishStep();
     assert.equal(gate.getContent(), '');
-    assert.equal(gate.fallbackText(), 'Saved to notes.');
-  });
-
-  it('fallback does not recover research-tool narration', () => {
-    const gate = createAnswerContentGate();
-    gate.startStep();
-    gate.onTextDelta('让我继续读。');
-    gate.onToolCall('grep');
-    gate.finishStep();
-    assert.equal(gate.getContent(), '');
-    assert.equal(gate.fallbackText(), '');
   });
 });
 
@@ -77,10 +61,10 @@ describe('pickAnswerFromSteps', () => {
     );
   });
 
-  it('recovers write_file-mixed text when every step had tools', () => {
+  it('does not recover write_file-mixed narration', () => {
     assert.equal(
       pickAnswerFromSteps([{ text: 'Saved.', toolCalls: [{ name: 'write_file' }] }]),
-      'Saved.',
+      '',
     );
   });
 

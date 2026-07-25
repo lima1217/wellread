@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { tool } from 'ai';
 import { z } from 'zod';
-import { DEGENERATE_ANSWER_ERROR, runTurn } from './runTurn.mjs';
+import { runTurn } from './runTurn.mjs';
 
 /**
  * @returns {import('./sessionStore.mjs').Session}
@@ -189,8 +189,8 @@ function answerWithWriteFileModel() {
           rawCall: { rawPrompt: null, rawSettings: {} },
         };
       }
-      // Soft-landing after write: empty on purpose so recovery must come from
-      // the write_file-mixed step, not a later tool-free step.
+      // Empty follow-up (under budget) so confirmation comes from toolTrace,
+      // not a later tool-free prose step.
       return {
         stream: new ReadableStream({
           start(controller) {
@@ -210,7 +210,7 @@ function answerWithWriteFileModel() {
 }
 
 /**
- * Tool step then a soft-landing ellipsis / 让我继续 loop (must be rejected).
+ * Two tool steps then a soft-landing ellipsis loop (maxToolRounds clamps to ≥2).
  */
 function toolThenDegenerateSoftLandingModel() {
   let callCount = 0;
@@ -227,16 +227,18 @@ function toolThenDegenerateSoftLandingModel() {
     },
     doStream: async () => {
       callCount += 1;
-      if (callCount === 1) {
+      if (callCount <= 2) {
         return {
           stream: new ReadableStream({
             start(controller) {
               controller.enqueue({ type: 'stream-start', warnings: [] });
               controller.enqueue({
                 type: 'tool-call',
-                toolCallId: 'tc_read',
+                toolCallId: `tc_read_${callCount}`,
                 toolName: 'read_file',
-                input: JSON.stringify({ path: '/workspace/chunk.md' }),
+                input: JSON.stringify({
+                  path: `/workspace/chunk-${callCount}.md`,
+                }),
               });
               controller.enqueue({
                 type: 'finish',
@@ -274,7 +276,7 @@ function toolThenDegenerateSoftLandingModel() {
   };
 }
 
-/** Research narration + grep, then empty soft-landing (must not recover). */
+/** Research narration + grep twice, then empty soft-landing. */
 function narrateWithGrepOnlyModel() {
   let callCount = 0;
   return {
@@ -287,7 +289,7 @@ function narrateWithGrepOnlyModel() {
     },
     doStream: async () => {
       callCount += 1;
-      if (callCount === 1) {
+      if (callCount <= 2) {
         return {
           stream: new ReadableStream({
             start(controller) {
@@ -301,9 +303,9 @@ function narrateWithGrepOnlyModel() {
               controller.enqueue({ type: 'text-end', id: 't0' });
               controller.enqueue({
                 type: 'tool-call',
-                toolCallId: 'tc_grep',
+                toolCallId: `tc_grep_${callCount}`,
                 toolName: 'grep',
-                input: JSON.stringify({ q: 'whale' }),
+                input: JSON.stringify({ q: 'whale', path: `/workspace/g${callCount}.md` }),
               });
               controller.enqueue({
                 type: 'finish',
@@ -372,7 +374,7 @@ describe('runTurn answer content gating', () => {
     assert.equal(deltas.includes('指数型技术。'), true);
   });
 
-  it('recovers answer text that shared a write_file call', async () => {
+  it('synthesizes write confirmation from write_file paths', async () => {
     const session = emptySession();
     /** @type {Array<Record<string, unknown>>} */
     const events = [];
@@ -395,8 +397,8 @@ describe('runTurn answer content gating', () => {
     });
 
     assert.ok(result);
-    assert.equal(result.content, '已写入笔记。');
-    assert.equal(session.messages.at(-1)?.content, '已写入笔记。');
+    assert.equal(result.content, '已写入：log.md');
+    assert.equal(session.messages.at(-1)?.content, '已写入：log.md');
   });
 
   it('does not recover research-tool narration when there is no final answer', async () => {
@@ -417,19 +419,17 @@ describe('runTurn answer content gating', () => {
       userMessage: '搜一下',
       getBooksRoot: () => '/tmp/books-should-not-matter',
       tools,
-      maxToolRounds: 1,
+      maxToolRounds: 2,
       onEvent: (event) => events.push(event),
     });
 
-    assert.equal(result, null);
-    assert.equal(
-      events.some((e) => e.type === 'error'),
-      true,
-    );
-    assert.equal(session.messages.length, 0);
+    // Soft-landing replaces model prose with a tool ledger.
+    assert.ok(result);
+    assert.match(result.content, /工具调用次数已用尽/);
+    assert.equal(result.content.includes('让我继续搜'), false);
   });
 
-  it('rejects degenerate soft-landing text and does not persist it', async () => {
+  it('replaces degenerate soft-landing prose with a tool ledger', async () => {
     const session = emptySession();
     /** @type {Array<Record<string, unknown>>} */
     const events = [];
@@ -447,15 +447,18 @@ describe('runTurn answer content gating', () => {
       userMessage: '核对全部 chunk',
       getBooksRoot: () => '/tmp/books-should-not-matter',
       tools,
-      maxToolRounds: 1,
+      maxToolRounds: 2,
       onEvent: (event) => events.push(event),
     });
 
-    assert.equal(result, null);
-    assert.equal(session.messages.length, 0);
-    const err = events.find((e) => e.type === 'error');
-    assert.ok(err);
-    assert.equal(err.message, DEGENERATE_ANSWER_ERROR);
+    assert.ok(result);
+    assert.match(result.content, /工具调用次数已用尽/);
+    assert.match(result.content, /chunk-1\.md/);
+    assert.equal(result.content.includes('让我继续'), false);
+    assert.equal(
+      events.some((e) => e.type === 'error'),
+      false,
+    );
   });
 });
 
@@ -486,7 +489,8 @@ describe('runTurn tool trace timing', () => {
       userMessage: 'Who is Ahab?',
       getBooksRoot: () => '/tmp/books-should-not-matter',
       tools,
-      maxToolRounds: 1,
+      // Keep a spare tool-capable step so the final prose is not soft-landing.
+      maxToolRounds: 2,
       onEvent: (event) => {
         events.push(event);
         if (event.type === 'tool.start' && toolRunning) {

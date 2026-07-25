@@ -25,6 +25,7 @@ import {
 import { maybeApplyFirstTurnTitle } from './sessionStore.mjs';
 import { discoverSkills } from './skills/discover.mjs';
 import { expandSkillCommand } from './skills/invoke.mjs';
+import { formatToolLedger, formatWriteConfirmation } from './toolLedger.mjs';
 import { createReadingTools } from './tools.mjs';
 import { prepareToolExhaustionStep, resolveMaxToolRounds } from './toolRounds.mjs';
 
@@ -179,6 +180,13 @@ export async function runTurn(input) {
             : undefined,
       },
       async () => {
+        // Flags set from prepareStep (more reliable than fullStream start-step).
+        let softLandingStep = false;
+        let usedSoftLanding = false;
+        const answerGate = createAnswerContentGate((delta) => {
+          onEvent({ type: 'message.assistant.delta', id: assistantId, delta });
+        });
+
         const result = streamText({
           model,
           system,
@@ -187,20 +195,21 @@ export async function runTurn(input) {
           abortSignal,
           // N tool-capable steps + 1 soft-landing answer (tools disabled).
           stopWhen: stepCountIs(maxToolRounds + 1),
-          prepareStep: ({ stepNumber, steps }) =>
-            prepareToolExhaustionStep({
+          prepareStep: ({ stepNumber, steps }) => {
+            const prep = prepareToolExhaustionStep({
               stepNumber,
               maxToolRounds,
               system,
               steps,
-            }),
+            });
+            softLandingStep = Boolean(prep);
+            if (softLandingStep) usedSoftLanding = true;
+            return prep;
+          },
         });
 
-        // Visible answer = tool-free steps only. Narration that shares a step
-        // with tool calls stays out of content (and thus out of history).
-        const answerGate = createAnswerContentGate((delta) => {
-          onEvent({ type: 'message.assistant.delta', id: assistantId, delta });
-        });
+        // Visible answer = tool-free steps only. Soft-landing (budget spent)
+        // never promotes model prose — content becomes a toolTrace ledger.
         /** Captured from fullStream `error` parts — AI SDK yields these instead of throwing. */
         let streamError = /** @type {unknown} */ (null);
         for await (const part of result.fullStream) {
@@ -263,7 +272,7 @@ export async function runTurn(input) {
             continue;
           }
           if (part.type === 'finish-step') {
-            answerGate.finishStep();
+            answerGate.finishStep({ promote: !softLandingStep });
           }
         }
 
@@ -285,35 +294,37 @@ export async function runTurn(input) {
           return null;
         }
 
-        let content = answerGate.getContent();
-        // Never use result.text here — it concatenates every step, including
-        // research-tool narration. Recover only write_file-mixed answer text
-        // (gate first, then steps) so save confirmations are not blanked.
-        if (!content.trim()) {
-          try {
-            const fromGate = answerGate.fallbackText();
-            const fromSteps = fromGate
-              ? ''
-              : pickAnswerFromSteps(await result.steps);
-            const fallback = fromGate || fromSteps;
-            if (fallback.trim()) {
-              answerGate.adoptFallback(fallback);
-              content = answerGate.getContent();
+        let content = '';
+        if (usedSoftLanding) {
+          content = formatToolLedger(toolTrace);
+          answerGate.adoptFallback(content);
+        } else {
+          content = answerGate.getContent();
+          // Never use result.text — it concatenates every step. Prefer tool-free
+          // step text; else synthesize write confirmations from write_file paths.
+          if (!content.trim()) {
+            try {
+              const fromSteps = pickAnswerFromSteps(await result.steps);
+              const fromWrites = fromSteps.trim()
+                ? ''
+                : formatWriteConfirmation(toolTrace);
+              const fallback = fromSteps.trim() ? fromSteps : fromWrites;
+              if (fallback.trim()) {
+                answerGate.adoptFallback(fallback);
+                content = answerGate.getContent();
+              }
+            } catch (error) {
+              if (isAbortError(error) || abortSignal?.aborted) {
+                return finishAborted(session, userId, onEvent, persistSession);
+              }
+              dropInFlightUser(session, userId, persistSession);
+              onEvent({
+                type: 'error',
+                message: error instanceof Error ? error.message : String(error),
+              });
+              onEvent({ type: 'done' });
+              return null;
             }
-          } catch (error) {
-            if (isAbortError(error) || abortSignal?.aborted) {
-              return finishAborted(session, userId, onEvent, persistSession);
-            }
-            // AI SDK rejects with NoOutputGeneratedError when the stream ended
-            // on an error/abort before any step finished — surface that, don't
-            // pretend the model returned an empty successful reply.
-            dropInFlightUser(session, userId, persistSession);
-            onEvent({
-              type: 'error',
-              message: error instanceof Error ? error.message : String(error),
-            });
-            onEvent({ type: 'done' });
-            return null;
           }
         }
 
@@ -331,7 +342,8 @@ export async function runTurn(input) {
           return null;
         }
 
-        if (isDegenerateAnswer(content)) {
+        // Ledger content is ours; only screen natural (non-exhaustion) answers.
+        if (!usedSoftLanding && isDegenerateAnswer(content)) {
           dropInFlightUser(session, userId, persistSession);
           onEvent({
             type: 'error',
