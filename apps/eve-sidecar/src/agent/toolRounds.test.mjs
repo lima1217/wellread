@@ -5,6 +5,7 @@ import {
   HARD_MAX_TOOL_ROUNDS,
   MIN_MAX_TOOL_ROUNDS,
   TOOLS_EXHAUSTED_SYSTEM_PROMPT,
+  formatReadPathsBlock,
   prepareToolExhaustionStep,
   resolveMaxToolRounds,
 } from './toolRounds.mjs';
@@ -54,5 +55,24 @@ describe('prepareToolExhaustionStep', () => {
     assert.deepEqual(step.activeTools, []);
     assert.ok(step.system.startsWith(system));
     assert.ok(step.system.includes(TOOLS_EXHAUSTED_SYSTEM_PROMPT));
+  });
+
+  it('appends already-read paths from prior steps', () => {
+    const step = prepareToolExhaustionStep({
+      stepNumber: 2,
+      maxToolRounds: 2,
+      system,
+      steps: [
+        {
+          toolCalls: [
+            { toolName: 'read_file', input: { path: '/workspace/a.md' } },
+          ],
+        },
+      ],
+    });
+    assert.ok(step);
+    assert.ok(step.system.includes('已读取路径'));
+    assert.ok(step.system.includes('/workspace/a.md'));
+    assert.ok(step.system.includes(formatReadPathsBlock(['/workspace/a.md'])));
   });
 });

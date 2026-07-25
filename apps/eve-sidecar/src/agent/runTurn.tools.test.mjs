@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { tool } from 'ai';
 import { z } from 'zod';
-import { runTurn } from './runTurn.mjs';
+import { DEGENERATE_ANSWER_ERROR, runTurn } from './runTurn.mjs';
 
 /**
  * @returns {import('./sessionStore.mjs').Session}
@@ -209,6 +209,71 @@ function answerWithWriteFileModel() {
   };
 }
 
+/**
+ * Tool step then a soft-landing ellipsis / 让我继续 loop (must be rejected).
+ */
+function toolThenDegenerateSoftLandingModel() {
+  let callCount = 0;
+  const bad = Array.from({ length: 40 }, () => '…让我继续。……（中间略）…').join(
+    '\n',
+  );
+  return {
+    specificationVersion: 'v2',
+    provider: 'test',
+    modelId: 'degenerate-soft-landing',
+    supportedUrls: {},
+    doGenerate: async () => {
+      throw new Error('doGenerate unused');
+    },
+    doStream: async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'tool-call',
+                toolCallId: 'tc_read',
+                toolName: 'read_file',
+                input: JSON.stringify({ path: '/workspace/chunk.md' }),
+              });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      }
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 't1' });
+            controller.enqueue({
+              type: 'text-delta',
+              id: 't1',
+              delta: `（续）… BCI…\n\n${bad}`,
+            });
+            controller.enqueue({ type: 'text-end', id: 't1' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  };
+}
+
 /** Research narration + grep, then empty soft-landing (must not recover). */
 function narrateWithGrepOnlyModel() {
   let callCount = 0;
@@ -362,6 +427,35 @@ describe('runTurn answer content gating', () => {
       true,
     );
     assert.equal(session.messages.length, 0);
+  });
+
+  it('rejects degenerate soft-landing text and does not persist it', async () => {
+    const session = emptySession();
+    /** @type {Array<Record<string, unknown>>} */
+    const events = [];
+    const tools = {
+      read_file: tool({
+        description: 'read',
+        inputSchema: z.object({ path: z.string() }),
+        execute: async ({ path }) => ({ ok: true, path, content: 'x' }),
+      }),
+    };
+
+    const result = await runTurn({
+      model: /** @type {any} */ (toolThenDegenerateSoftLandingModel()),
+      session,
+      userMessage: '核对全部 chunk',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools,
+      maxToolRounds: 1,
+      onEvent: (event) => events.push(event),
+    });
+
+    assert.equal(result, null);
+    assert.equal(session.messages.length, 0);
+    const err = events.find((e) => e.type === 'error');
+    assert.ok(err);
+    assert.equal(err.message, DEGENERATE_ANSWER_ERROR);
   });
 });
 

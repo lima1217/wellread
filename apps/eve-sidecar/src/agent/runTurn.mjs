@@ -9,6 +9,7 @@ import {
   createAnswerContentGate,
   pickAnswerFromSteps,
 } from './answerContent.mjs';
+import { isDegenerateAnswer } from './answerQuality.mjs';
 import { maybeCompressSession } from './contextCompress.mjs';
 import { isAbortError } from './httpAbort.mjs';
 import {
@@ -26,6 +27,9 @@ import { discoverSkills } from './skills/discover.mjs';
 import { expandSkillCommand } from './skills/invoke.mjs';
 import { createReadingTools } from './tools.mjs';
 import { prepareToolExhaustionStep, resolveMaxToolRounds } from './toolRounds.mjs';
+
+export const DEGENERATE_ANSWER_ERROR =
+  'Model returned a degenerate reply after the tool budget was spent. Try a narrower question.';
 
 /** Fallback when caller omits contextWindowTokens (matches createModel default). */
 const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
@@ -183,8 +187,13 @@ export async function runTurn(input) {
           abortSignal,
           // N tool-capable steps + 1 soft-landing answer (tools disabled).
           stopWhen: stepCountIs(maxToolRounds + 1),
-          prepareStep: ({ stepNumber }) =>
-            prepareToolExhaustionStep({ stepNumber, maxToolRounds, system }),
+          prepareStep: ({ stepNumber, steps }) =>
+            prepareToolExhaustionStep({
+              stepNumber,
+              maxToolRounds,
+              system,
+              steps,
+            }),
         });
 
         // Visible answer = tool-free steps only. Narration that shares a step
@@ -317,6 +326,16 @@ export async function runTurn(input) {
           onEvent({
             type: 'error',
             message: 'Model returned an empty reply. Check API key/model.',
+          });
+          onEvent({ type: 'done' });
+          return null;
+        }
+
+        if (isDegenerateAnswer(content)) {
+          dropInFlightUser(session, userId, persistSession);
+          onEvent({
+            type: 'error',
+            message: DEGENERATE_ANSWER_ERROR,
           });
           onEvent({ type: 'done' });
           return null;
