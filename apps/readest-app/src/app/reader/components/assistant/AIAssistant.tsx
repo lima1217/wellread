@@ -116,6 +116,52 @@ function MarkdownRule() {
   return <div className='my-[0.9em]' aria-hidden='true' />;
 }
 
+function languageFromClassName(className?: string): string | null {
+  if (!className) return null;
+  const m = /(?:^|\s)language-([\w#+.-]+)/.exec(className);
+  return m?.[1] ?? null;
+}
+
+/** Fenced block chrome: optional language chip; shell carries eink-safe 1px edge. */
+function MarkdownPre({ children }: { children?: ReactNode }) {
+  const child = Array.isArray(children) ? children[0] : children;
+  const language =
+    isValidElement(child) && child.props && typeof child.props === 'object'
+      ? languageFromClassName((child.props as { className?: string }).className)
+      : null;
+  return (
+    <div
+      className={clsx(
+        'bg-base-100/80 eink-bordered border-base-content/10 my-[0.9em] overflow-hidden rounded-lg border',
+      )}
+    >
+      {language ? (
+        <div
+          className={clsx(
+            'text-base-content/45 border-base-content/10 border-b px-3 py-1.5',
+            'select-none font-sans text-[0.75em] leading-none tracking-wide',
+          )}
+        >
+          {language}
+        </div>
+      ) : null}
+      <pre className='overflow-x-auto p-3.5'>{children}</pre>
+    </div>
+  );
+}
+
+function MarkdownTable({ children }: { children?: ReactNode }) {
+  return (
+    <div
+      className={clsx(
+        'eink-bordered border-base-content/15 my-[0.9em] overflow-x-auto rounded-lg border',
+      )}
+    >
+      <table className='w-full border-collapse text-[0.92em] leading-snug'>{children}</table>
+    </div>
+  );
+}
+
 function plainTextFromChildren(children: ReactNode): string {
   if (children == null || typeof children === 'boolean') return '';
   if (typeof children === 'string' || typeof children === 'number') return String(children);
@@ -161,6 +207,8 @@ function createAssistantMarkdownComponents(opts: {
   return {
     blockquote: ({ children }) => <MarkdownBlockquote>{children}</MarkdownBlockquote>,
     hr: () => <MarkdownRule />,
+    pre: ({ children }) => <MarkdownPre>{children}</MarkdownPre>,
+    table: ({ children }) => <MarkdownTable>{children}</MarkdownTable>,
     code: ({ children, className }) => {
       // Fenced blocks get a language class; leave those alone.
       if (className) {
@@ -215,15 +263,20 @@ function extractEpubCfiFromLabel(text: string): string | null {
 const messageTypeClass = 'font-sans text-base leading-[1.75]';
 const markdownBodyClass = clsx(
   'break-words [&_a]:break-all',
-  '[&_code]:font-mono [&_code]:text-[0.9em]',
+  // Inline code chip; fenced `pre code` resets below so the shell stays clean.
+  '[&_code]:rounded [&_code]:bg-base-200/70 [&_code]:px-1 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.9em]',
+  '[&_pre_code]:rounded-none [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:font-mono',
   '[&_h1]:mb-[0.55em] [&_h1]:text-balance [&_h1]:text-[1.15em] [&_h1]:leading-[1.3] [&_h1]:font-semibold',
   '[&_h2]:mb-[0.5em] [&_h2]:text-balance [&_h2]:text-[1.08em] [&_h2]:leading-[1.35] [&_h2]:font-semibold',
   '[&_h3]:mb-[0.45em] [&_h3]:text-balance [&_h3]:font-semibold [&_h3]:leading-[1.4]',
-  '[&_li]:my-[0.5em]',
-  '[&_ol]:my-[0.9em] [&_ul]:my-[0.9em]',
+  '[&_ul]:my-[0.9em] [&_ul]:list-disc [&_ul]:ps-5',
+  '[&_ol]:my-[0.9em] [&_ol]:list-decimal [&_ol]:ps-5',
+  '[&_li]:my-[0.5em] [&_li]:ps-0.5',
+  '[&_ul_ul]:my-[0.35em] [&_ol_ol]:my-[0.35em] [&_ul_ol]:my-[0.35em] [&_ol_ul]:my-[0.35em]',
   '[&_p]:my-[0.9em] [&_p:first-child]:mt-0 [&_p:last-child]:mb-0',
-  '[&_pre]:bg-base-100/80 [&_pre]:my-[0.9em] [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:p-3.5',
-  '[&_pre_code]:font-mono',
+  '[&_th]:border-base-content/15 [&_th]:border-b [&_th]:bg-base-200/40 [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:text-start [&_th]:font-semibold',
+  '[&_td]:border-base-content/10 [&_td]:border-b [&_td]:px-2.5 [&_td]:py-1.5',
+  '[&_tr:last-child_td]:border-b-0',
 );
 
 /** T3: always-visible summary + Details expands params. */
