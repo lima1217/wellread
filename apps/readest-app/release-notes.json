@@ -1,5 +1,16 @@
 {
   "releases": {
+    "1.1.1": {
+      "date": "2026-07-26",
+      "notes": [
+        "Assistant: Each turn now carries reading position, Pending Quotes, and notes via a reading-context envelope",
+        "Assistant: New OKF note skill with write budgets, batching, and tighter notes write gates",
+        "Assistant: Soft-landing answers replaced by a capped tool-trace ledger; degenerate soft landings are rejected",
+        "Assistant: Pending Quote text is no longer truncated in the reading-context envelope",
+        "Assistant: Markdown rendering polished for fenced code, tables, and lists",
+        "Assistant: Tool-step narration omitted from answers when recovering write_file confirmations"
+      ]
+    },
     "1.1.0": {
       "date": "2026-07-24",
       "notes": [
