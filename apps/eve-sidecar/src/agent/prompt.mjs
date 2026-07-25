@@ -18,9 +18,6 @@ export const NOTES_INDEX_MAX = 24;
 /** Cap filesystem visits while building notes_index (DoS / large OKF trees). */
 export const NOTES_INDEX_WALK_MAX = 400;
 
-/** Max chars per Pending Quote text in the envelope. */
-export const ENVELOPE_QUOTE_TEXT_MAX = 500;
-
 const CHAPTER_ATTR = /^— 《(.+)》$/;
 
 /**
@@ -295,11 +292,8 @@ export function buildReadingContextEnvelope(input) {
   const quoteLines = [];
   for (const q of quotes) {
     if (!q || typeof q.text !== 'string') continue;
-    let text = q.text.trim();
+    const text = q.text.trim();
     if (!text) continue;
-    if (text.length > ENVELOPE_QUOTE_TEXT_MAX) {
-      text = `${text.slice(0, ENVELOPE_QUOTE_TEXT_MAX - 1).trimEnd()}…`;
-    }
     const ch =
       typeof q.chapterTitle === 'string' && q.chapterTitle.trim()
         ? q.chapterTitle.trim()

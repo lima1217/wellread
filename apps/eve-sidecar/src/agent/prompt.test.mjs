@@ -191,6 +191,18 @@ describe('buildReadingContextEnvelope', () => {
     assert.doesNotMatch(env, /position:/);
   });
 
+  it('keeps the full Pending Quote text with no char cap', () => {
+    const text = `The cognitive skills encountered in the previous chapter are the result of a two-decade revolution in neuroscience that began when President George H. W. Bush declared the 1990s "the Decade of the Brain." During this period, research dollars flooded into the field. The tools for peering inside the brain rode the same exponential curves powering the rest of this book. Room-size imaging machines shrunk to pocket-size wonders, while the computational power needed to analyze the data collected by these machines rode Moore's law right into the App Store. This convergence birthed a new generation of neurotechnology—or what could be called brain-enhancing, consciousness-raising technology.`;
+    assert.ok(text.length > 500);
+    const env = buildReadingContextEnvelope({
+      bookId: 'bk1',
+      bookTitle: 'Book',
+      quotes: [{ text }],
+    });
+    assert.ok(env.includes(`text: ${JSON.stringify(text)}`));
+    assert.doesNotMatch(env, /…/);
+  });
+
   it('includes stale-marked position, quotes, prior_sources, notes_index', () => {
     const env = buildReadingContextEnvelope({
       bookId: 'bk1',
