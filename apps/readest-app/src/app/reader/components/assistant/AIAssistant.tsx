@@ -58,6 +58,8 @@ import { openExternalUrl } from '@/utils/open';
 
 interface AIAssistantProps {
   bookKey: string;
+  /** False while History pane covers chat (chat stays mounted). */
+  isActive?: boolean;
 }
 
 const focusRing =
@@ -99,21 +101,23 @@ const composerPrimaryBtnIdle = 'bg-base-200/70 text-base-content/30';
 /** Book excerpt in assistant prose — editorial pull-quote, not a chat bubble. */
 function MarkdownBlockquote({ children }: { children?: ReactNode }) {
   return (
-    <blockquote className='border-base-content/20 text-base-content/65 my-[0.9em] border-s-2 ps-3.5 text-[0.92em] leading-[1.7] not-italic'>
+    <blockquote className='border-base-content/20 text-base-content/65 my-[0.75em] border-s-2 ps-3.5 text-[0.92em] leading-[1.6] not-italic'>
       <div
         className='text-base-content/30 mb-1 select-none font-sans text-[0.8em] leading-none tracking-wide'
         aria-hidden='true'
       >
         ❝
       </div>
-      <div className='[&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0'>{children}</div>
+      <div className='text-pretty [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0'>
+        {children}
+      </div>
     </blockquote>
   );
 }
 
 /** Models often wrap citations with `---` → `<hr>`; keep the break, drop the white line. */
 function MarkdownRule() {
-  return <div className='my-[0.9em]' aria-hidden='true' />;
+  return <div className='my-[0.75em]' aria-hidden='true' />;
 }
 
 function languageFromClassName(className?: string): string | null {
@@ -132,7 +136,7 @@ function MarkdownPre({ children }: { children?: ReactNode }) {
   return (
     <div
       className={clsx(
-        'bg-base-100/80 eink-bordered border-base-content/10 my-[0.9em] overflow-hidden rounded-lg border',
+        'bg-base-100/80 eink-bordered border-base-content/10 my-[0.75em] overflow-hidden rounded-lg border',
       )}
     >
       {language ? (
@@ -145,7 +149,9 @@ function MarkdownPre({ children }: { children?: ReactNode }) {
           {language}
         </div>
       ) : null}
-      <pre className='overflow-x-auto p-3.5'>{children}</pre>
+      <pre className='overflow-x-auto p-3.5 font-mono text-[0.875em] leading-relaxed'>
+        {children}
+      </pre>
     </div>
   );
 }
@@ -154,10 +160,10 @@ function MarkdownTable({ children }: { children?: ReactNode }) {
   return (
     <div
       className={clsx(
-        'eink-bordered border-base-content/15 my-[0.9em] overflow-x-auto rounded-lg border',
+        'eink-bordered border-base-content/15 my-[0.75em] overflow-x-auto rounded-lg border',
       )}
     >
-      <table className='w-full border-collapse text-[0.92em] leading-snug'>{children}</table>
+      <table className='w-full border-collapse text-[0.92em] leading-[1.45]'>{children}</table>
     </div>
   );
 }
@@ -259,23 +265,32 @@ function extractEpubCfiFromLabel(text: string): string | null {
   return m ? m[0] : null;
 }
 
-/** Chat body uses app UI type, not the reader's book face. Keep 16px + 1.75 for CJK air. */
-const messageTypeClass = 'font-sans text-base leading-[1.75]';
+/**
+ * Assistant prose: app UI face (not the book face), 16px floor for iOS inputs nearby,
+ * ~1.65 leading for mixed CJK/EN, measure capped when the panel is wide.
+ */
+const messageTypeClass = 'font-sans text-base leading-[1.65]';
 const markdownBodyClass = clsx(
   'break-words [&_a]:break-all',
   // Inline code chip; fenced `pre code` resets below so the shell stays clean.
   '[&_code]:rounded [&_code]:bg-base-200/70 [&_code]:px-1 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.9em]',
-  '[&_pre_code]:rounded-none [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:font-mono',
-  '[&_h1]:mb-[0.55em] [&_h1]:text-balance [&_h1]:text-[1.15em] [&_h1]:leading-[1.3] [&_h1]:font-semibold',
-  '[&_h2]:mb-[0.5em] [&_h2]:text-balance [&_h2]:text-[1.08em] [&_h2]:leading-[1.35] [&_h2]:font-semibold',
-  '[&_h3]:mb-[0.45em] [&_h3]:text-balance [&_h3]:font-semibold [&_h3]:leading-[1.4]',
-  '[&_ul]:my-[0.9em] [&_ul]:list-disc [&_ul]:ps-5',
-  '[&_ol]:my-[0.9em] [&_ol]:list-decimal [&_ol]:ps-5',
-  '[&_li]:my-[0.5em] [&_li]:ps-0.5',
-  '[&_ul_ul]:my-[0.35em] [&_ol_ol]:my-[0.35em] [&_ul_ol]:my-[0.35em] [&_ol_ul]:my-[0.35em]',
-  '[&_p]:my-[0.9em] [&_p:first-child]:mt-0 [&_p:last-child]:mb-0',
-  '[&_th]:border-base-content/15 [&_th]:border-b [&_th]:bg-base-200/40 [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:text-start [&_th]:font-semibold',
-  '[&_td]:border-base-content/10 [&_td]:border-b [&_td]:px-2.5 [&_td]:py-1.5',
+  '[&_pre_code]:rounded-none [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:font-mono [&_pre_code]:text-[0.875em] [&_pre_code]:leading-relaxed',
+  // Headings: descending scale, tighter leading, section gap above (not only below).
+  '[&_h1]:mt-[1.15em] [&_h1]:mb-[0.4em] [&_h1]:text-balance [&_h1]:text-[1.2em] [&_h1]:leading-[1.25] [&_h1]:font-semibold [&_h1]:tracking-tight [&_h1]:first:mt-0',
+  '[&_h2]:mt-[1.05em] [&_h2]:mb-[0.35em] [&_h2]:text-balance [&_h2]:text-[1.1em] [&_h2]:leading-[1.3] [&_h2]:font-semibold [&_h2]:tracking-tight [&_h2]:first:mt-0',
+  '[&_h3]:mt-[0.95em] [&_h3]:mb-[0.3em] [&_h3]:text-balance [&_h3]:text-[1.02em] [&_h3]:leading-[1.35] [&_h3]:font-semibold [&_h3]:first:mt-0',
+  '[&_h4]:mt-[0.85em] [&_h4]:mb-[0.25em] [&_h4]:text-balance [&_h4]:text-[1em] [&_h4]:leading-[1.4] [&_h4]:font-semibold [&_h4]:first:mt-0',
+  // Body rhythm: tighter than 0.9em so short AI paragraphs don't feel sparse.
+  '[&_p]:my-[0.7em] [&_p]:text-pretty [&_p:first-child]:mt-0 [&_p:last-child]:mb-0',
+  '[&_strong]:font-semibold [&_em]:italic',
+  // Lists denser than paragraphs; wrap at ≥1.4.
+  '[&_ul]:my-[0.7em] [&_ul]:list-disc [&_ul]:ps-5',
+  '[&_ol]:my-[0.7em] [&_ol]:list-decimal [&_ol]:ps-5',
+  '[&_li]:my-[0.28em] [&_li]:ps-0.5 [&_li]:leading-[1.55]',
+  '[&_ul_ul]:my-[0.25em] [&_ol_ol]:my-[0.25em] [&_ul_ol]:my-[0.25em] [&_ol_ul]:my-[0.25em]',
+  // Tables
+  '[&_th]:border-base-content/15 [&_th]:border-b [&_th]:bg-base-200/40 [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:text-start [&_th]:font-semibold [&_th]:leading-snug',
+  '[&_td]:border-base-content/10 [&_td]:border-b [&_td]:px-2.5 [&_td]:py-1.5 [&_td]:leading-[1.45]',
   '[&_tr:last-child_td]:border-b-0',
 );
 
@@ -344,7 +359,7 @@ function QuoteStack({ quotes }: { quotes: EveMessageQuote[] }) {
   );
 }
 
-/** Quiet three-dot wait cue while the assistant has no visible reply yet. */
+/** Quiet wait cue while the assistant has no visible reply yet. */
 function PendingReplyDots({ lookingUp }: { lookingUp: boolean }) {
   const _ = useTranslation();
   const label = lookingUp ? _('Looking up…') : _('Thinking…');
@@ -355,9 +370,8 @@ function PendingReplyDots({ lookingUp }: { lookingUp: boolean }) {
         'text-base-content/55 me-1 flex items-center gap-2 px-0.5 py-0.5',
       )}
       role='status'
-      aria-label={label}
     >
-      {lookingUp ? <span className='font-sans text-[0.85em] leading-none'>{label}</span> : null}
+      <span className='font-sans text-[0.85em] leading-none'>{label}</span>
       <span className='assistant-pending-dots inline-flex items-center gap-1' aria-hidden='true'>
         <span className='bg-base-content size-1 rounded-full' />
         <span className='bg-base-content size-1 rounded-full' />
@@ -390,7 +404,7 @@ function ReasoningBlock({ reasoning }: { reasoning: string }) {
       <pre
         className={clsx(
           'text-base-content/55 mt-2.5 max-h-56 overflow-y-auto overscroll-contain',
-          'whitespace-pre-wrap font-sans text-[0.9em] leading-[1.7]',
+          'whitespace-pre-wrap font-sans text-[0.9em] leading-[1.6]',
         )}
       >
         {reasoning}
@@ -417,7 +431,8 @@ function CopyMessageButton({ content, workedMs }: { content: string; workedMs?: 
       <button
         type='button'
         className={clsx(
-          'hover:text-base-content inline-flex items-center justify-center',
+          'hover:text-base-content relative inline-flex size-6 items-center justify-center',
+          'after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2',
           'transition-colors',
           focusRing,
         )}
@@ -540,10 +555,12 @@ const ReadingAssistantChat = ({
   bookKey,
   bookId,
   bookTitle,
+  isActive = true,
 }: {
   bookKey: string;
   bookId: string;
   bookTitle: string;
+  isActive?: boolean;
 }) => {
   const _ = useTranslation();
   const { envConfig } = useEnv();
@@ -582,11 +599,17 @@ const ReadingAssistantChat = ({
   const [skillsError, setSkillsError] = useState(false);
   const [slashIndex, setSlashIndex] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState(false);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const slashQuery = getComposerSlashQuery(agent.composer);
   const slashOpen = slashQuery !== null && !slashDismissed;
   const slashMatches = slashOpen ? filterSkillsForSlash(skills, slashQuery) : [];
   const activeSlashIndex =
     slashMatches.length === 0 ? 0 : Math.min(slashIndex, slashMatches.length - 1);
+
+  useEffect(() => {
+    if (!isActive) return;
+    composerRef.current?.focus({ preventScroll: true });
+  }, [isActive]);
 
   useEffect(() => {
     if (!slashOpen) return;
@@ -710,11 +733,15 @@ const ReadingAssistantChat = ({
         onRemove={removePendingQuote}
         onClear={clearPendingQuotes}
       />
-      <div
-        className='min-h-0 flex-1 space-y-8 overflow-y-auto overscroll-contain px-4 py-5 touch-pan-y'
-        aria-live='polite'
-        aria-relevant='additions'
-      >
+      <div className='min-h-0 flex-1 space-y-8 overflow-y-auto overscroll-contain px-4 py-5 touch-pan-y'>
+        {agent.messages.length === 0 && !showPendingReply && !agent.error ? (
+          <div className='text-base-content/60 flex h-full min-h-40 flex-col justify-center gap-1.5 py-6 text-pretty leading-relaxed'>
+            <p className='text-base-content/80 font-medium'>{_('Ask about this book')}</p>
+            <p className='text-[0.92em]'>
+              {_('Select a passage and choose Ask, or type a question below.')}
+            </p>
+          </div>
+        ) : null}
         {agent.messages.map((msg, index) => {
           const isLiveAssistant =
             busy && msg.role === 'assistant' && index === agent.messages.length - 1;
@@ -729,7 +756,7 @@ const ReadingAssistantChat = ({
                 messageTypeClass,
                 msg.role === 'user'
                   ? 'bg-base-100/70 ms-5 select-text rounded-xl px-3.5 py-3 break-words whitespace-pre-wrap'
-                  : 'me-1 select-text px-0.5 py-0.5',
+                  : 'me-1 max-w-[65ch] select-text px-0.5 py-0.5',
               )}
             >
               {msg.role === 'user' && msg.quotes?.length ? (
@@ -844,6 +871,7 @@ const ReadingAssistantChat = ({
             </div>
           ) : null}
           <textarea
+            ref={composerRef}
             name='assistant-message'
             aria-label={_('Message')}
             autoComplete='off'
@@ -1056,10 +1084,11 @@ const ReadingAssistantChat = ({
   );
 };
 
-const AIAssistant = ({ bookKey }: AIAssistantProps) => {
+const AIAssistant = ({ bookKey, isActive = true }: AIAssistantProps) => {
   const _ = useTranslation();
   const { appService } = useEnv();
-  const { settings } = useSettingsStore();
+  const { settings, setSettingsDialogBookKey, setSettingsDialogOpen, setActiveSettingsItemId } =
+    useSettingsStore();
   const { getBookData } = useBookDataStore();
   const bookData = getBookData(bookKey);
   const ready = useEveConnectionStore((s) => s.ready);
@@ -1096,9 +1125,15 @@ const AIAssistant = ({ bookKey }: AIAssistantProps) => {
   const bookId = bookData?.book?.hash || '';
   const bookTitle = bookData?.book?.title || '';
 
+  const openAISettings = useCallback(() => {
+    setSettingsDialogBookKey(bookKey);
+    setActiveSettingsItemId('settings.ai.enableAssistant');
+    setSettingsDialogOpen(true);
+  }, [bookKey, setActiveSettingsItemId, setSettingsDialogBookKey, setSettingsDialogOpen]);
+
   if (!available) {
     return (
-      <div className='text-base-content/70 flex h-full flex-col items-center justify-center gap-2 p-4 text-center leading-relaxed'>
+      <div className='text-base-content/70 flex h-full flex-col items-center justify-center gap-3 p-4 text-center leading-relaxed'>
         {!ready ? (
           <Loader2Icon
             className='animate-spin select-none motion-reduce:animate-none'
@@ -1107,10 +1142,22 @@ const AIAssistant = ({ bookKey }: AIAssistantProps) => {
           />
         ) : null}
         <p className='select-text text-pretty' aria-live='polite'>
-          {_(
-            'Enable Reading Assistant in Settings, add an API key, and wait for the local sidecar to start.',
-          )}
+          {ready
+            ? _('Enable Reading Assistant in Settings and add an API key.')
+            : _('Starting the local Reading Assistant…')}
         </p>
+        {ready ? (
+          <button
+            type='button'
+            className={clsx(
+              'btn btn-contrast h-9 min-h-0 rounded-lg px-4 text-sm font-medium',
+              focusRing,
+            )}
+            onClick={openAISettings}
+          >
+            {_('Open AI settings')}
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -1127,7 +1174,13 @@ const AIAssistant = ({ bookKey }: AIAssistantProps) => {
   // writes it to the store; a sessionId key remount would drop the in-flight stream.
   // Session switches (History / New chat) are handled by useEveAgent's load effect.
   return (
-    <ReadingAssistantChat key={bookId} bookKey={bookKey} bookId={bookId} bookTitle={bookTitle} />
+    <ReadingAssistantChat
+      key={bookId}
+      bookKey={bookKey}
+      bookId={bookId}
+      bookTitle={bookTitle}
+      isActive={isActive}
+    />
   );
 };
 

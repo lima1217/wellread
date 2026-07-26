@@ -34,17 +34,18 @@ const AssistantHeader: React.FC<{
       className='assistant-header relative flex h-11 items-center px-3 select-none touch-manipulation'
       dir='ltr'
     >
-      <div className='absolute inset-0 z-[-1] flex items-center justify-center'>
-        <div
+      {/* Inset + truncate so the title stays clear of flanking controls at narrow widths. */}
+      <div className='pointer-events-none absolute inset-x-20 inset-y-0 z-0 flex items-center justify-center sm:inset-x-24'>
+        <h2
           className={clsx(
-            'assistant-title text-balance font-medium tracking-tight',
+            'assistant-title truncate text-center text-base font-medium tracking-tight',
             isHistory && 'text-base-content/60',
           )}
         >
           {isHistory ? _('Chat History') : _('Reading Assistant')}
-        </div>
+        </h2>
       </div>
-      <div className='flex w-full items-center gap-x-1.5'>
+      <div className='relative z-10 flex w-full items-center gap-x-1.5'>
         <button
           type='button'
           title={isPinned ? _('Unpin AI') : _('Pin AI')}

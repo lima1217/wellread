@@ -133,8 +133,22 @@ const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({ bookKey, onSessionOpe
             {_('Loading…')}
           </div>
         ) : sessions.length === 0 ? (
-          <div className='text-base-content/60 p-4 text-pretty leading-relaxed'>
-            {_('No chats for this book yet.')}
+          <div className='text-base-content/60 flex flex-col items-start gap-3 p-4 text-pretty leading-relaxed'>
+            <div>
+              <p className='text-base-content/80 font-medium'>{_('No chats for this book yet')}</p>
+              <p className='mt-1 text-[0.92em]'>{_('Start a conversation from the chat panel.')}</p>
+            </div>
+            <button
+              type='button'
+              className={clsx(
+                'btn btn-contrast h-9 min-h-0 rounded-lg px-4 text-sm font-medium',
+                'focus-visible:ring-base-content/15 focus-visible:outline-none focus-visible:ring-2',
+                pressScaleClass,
+              )}
+              onClick={onSessionOpen}
+            >
+              {_('Back to chat')}
+            </button>
           </div>
         ) : (
           <ul className='space-y-0.5 px-2 py-1'>

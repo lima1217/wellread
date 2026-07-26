@@ -213,7 +213,10 @@ const AssistantPanel: React.FC = ({}) => {
           tabIndex={0}
           aria-label={_('Resize AI')}
           aria-orientation='horizontal'
+          aria-valuemin={MIN_ASSISTANT_PANEL_WIDTH * 100}
+          aria-valuemax={MAX_ASSISTANT_PANEL_WIDTH * 100}
           aria-valuenow={parseFloat(assistantPanelWidth)}
+          aria-valuetext={`${Math.round(parseFloat(assistantPanelWidth))}%`}
           onMouseDown={handleDragStart}
           onTouchStart={handleDragStart}
           onKeyDown={handleDragKeyDown}
@@ -225,6 +228,8 @@ const AssistantPanel: React.FC = ({}) => {
               tabIndex={0}
               aria-label={_('Resize AI')}
               aria-orientation='vertical'
+              aria-valuemin={0}
+              aria-valuemax={100}
               aria-valuenow={assistantPanelHeight.current}
               className='drag-handle flex h-6 max-h-6 min-h-6 w-full cursor-row-resize items-center justify-center'
               onMouseDown={handleVerticalDragStart}
@@ -253,7 +258,7 @@ const AssistantPanel: React.FC = ({}) => {
             {/* Do not key on activeSessionId: first send creates a session and
                 syncs it to the store; remounting here would destroy useEveAgent
                 mid-stream. History / new-chat switches load via sessionId prop. */}
-            <AIAssistant bookKey={sideBarBookKey} />
+            <AIAssistant bookKey={sideBarBookKey} isActive={pane === 'chat'} />
           </div>
           {pane === 'history' && (
             <ChatHistoryView bookKey={sideBarBookKey} onSessionOpen={() => setPane('chat')} />
