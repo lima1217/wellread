@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  EXTRACT_SCHEMA_VERSION,
   chunkFileName,
   formatChunkMarkdown,
   isMetaStale,
@@ -12,7 +13,8 @@ import {
   ensureBookExtract,
   type BooksExtractFs,
 } from '@/services/wellread/extract/ensureBookExtract';
-import type { BookDoc } from '@/libs/document';
+import { buildSpineChapterTitleLookup } from '@/services/wellread/extract/spineChapterTitles';
+import type { BookDoc, TOCItem } from '@/libs/document';
 
 function memoryFs(): BooksExtractFs & { files: Map<string, string> } {
   const files = new Map<string, string>();
@@ -46,11 +48,25 @@ function makeDoc(bodyHtml: string): Document {
   );
 }
 
-function fakeBookDoc(sectionsHtml: string[]): BookDoc {
+function fakeBookDoc(
+  sectionsHtml: string[],
+  opts?: {
+    sectionIds?: string[];
+    toc?: TOCItem[];
+  },
+): BookDoc {
+  const sections = sectionsHtml.map((html, i) => ({
+    id: opts?.sectionIds?.[i] ?? `sec-${i}.xhtml`,
+    href: opts?.sectionIds?.[i] ?? `sec-${i}.xhtml`,
+    createDocument: async () => makeDoc(html),
+  }));
   return {
-    sections: sectionsHtml.map((html) => ({
-      createDocument: async () => makeDoc(html),
-    })),
+    sections,
+    toc: opts?.toc,
+    splitTOCHref: (href: string) => {
+      const [path, fragment] = href.split('#');
+      return [path, fragment];
+    },
   } as unknown as BookDoc;
 }
 
@@ -75,8 +91,23 @@ describe('extract format', () => {
     expect(chunkFileName(0, 'Hello World')).toBe('00001-hello-world.md');
   });
 
-  it('detects stale meta by hash or mtime', () => {
+  it('detects stale meta by hash, mtime, or schema version', () => {
     const meta = parseExtractMeta(
+      JSON.stringify({
+        bookId: 'bk1',
+        sourceHash: 'abc',
+        sourceMtimeMs: 10,
+        format: 'EPUB',
+        extractedAt: 1,
+        chunkCount: 1,
+        schemaVersion: EXTRACT_SCHEMA_VERSION,
+      }),
+    );
+    expect(isMetaStale(meta, { sourceHash: 'abc', sourceMtimeMs: 10 })).toBe(false);
+    expect(isMetaStale(meta, { sourceHash: 'xyz', sourceMtimeMs: 10 })).toBe(true);
+    expect(isMetaStale(meta, { sourceHash: 'abc', sourceMtimeMs: 99 })).toBe(true);
+
+    const legacy = parseExtractMeta(
       JSON.stringify({
         bookId: 'bk1',
         sourceHash: 'abc',
@@ -86,9 +117,24 @@ describe('extract format', () => {
         chunkCount: 1,
       }),
     );
-    expect(isMetaStale(meta, { sourceHash: 'abc', sourceMtimeMs: 10 })).toBe(false);
-    expect(isMetaStale(meta, { sourceHash: 'xyz', sourceMtimeMs: 10 })).toBe(true);
-    expect(isMetaStale(meta, { sourceHash: 'abc', sourceMtimeMs: 99 })).toBe(true);
+    expect(isMetaStale(legacy, { sourceHash: 'abc', sourceMtimeMs: 10 })).toBe(true);
+  });
+});
+
+describe('buildSpineChapterTitleLookup', () => {
+  it('maps TOC labels onto spine indices (first label wins)', () => {
+    const bookDoc = fakeBookDoc(['<p>a</p>', '<p>b</p>', '<p>c</p>'], {
+      sectionIds: ['ch1.xhtml', 'ch2.xhtml', 'ch3.xhtml'],
+      toc: [
+        { id: 1, label: 'Loomings', href: 'ch1.xhtml', index: 0 },
+        { id: 2, label: 'Unbelievable scenes', href: 'ch2.xhtml#frag', index: 1 },
+        { id: 3, label: 'Later fragment', href: 'ch2.xhtml#other', index: 2 },
+      ],
+    });
+    const lookup = buildSpineChapterTitleLookup(bookDoc);
+    expect(lookup(0)).toBe('Loomings');
+    expect(lookup(1)).toBe('Unbelievable scenes');
+    expect(lookup(2)).toBeNull();
   });
 });
 
@@ -148,5 +194,31 @@ describe('ensureBookExtract', () => {
       fs,
     });
     expect(third.status).toBe('rebuilt');
+  });
+
+  it('writes TOC chapter titles into chunk frontmatter and schemaVersion into meta', async () => {
+    const fs = memoryFs();
+    const bookDoc = fakeBookDoc(
+      ['<p>Call me Ishmael. Some years ago never mind how long precisely.</p>'],
+      {
+        sectionIds: ['loomings.xhtml'],
+        toc: [{ id: 1, label: 'Loomings', href: 'loomings.xhtml', index: 0 }],
+      },
+    );
+    await ensureBookExtract({
+      bookId: 'bk1',
+      bookDoc,
+      format: 'EPUB',
+      sourceHash: 'h1',
+      sourceMtimeMs: 1,
+      fs,
+      getChapterTitle: buildSpineChapterTitleLookup(bookDoc),
+    });
+    const meta = JSON.parse(fs.files.get('.wellread/extract/bk1/meta.json')!);
+    expect(meta.schemaVersion).toBe(EXTRACT_SCHEMA_VERSION);
+    const chunkKeys = [...fs.files.keys()].filter((k) => k.includes('/chunks/'));
+    const sample = fs.files.get(chunkKeys[0]!)!;
+    expect(sample).toContain('title: "Loomings"');
+    expect(fs.files.get('.wellread/extract/bk1/toc.md')).toContain('Loomings');
   });
 });

@@ -3,6 +3,7 @@ import { BookDoc, SectionItem } from '@/libs/document';
 import { BookNote, HighlightColor, HighlightStyle } from '@/types/book';
 import { uniqueId } from '@/utils/misc';
 import { collectAllTocItems } from '@/services/nav/grouping';
+import { buildHrefToSpineIndex, resolveTocHrefToSpineIndex } from '@/services/nav/tocSpine';
 import { MrexptEntry } from '@/utils/mrexpt';
 
 /**
@@ -143,23 +144,6 @@ const buildRangeCfi = (
 };
 
 /**
- * Resolve a TOC href to its 0-based spine index by looking up the
- * corresponding SectionItem.
- *
- * BookDoc.splitTOCHref returns [sectionId, fragmentId?] where sectionId is
- * the path-resolved manifest item href (matching SectionItem.id).
- */
-const buildHrefToSpineIndex = (bookDoc: BookDoc): Map<string, number> => {
-  const map = new Map<string, number>();
-  const sections = bookDoc.sections ?? [];
-  sections.forEach((section, idx) => {
-    if (section.id) map.set(section.id, idx);
-    if (section.href) map.set(section.href, idx);
-  });
-  return map;
-};
-
-/**
  * Build a mapping from NCX navPoint 0-based index to spine index using
  * BookDoc.toc. The mrexpt format encodes the chapter as the navPoint index
  * (field b4), which corresponds to the in-document order of TOC items.
@@ -173,22 +157,7 @@ const buildNavpointToSpine = (bookDoc: BookDoc): number[] => {
       result.push(-1);
       continue;
     }
-    const [sectionId] = bookDoc.splitTOCHref(item.href) as [string | undefined];
-    let spineIdx = -1;
-    if (sectionId !== undefined) {
-      spineIdx = hrefToSpine.get(sectionId) ?? -1;
-    }
-    if (spineIdx < 0) {
-      // Try a basename match (some books store relative paths in TOC).
-      const candidate = sectionId ?? item.href;
-      const basename = candidate.split('/').pop() ?? candidate;
-      const fallback = (bookDoc.sections ?? []).findIndex((s) => {
-        const sid = s.id || s.href || '';
-        return sid.endsWith(`/${basename}`) || sid === basename;
-      });
-      spineIdx = fallback;
-    }
-    result.push(spineIdx);
+    result.push(resolveTocHrefToSpineIndex(bookDoc, item.href, hrefToSpine));
   }
   return result;
 };

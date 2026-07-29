@@ -587,9 +587,14 @@ const ReadingAssistantChat = ({
     getReaderState: () => {
       const progress = useReaderStore.getState().getProgress(bookKey);
       if (!progress?.location && !progress?.sectionLabel) return null;
+      const sectionIndex =
+        typeof progress.index === 'number' && Number.isFinite(progress.index) && progress.index >= 0
+          ? Math.floor(progress.index)
+          : undefined;
       return {
         ...(progress.sectionLabel ? { chapter: progress.sectionLabel } : {}),
         ...(progress.location ? { cfi: progress.location } : {}),
+        ...(sectionIndex !== undefined ? { sectionIndex } : {}),
       };
     },
   });

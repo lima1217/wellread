@@ -1,5 +1,8 @@
 import type { ChunkRow } from './CfiChunker';
 
+/** Bump when extract on-disk shape/semantics change (forces rebuild). */
+export const EXTRACT_SCHEMA_VERSION = 1;
+
 export type ExtractMeta = {
   bookId: string;
   sourceHash: string;
@@ -7,6 +10,7 @@ export type ExtractMeta = {
   format: string;
   extractedAt: number;
   chunkCount: number;
+  schemaVersion: number;
 };
 
 export type ExtractChunkInput = {
@@ -84,6 +88,7 @@ export function isMetaStale(
   source: { sourceHash: string; sourceMtimeMs: number | null },
 ): boolean {
   if (!meta) return true;
+  if (meta.schemaVersion !== EXTRACT_SCHEMA_VERSION) return true;
   if (meta.sourceHash !== source.sourceHash) return true;
   if (meta.sourceMtimeMs !== source.sourceMtimeMs) return true;
   return false;
@@ -91,9 +96,17 @@ export function isMetaStale(
 
 export function parseExtractMeta(json: string): ExtractMeta | null {
   try {
-    const v = JSON.parse(json) as ExtractMeta;
+    const v = JSON.parse(json) as Partial<ExtractMeta>;
     if (typeof v.bookId !== 'string' || typeof v.sourceHash !== 'string') return null;
-    return v;
+    return {
+      bookId: v.bookId,
+      sourceHash: v.sourceHash,
+      sourceMtimeMs: typeof v.sourceMtimeMs === 'number' ? v.sourceMtimeMs : null,
+      format: typeof v.format === 'string' ? v.format : '',
+      extractedAt: typeof v.extractedAt === 'number' ? v.extractedAt : 0,
+      chunkCount: typeof v.chunkCount === 'number' ? v.chunkCount : 0,
+      schemaVersion: typeof v.schemaVersion === 'number' ? v.schemaVersion : 0,
+    };
   } catch {
     return null;
   }

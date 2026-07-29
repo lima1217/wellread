@@ -1,15 +1,26 @@
 ---
 name: 翻译
-description: "将选区或引用译为简体中文。用户 /skill:translate、要翻译选区/引用或索取中文译文时使用。"
+description: "将选区、引用或当前章节译为简体中文。用户 /skill:translate、要翻译选区/引用/本章或索取中文译文时使用。"
 ---
 
 # Translate
 
 把源文译成**简体中文**。
 
-## 源文
+## 源文与范围
 
-源文在本 skill 上方的 Pending Quote（`>` 引用块）里，和/或在 `/skill:translate` 后的参数里。只译这段源文。
+按优先级选源，不要扩大范围：
+
+1. **Pending Quote / 参数选区**（本 skill 上方的 `>` 引用块，和/或 `/skill:translate` 后的参数）：只译这段。
+2. **无选区，用户要「这一页 / 这段 / 当前位置」**：只读 `reading_context` 里当前 `cfi` 所在的 1–2 个 extract chunk（`sectionIndex` 匹配且 `cfi`/`endCfi` 覆盖当前位置），不要整节。
+3. **无选区，用户要「本章 / 这一节 / 翻译 Unbelievable scenes」**：
+   - 优先用 envelope 的 `sectionIndex`（0-based spine）：在  
+     `/workspace/.wellread/extract/<bookId>/` 下 `grep`/`glob` frontmatter `sectionIndex: N`，按 `chunkIndex` 升序读齐该节全部 chunk。
+   - 若用户点了章名：在 extract 的 `toc.md` 与 chunk frontmatter `title` 里搜该名，锁定对应 `sectionIndex`，再同上。
+   - **默认「本章」= 当前 spine 整节**（同一 `sectionIndex` 的全部 chunk）。TOC 与 spine 可能不完全对齐；不要猜邻节。
+   - 若匹配到的 chunk **多于 20 个**：先报章名、`sectionIndex`、chunk 数，问是否继续或只要当前位置附近；不要默默翻超长节。
+
+定位不到范围时，简短说明缺什么（例如没有 `sectionIndex`、extract 未就绪、章名搜不到），请用户划选或给一句定位原文。不要编造正文。
 
 ## 准则
 
@@ -30,6 +41,6 @@ description: "将选区或引用译为简体中文。用户 /skill:translate、�
 
 ## 输出
 
-直接给出译文。仅在确有必要时（歧义、专名取舍）于译文后附**译者注**，尽量短，同样遵守「行文」护栏。
+直接给出译文。整节多 chunk 时按原文顺序合并为一篇译文。仅在确有必要时（歧义、专名取舍）于译文后附**译者注**，尽量短，同样遵守「行文」护栏。
 
-**完成条件：** 整段源文已按准则译为简体中文；无残留未译、无概述、无开场白；译文正文无破折号、无纠偏对举。
+**完成条件：** 选定范围内的源文已按准则译为简体中文；无残留未译、无概述、无开场白；译文正文无破折号、无纠偏对举。

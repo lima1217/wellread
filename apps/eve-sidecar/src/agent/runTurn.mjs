@@ -46,7 +46,7 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   abortSignal?: AbortSignal,
  *   contextWindowTokens?: number,
  *   thinkingMode?: 'think' | 'fast',
- *   readerState?: { chapter?: string | null, cfi?: string | null } | null,
+ *   readerState?: { chapter?: string | null, cfi?: string | null, sectionIndex?: number | null } | null,
  *   generateTextFn?: import('ai').generateText,
  *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
  *   tools?: import('ai').ToolSet,

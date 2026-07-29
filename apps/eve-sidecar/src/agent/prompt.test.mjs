@@ -207,7 +207,7 @@ describe('buildReadingContextEnvelope', () => {
     const env = buildReadingContextEnvelope({
       bookId: 'bk1',
       bookTitle: 'Moby Dick',
-      readerState: { chapter: 'Ch 1', cfi: 'epubcfi(/6/2!)' },
+      readerState: { chapter: 'Ch 1', cfi: 'epubcfi(/6/2!)', sectionIndex: 0 },
       quotes: [{ text: 'Call me Ishmael.', chapterTitle: 'Loomings' }],
       priorSources: [
         {
@@ -221,6 +221,7 @@ describe('buildReadingContextEnvelope', () => {
     assert.match(env, /position: \(client-reported, may be stale\)/);
     assert.match(env, /chapter: "Ch 1"/);
     assert.match(env, /cfi: "epubcfi\(\/6\/2!\)"/);
+    assert.match(env, /sectionIndex: 0/);
     assert.match(env, /quotes:/);
     assert.match(env, /Call me Ishmael/);
     assert.match(env, /Loomings/);

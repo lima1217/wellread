@@ -15,6 +15,8 @@ export type EveSource = {
 export type EveReaderState = {
   chapter?: string;
   cfi?: string;
+  /** 0-based EPUB spine index from reader progress when available. */
+  sectionIndex?: number;
 };
 
 export type EveToolTrace = {
@@ -185,10 +187,16 @@ export async function* streamEveTurn(
   const thinkingMode = options?.thinkingMode === 'think' ? 'think' : 'fast';
   const readerState = options?.readerState ?? undefined;
   const body: Record<string, unknown> = { message, thinkingMode };
-  if (readerState && (readerState.chapter || readerState.cfi)) {
+  if (
+    readerState &&
+    (readerState.chapter || readerState.cfi || typeof readerState.sectionIndex === 'number')
+  ) {
     body['readerState'] = {
       ...(readerState.chapter ? { chapter: readerState.chapter } : {}),
       ...(readerState.cfi ? { cfi: readerState.cfi } : {}),
+      ...(typeof readerState.sectionIndex === 'number'
+        ? { sectionIndex: readerState.sectionIndex }
+        : {}),
     };
   }
   const res = await eveFetch(`${baseUrl}/eve/v1/sessions/${encodeURIComponent(sessionId)}/turns`, {

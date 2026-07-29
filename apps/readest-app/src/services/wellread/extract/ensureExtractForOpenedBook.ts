@@ -3,6 +3,7 @@ import type { Book } from '@/types/book';
 import type { BookDoc } from '@/libs/document';
 import { getLocalBookFilename } from '@/utils/book';
 import { ensureBookExtract, type BooksExtractFs } from './ensureBookExtract';
+import { buildSpineChapterTitleLookup } from './spineChapterTitles';
 
 export function createAppServiceExtractFs(appService: AppService): BooksExtractFs {
   return {
@@ -48,7 +49,7 @@ async function resolveSourceMtimeMs(appService: AppService, book: Book): Promise
  * Host hook: build/refresh extract tree for an opened book.
  * Non-EPUB formats skip chunking (no precise cfi anchors yet — SPEC §8).
  *
- * Invalidation = book.hash (content) + source file mtime when available.
+ * Invalidation = book.hash (content) + source file mtime + extract schema version.
  */
 export async function ensureExtractForOpenedBook(input: {
   appService: AppService;
@@ -65,5 +66,6 @@ export async function ensureExtractForOpenedBook(input: {
     sourceMtimeMs,
     fs: createAppServiceExtractFs(appService),
     skipChunking: book.format !== 'EPUB',
+    getChapterTitle: buildSpineChapterTitleLookup(bookDoc),
   });
 }

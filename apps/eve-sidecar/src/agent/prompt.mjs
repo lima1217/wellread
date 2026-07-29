@@ -261,7 +261,7 @@ function walkNotes(dir, root, spine, rest, state) {
  * @param {{
  *   bookId: string,
  *   bookTitle?: string | null,
- *   readerState?: { chapter?: string | null, cfi?: string | null } | null,
+ *   readerState?: { chapter?: string | null, cfi?: string | null, sectionIndex?: number | null } | null,
  *   quotes?: Array<{ text: string, chapterTitle?: string | null }> | null,
  *   priorSources?: Array<{ cfi: string, title?: string, path?: string }> | null,
  *   notesIndex?: string[] | null,
@@ -282,10 +282,16 @@ export function buildReadingContextEnvelope(input) {
       : '';
   const cfi =
     typeof input.readerState?.cfi === 'string' ? input.readerState.cfi.trim() : '';
-  if (chapter || cfi) {
+  const sectionRaw = input.readerState?.sectionIndex;
+  const sectionIndex =
+    typeof sectionRaw === 'number' && Number.isFinite(sectionRaw) && sectionRaw >= 0
+      ? Math.floor(sectionRaw)
+      : undefined;
+  if (chapter || cfi || sectionIndex !== undefined) {
     body.push('position: (client-reported, may be stale)');
     if (chapter) body.push(`  chapter: ${JSON.stringify(chapter)}`);
     if (cfi) body.push(`  cfi: ${JSON.stringify(cfi)}`);
+    if (sectionIndex !== undefined) body.push(`  sectionIndex: ${sectionIndex}`);
   }
 
   const quotes = Array.isArray(input.quotes) ? input.quotes : [];

@@ -2,6 +2,7 @@ import type { BookDoc } from '@/libs/document';
 import type { ChunkOptions } from './CfiChunker';
 import { chunkSection } from './CfiChunker';
 import {
+  EXTRACT_SCHEMA_VERSION,
   chunkFileName,
   chunkRowToExtractInput,
   extractDir,
@@ -91,6 +92,7 @@ async function writeExtractTree(
     format: input.format,
     extractedAt: Date.now(),
     chunkCount: chunks.length,
+    schemaVersion: EXTRACT_SCHEMA_VERSION,
   };
   await input.fs.writeText(`${root}/meta.json`, `${JSON.stringify(meta, null, 2)}\n`);
   return chunks.length;
