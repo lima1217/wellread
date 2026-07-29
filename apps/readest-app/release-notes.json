@@ -1,5 +1,14 @@
 {
   "releases": {
+    "1.1.2": {
+      "date": "2026-07-29",
+      "notes": [
+        "Assistant: Translate skill can target whole chapters via spine sectionIndex and TOC titles",
+        "Assistant: Reading-context envelope now includes reader progress for chapter-scoped work",
+        "Assistant: Book extracts rebuild with real chapter labels from a shared TOC↔spine helper",
+        "Assistant: Empty states, prose rhythm, and panel accessibility polished"
+      ]
+    },
     "1.1.1": {
       "date": "2026-07-26",
       "notes": [
