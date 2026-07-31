@@ -356,9 +356,11 @@ export class NodeAppService extends BaseAppService {
 
   constructor(customRootDir?: string) {
     super();
-    if (customRootDir) {
-      this.fs.resolvePath = getPathResolver({ customRootDir: nodePath.resolve(customRootDir) });
-    }
+    // Always reset: nodeFileSystem is a shared singleton, so a prior
+    // customRootDir instance must not leak into later default instances.
+    this.fs.resolvePath = getPathResolver(
+      customRootDir ? { customRootDir: nodePath.resolve(customRootDir) } : {},
+    );
   }
 
   protected resolvePath(fp: string, base: BaseDir): ResolvedPath {
