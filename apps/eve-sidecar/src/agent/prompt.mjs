@@ -7,8 +7,6 @@ import { readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { isSafeBookIdSegment } from './notesOkf.mjs';
 
-export { isSafeBookIdSegment } from './notesOkf.mjs';
-
 /** Max prior CFI sources replayed into the reading-context envelope. */
 export const PRIOR_SOURCES_MAX = 12;
 
@@ -19,6 +17,38 @@ export const NOTES_INDEX_MAX = 24;
 export const NOTES_INDEX_WALK_MAX = 400;
 
 const CHAPTER_ATTR = /^— 《(.+)》$/;
+
+/**
+ * Optional client reading position for the reading-context envelope.
+ * HTTP adapter and envelope builder share this so new fields land once.
+ *
+ * @param {unknown} raw
+ * @returns {{ chapter?: string, cfi?: string, sectionIndex?: number } | null}
+ */
+export function normalizeReaderState(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const chapter =
+    typeof /** @type {{ chapter?: unknown }} */ (raw).chapter === 'string'
+      ? /** @type {{ chapter: string }} */ (raw).chapter.trim()
+      : '';
+  const cfi =
+    typeof /** @type {{ cfi?: unknown }} */ (raw).cfi === 'string'
+      ? /** @type {{ cfi: string }} */ (raw).cfi.trim()
+      : '';
+  const sectionRaw = /** @type {{ sectionIndex?: unknown }} */ (raw).sectionIndex;
+  const sectionIndex =
+    typeof sectionRaw === 'number' &&
+    Number.isFinite(sectionRaw) &&
+    sectionRaw >= 0
+      ? Math.floor(sectionRaw)
+      : undefined;
+  if (!chapter && !cfi && sectionIndex === undefined) return null;
+  return {
+    ...(chapter ? { chapter } : {}),
+    ...(cfi ? { cfi } : {}),
+    ...(sectionIndex !== undefined ? { sectionIndex } : {}),
+  };
+}
 
 /**
  * @param {{
@@ -276,22 +306,16 @@ export function buildReadingContextEnvelope(input) {
     `bookId: ${JSON.stringify(input.bookId)}`,
   ];
 
-  const chapter =
-    typeof input.readerState?.chapter === 'string'
-      ? input.readerState.chapter.trim()
-      : '';
-  const cfi =
-    typeof input.readerState?.cfi === 'string' ? input.readerState.cfi.trim() : '';
-  const sectionRaw = input.readerState?.sectionIndex;
-  const sectionIndex =
-    typeof sectionRaw === 'number' && Number.isFinite(sectionRaw) && sectionRaw >= 0
-      ? Math.floor(sectionRaw)
-      : undefined;
-  if (chapter || cfi || sectionIndex !== undefined) {
+  const position = normalizeReaderState(input.readerState);
+  if (position) {
     body.push('position: (client-reported, may be stale)');
-    if (chapter) body.push(`  chapter: ${JSON.stringify(chapter)}`);
-    if (cfi) body.push(`  cfi: ${JSON.stringify(cfi)}`);
-    if (sectionIndex !== undefined) body.push(`  sectionIndex: ${sectionIndex}`);
+    if (position.chapter) {
+      body.push(`  chapter: ${JSON.stringify(position.chapter)}`);
+    }
+    if (position.cfi) body.push(`  cfi: ${JSON.stringify(position.cfi)}`);
+    if (position.sectionIndex !== undefined) {
+      body.push(`  sectionIndex: ${position.sectionIndex}`);
+    }
   }
 
   const quotes = Array.isArray(input.quotes) ? input.quotes : [];
@@ -343,7 +367,7 @@ export function buildReadingContextEnvelope(input) {
 
   // book/bookId alone are already in the base system prompt — skip empty envelope.
   const hasExtra =
-    Boolean(chapter || cfi) ||
+    Boolean(position) ||
     quoteLines.length > 0 ||
     priors.length > 0 ||
     notes.length > 0;

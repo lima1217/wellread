@@ -6,8 +6,9 @@
  *   bundled: <sidecar>/bundled-skills/<id>/…  (source: 'bundled')
  * Same id: user wins. Disabled bundled ids live in
  * Books/.wellread/disabled-bundled-skills.json (ignored when a user package exists).
- * Sandbox may read_file package files; PACKAGE.md / AGENTS.md / tools/* always
- * prefer the bundled copy (user Books overlay ignored for those paths).
+ * Sandbox read_file overlay rules (bundled-only PACKAGE.md / AGENTS.md / tools/*)
+ * live in books/skillWorkspaceRead.mjs; this module owns catalog discovery and
+ * the shared skill package helpers that read uses.
  *
  * Catalog results are cached in-process and invalidated when the catalog stamp
  * changes or via {@link invalidateSkillsCache}.

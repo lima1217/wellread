@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { SOFT_LANDING_PATHS_MAX } from './toolRounds.mjs';
+import { SOFT_LANDING_PATHS_MAX } from './toolLedger.mjs';
 import { formatToolLedger, formatWriteConfirmation } from './toolLedger.mjs';
 
 describe('formatWriteConfirmation', () => {

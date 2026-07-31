@@ -18,4 +18,16 @@ describe('notesOkf SSOT', () => {
     assert.equal(notesPackageWorkspaceRoot('../x'), null);
     assert.equal(isSafeBookIdSegment('bk1'), true);
   });
+
+  it('accepts plain book ids and rejects path-like values', () => {
+    assert.equal(isSafeBookIdSegment('book-a_2'), true);
+    assert.equal(isSafeBookIdSegment(''), false);
+    assert.equal(isSafeBookIdSegment('  bk1'), false);
+    assert.equal(isSafeBookIdSegment('.'), false);
+    assert.equal(isSafeBookIdSegment('..'), false);
+    assert.equal(isSafeBookIdSegment('../extract/x'), false);
+    assert.equal(isSafeBookIdSegment('a/b'), false);
+    assert.equal(isSafeBookIdSegment('a\\b'), false);
+    assert.equal(isSafeBookIdSegment('bk\ninjected'), false);
+  });
 });

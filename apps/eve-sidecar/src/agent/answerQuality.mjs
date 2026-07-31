@@ -31,32 +31,3 @@ export function isDegenerateAnswer(text) {
   if (ellipRatio >= 0.6 && stripped.length < 400) return true;
   return false;
 }
-
-/**
- * Collect unique `path` args from prior AI SDK step toolCalls (read_file/grep/…).
- *
- * @param {unknown} steps
- * @returns {string[]}
- */
-export function collectToolPathsFromSteps(steps) {
-  if (!Array.isArray(steps)) return [];
-  /** @type {string[]} */
-  const paths = [];
-  const seen = new Set();
-  for (const step of steps) {
-    if (!step || typeof step !== 'object') continue;
-    const calls = /** @type {{ toolCalls?: unknown }} */ (step).toolCalls;
-    if (!Array.isArray(calls)) continue;
-    for (const call of calls) {
-      if (!call || typeof call !== 'object') continue;
-      const input = /** @type {{ input?: unknown }} */ (call).input;
-      if (!input || typeof input !== 'object') continue;
-      const path = /** @type {{ path?: unknown }} */ (input).path;
-      if (typeof path !== 'string' || !path.trim()) continue;
-      if (seen.has(path)) continue;
-      seen.add(path);
-      paths.push(path);
-    }
-  }
-  return paths;
-}

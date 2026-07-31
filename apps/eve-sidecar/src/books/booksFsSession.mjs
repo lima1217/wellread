@@ -9,12 +9,6 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { isSafeBookIdSegment } from '../agent/notesOkf.mjs';
-import {
-  parseSkillMd,
-  parseSkillPackagePath,
-  readBundledSkillFile,
-  readDisabledBundledSkillIds,
-} from '../agent/skills/discover.mjs';
 import { createNodeRealpathLookup } from './nodeLookup.mjs';
 import {
   WORKSPACE_ROOT,
@@ -26,19 +20,7 @@ import {
   normalizeAbsolute,
   workspaceToHost,
 } from './scopedFs.mjs';
-
-const SKILL_MD = 'SKILL.md';
-
-/**
- * Skill package paths that must not be overridden by Books/skills user files
- * (instruction / validator surface — always prefer bundled).
- * @param {string} relPath
- */
-export function preferBundledSkillRel(relPath) {
-  if (relPath === 'PACKAGE.md' || relPath === 'AGENTS.md') return true;
-  if (relPath === 'tools' || relPath.startsWith('tools/')) return true;
-  return false;
-}
+import { readWorkspaceSkillFile } from './skillWorkspaceRead.mjs';
 
 function resolveWorkspacePath(path) {
   if (path.startsWith('/')) return path;
@@ -74,49 +56,20 @@ export function createBooksFsSession(options) {
     async readFile({ path }) {
       const workspacePath = resolveWorkspacePath(path);
       const booksRoot = normalizeAbsolute(options.getBooksRoot());
-      const skillRef = parseSkillPackagePath(workspacePath);
-      const isSkillMd = Boolean(skillRef && skillRef.relPath === SKILL_MD);
-      const bundledOnly = Boolean(skillRef && preferBundledSkillRel(skillRef.relPath));
-      const disabled = skillRef
-        ? readDisabledBundledSkillIds(booksRoot).has(skillRef.id)
-        : false;
 
-      // PACKAGE.md / AGENTS.md / tools/* — never serve user overlay (instruction injection).
-      if (skillRef && bundledOnly && !disabled) {
-        const bundled = readBundledSkillFile(skillRef.id, skillRef.relPath);
-        if (bundled != null) {
-          return new Uint8Array(Buffer.from(bundled, 'utf8'));
-        }
-        return null;
+      const skill = readWorkspaceSkillFile(workspacePath, booksRoot, lookup);
+      if (skill.handled) {
+        return skill.bytes;
       }
 
       const auth = authorizeRead(workspacePath, booksRoot, lookup);
-      if (auth.ok) {
-        try {
-          const bytes = new Uint8Array(readFileSync(auth.realPath));
-          // Skill catalog SKILL.md: only a parseable package counts as user overlay
-          // (same gate as loadSkillPackage / discoverSkills). Broken user files
-          // fall through to the bundled copy instead of poisoning read_file.
-          if (!isSkillMd || parseSkillMd(new TextDecoder().decode(bytes))) {
-            return bytes;
-          }
-        } catch (err) {
-          if (err.code !== 'ENOENT') throw err;
-        }
-      } else if (!skillRef) {
-        throw new Error(auth.reason);
-      }
-
-      // /workspace/skills/<id>/… — Books miss or bad SKILL.md → bundled package file.
-      if (skillRef && !disabled) {
-        const bundled = readBundledSkillFile(skillRef.id, skillRef.relPath);
-        if (bundled != null) {
-          return new Uint8Array(Buffer.from(bundled, 'utf8'));
-        }
-      }
-
       if (!auth.ok) throw new Error(auth.reason);
-      return null;
+      try {
+        return new Uint8Array(readFileSync(auth.realPath));
+      } catch (err) {
+        if (err.code === 'ENOENT') return null;
+        throw err;
+      }
     },
 
     /**

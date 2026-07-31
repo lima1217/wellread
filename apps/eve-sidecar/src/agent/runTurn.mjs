@@ -19,15 +19,13 @@ import {
   collectPriorSources,
   collectSourcesFromTools,
   listNotesIndex,
-  parsePendingQuotesFromWire,
-  stripLeadingQuoteBlocks,
 } from './prompt.mjs';
 import { maybeApplyFirstTurnTitle } from './sessionStore.mjs';
 import { discoverSkills } from './skills/discover.mjs';
-import { expandSkillCommand } from './skills/invoke.mjs';
 import { formatToolLedger, formatWriteConfirmation } from './toolLedger.mjs';
 import { createReadingTools } from './tools.mjs';
 import { prepareToolExhaustionStep, resolveMaxToolRounds } from './toolRounds.mjs';
+import { prepareUserTurn } from './userTurn.mjs';
 
 export const DEGENERATE_ANSWER_ERROR =
   'Model returned a degenerate reply after the tool budget was spent. Try a narrower question.';
@@ -56,29 +54,28 @@ export async function runTurn(input) {
   const { model, session, userMessage, getBooksRoot, onEvent, abortSignal } = input;
   const persistSession = input.persistSession;
   const thinkingMode = normalizeThinkingMode(input.thinkingMode);
-  const { quotes: turnQuotes } = parsePendingQuotesFromWire(userMessage);
-  // Session / UI keep the slash form; only the model turn is expanded (Pi-style).
-  // Quotes move into <reading_context>; model user text is quote-free.
-  let modelUserMessage = userMessage;
-  try {
-    modelUserMessage = expandSkillCommand(userMessage, getBooksRoot()).modelMessage;
-  } catch {
-    // Missing books root or FS errors: send the original slash text.
-  }
-  // Empty is intentional when the turn is quote-only — quotes live in the envelope.
-  modelUserMessage = stripLeadingQuoteBlocks(modelUserMessage);
+  const prepared = prepareUserTurn(userMessage, getBooksRoot);
+  const modelUserMessage = prepared.modelContent;
+  const turnQuotes = prepared.quotes;
   const userId = `msg_${randomBytes(6).toString('hex')}`;
   const userMsg = {
     id: userId,
     role: /** @type {const} */ ('user'),
-    content: userMessage,
+    content: prepared.sessionContent,
     createdAt: Date.now(),
   };
   session.messages.push(userMsg);
-  onEvent({ type: 'message.user', id: userId, content: userMessage });
+  onEvent({ type: 'message.user', id: userId, content: prepared.sessionContent });
+
+  const settle = createTurnSettler({
+    session,
+    userId,
+    onEvent,
+    persistSession,
+  });
 
   if (abortSignal?.aborted) {
-    return finishAborted(session, userId, onEvent, persistSession);
+    return settle.aborted();
   }
 
   let skills = [];
@@ -132,14 +129,14 @@ export async function runTurn(input) {
     }
   } catch (error) {
     if (isAbortError(error) || abortSignal?.aborted) {
-      return finishAborted(session, userId, onEvent, persistSession);
+      return settle.aborted();
     }
-    dropInFlightUser(session, userId, persistSession);
+    settle.drop();
     throw error;
   }
 
   if (abortSignal?.aborted) {
-    return finishAborted(session, userId, onEvent, persistSession);
+    return settle.aborted();
   }
 
   const tools =
@@ -195,12 +192,11 @@ export async function runTurn(input) {
           abortSignal,
           // N tool-capable steps + 1 soft-landing answer (tools disabled).
           stopWhen: stepCountIs(maxToolRounds + 1),
-          prepareStep: ({ stepNumber, steps }) => {
+          prepareStep: ({ stepNumber }) => {
             const prep = prepareToolExhaustionStep({
               stepNumber,
               maxToolRounds,
               system,
-              steps,
             });
             softLandingStep = Boolean(prep);
             if (softLandingStep) usedSoftLanding = true;
@@ -214,7 +210,7 @@ export async function runTurn(input) {
         let streamError = /** @type {unknown} */ (null);
         for await (const part of result.fullStream) {
           if (abortSignal?.aborted || part.type === 'abort') {
-            return finishAborted(session, userId, onEvent, persistSession);
+            return settle.aborted();
           }
           if (part.type === 'error') {
             streamError = part.error;
@@ -277,21 +273,16 @@ export async function runTurn(input) {
         }
 
         if (abortSignal?.aborted) {
-          return finishAborted(session, userId, onEvent, persistSession);
+          return settle.aborted();
         }
 
         if (streamError != null) {
           if (isAbortError(streamError)) {
-            return finishAborted(session, userId, onEvent, persistSession);
+            return settle.aborted();
           }
-          dropInFlightUser(session, userId, persistSession);
-          onEvent({
-            type: 'error',
-            message:
-              streamError instanceof Error ? streamError.message : String(streamError),
-          });
-          onEvent({ type: 'done' });
-          return null;
+          return settle.error(
+            streamError instanceof Error ? streamError.message : String(streamError),
+          );
         }
 
         let content = '';
@@ -315,42 +306,28 @@ export async function runTurn(input) {
               }
             } catch (error) {
               if (isAbortError(error) || abortSignal?.aborted) {
-                return finishAborted(session, userId, onEvent, persistSession);
+                return settle.aborted();
               }
-              dropInFlightUser(session, userId, persistSession);
-              onEvent({
-                type: 'error',
-                message: error instanceof Error ? error.message : String(error),
-              });
-              onEvent({ type: 'done' });
-              return null;
+              return settle.error(
+                error instanceof Error ? error.message : String(error),
+              );
             }
           }
         }
 
         if (abortSignal?.aborted) {
-          return finishAborted(session, userId, onEvent, persistSession);
+          return settle.aborted();
         }
 
         if (!content.trim()) {
-          dropInFlightUser(session, userId, persistSession);
-          onEvent({
-            type: 'error',
-            message: 'Model returned an empty reply. Check API key/model.',
-          });
-          onEvent({ type: 'done' });
-          return null;
+          return settle.error(
+            'Model returned an empty reply. Check API key/model.',
+          );
         }
 
         // Ledger content is ours; only screen natural (non-exhaustion) answers.
         if (!usedSoftLanding && isDegenerateAnswer(content)) {
-          dropInFlightUser(session, userId, persistSession);
-          onEvent({
-            type: 'error',
-            message: DEGENERATE_ANSWER_ERROR,
-          });
-          onEvent({ type: 'done' });
-          return null;
+          return settle.error(DEGENERATE_ANSWER_ERROR);
         }
 
         const sources = collectSourcesFromTools(toolTrace);
@@ -380,38 +357,46 @@ export async function runTurn(input) {
     );
   } catch (error) {
     if (isAbortError(error) || abortSignal?.aborted) {
-      return finishAborted(session, userId, onEvent, persistSession);
+      return settle.aborted();
     }
-    dropInFlightUser(session, userId, persistSession);
+    settle.drop();
     throw error;
   }
 }
 
 /**
- * Drop the in-flight user turn so failed/cancelled asks do not pollute history.
- * @param {import('./sessionStore.mjs').Session} session
- * @param {string} userId
- * @param {(session: import('./sessionStore.mjs').Session) => void} [persistSession]
+ * One place owns in-flight user rollback + terminal events.
+ * @param {{
+ *   session: import('./sessionStore.mjs').Session,
+ *   userId: string,
+ *   onEvent: (event: Record<string, unknown>) => void,
+ *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
+ * }} ctx
  */
-function dropInFlightUser(session, userId, persistSession) {
-  const last = session.messages[session.messages.length - 1];
-  if (last && last.id === userId && last.role === 'user') {
-    session.messages.pop();
-  }
-  // Re-persist after rollback so clients reconciling mid-turn (e.g. after
-  // compress-then-fail) never observe the unanswered user on disk.
-  persistSession?.(session);
-}
+function createTurnSettler(ctx) {
+  const drop = () => {
+    const last = ctx.session.messages[ctx.session.messages.length - 1];
+    if (last && last.id === ctx.userId && last.role === 'user') {
+      ctx.session.messages.pop();
+    }
+    // Re-persist after rollback so clients reconciling mid-turn (e.g. after
+    // compress-then-fail) never observe the unanswered user on disk.
+    ctx.persistSession?.(ctx.session);
+  };
 
-/**
- * Drop the in-flight user turn so cancelled asks do not pollute model history.
- * @param {import('./sessionStore.mjs').Session} session
- * @param {string} userId
- * @param {(event: Record<string, unknown>) => void} onEvent
- * @param {(session: import('./sessionStore.mjs').Session) => void} [persistSession]
- */
-function finishAborted(session, userId, onEvent, persistSession) {
-  dropInFlightUser(session, userId, persistSession);
-  onEvent({ type: 'done', aborted: true });
-  return null;
+  return {
+    drop,
+    aborted() {
+      drop();
+      ctx.onEvent({ type: 'done', aborted: true });
+      return null;
+    },
+    /** @param {string} message */
+    error(message) {
+      drop();
+      ctx.onEvent({ type: 'error', message });
+      ctx.onEvent({ type: 'done' });
+      return null;
+    },
+  };
 }

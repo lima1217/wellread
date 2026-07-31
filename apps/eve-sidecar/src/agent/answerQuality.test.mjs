@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import {
-  collectToolPathsFromSteps,
-  isDegenerateAnswer,
-} from './answerQuality.mjs';
+import { isDegenerateAnswer } from './answerQuality.mjs';
 
 describe('isDegenerateAnswer', () => {
   it('rejects the soft-landing ellipsis / 让我继续 loop shape', () => {
@@ -25,29 +22,5 @@ describe('isDegenerateAnswer', () => {
 
   it('allows short replies even with a few ellipses', () => {
     assert.equal(isDegenerateAnswer('答案是……指数型技术。'), false);
-  });
-});
-
-describe('collectToolPathsFromSteps', () => {
-  it('dedupes path args from prior toolCalls', () => {
-    assert.deepEqual(
-      collectToolPathsFromSteps([
-        {
-          toolCalls: [
-            { toolName: 'read_file', input: { path: '/a.md' } },
-            { toolName: 'grep', input: { path: '/a.md', pattern: 'x' } },
-          ],
-        },
-        {
-          toolCalls: [{ toolName: 'read_file', input: { path: '/b.md' } }],
-        },
-      ]),
-      ['/a.md', '/b.md'],
-    );
-  });
-
-  it('returns empty for missing steps', () => {
-    assert.deepEqual(collectToolPathsFromSteps(undefined), []);
-    assert.deepEqual(collectToolPathsFromSteps([]), []);
   });
 });

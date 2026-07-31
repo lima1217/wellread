@@ -4,7 +4,8 @@
  * recycle progress narration.
  */
 
-import { SOFT_LANDING_PATHS_MAX } from './toolRounds.mjs';
+/** Cap listed paths in ledger sections (keep answers bounded). */
+export const SOFT_LANDING_PATHS_MAX = 80;
 
 /**
  * @param {unknown} args
@@ -94,7 +95,7 @@ function uniqueWritePaths(toolTrace, outcome) {
 }
 
 /**
- * Cap listed paths to match soft-landing nudge budget.
+ * Cap listed paths in ledger sections (keep answers bounded).
  *
  * @param {string[]} paths
  * @returns {{ shown: string[], omitted: number }}

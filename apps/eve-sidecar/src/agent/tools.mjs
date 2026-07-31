@@ -17,7 +17,7 @@ import {
   notesPackageWorkspaceRoot,
 } from './notesOkf.mjs';
 
-export { OKF_NOTES_DIRS, OKF_NOTES_ROOT_FILES, isSafeBookIdSegment } from './notesOkf.mjs';
+export { OKF_NOTES_DIRS, OKF_NOTES_ROOT_FILES } from './notesOkf.mjs';
 
 /** Cap model-facing grep hits (search may return more internally). */
 export const GREP_MODEL_HIT_MAX = 40;

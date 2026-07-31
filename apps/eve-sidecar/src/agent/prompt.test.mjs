@@ -11,8 +11,8 @@ import {
   buildSystemPrompt,
   collectPriorSources,
   formatSkillsCatalog,
-  isSafeBookIdSegment,
   listNotesIndex,
+  normalizeReaderState,
   parsePendingQuotesFromWire,
   sanitizeSkillCatalogDescription,
   stripLeadingQuoteBlocks,
@@ -191,6 +191,18 @@ describe('buildReadingContextEnvelope', () => {
     assert.doesNotMatch(env, /position:/);
   });
 
+  it('keeps sectionIndex-only position as enough envelope content', () => {
+    const env = buildReadingContextEnvelope({
+      bookId: 'bk1',
+      bookTitle: 'Book',
+      readerState: { sectionIndex: 3 },
+    });
+    assert.match(env, /<reading_context>/);
+    assert.match(env, /sectionIndex: 3/);
+    assert.doesNotMatch(env, /chapter:/);
+    assert.doesNotMatch(env, /cfi:/);
+  });
+
   it('keeps the full Pending Quote text with no char cap', () => {
     const text = `The cognitive skills encountered in the previous chapter are the result of a two-decade revolution in neuroscience that began when President George H. W. Bush declared the 1990s "the Decade of the Brain." During this period, research dollars flooded into the field. The tools for peering inside the brain rode the same exponential curves powering the rest of this book. Room-size imaging machines shrunk to pocket-size wonders, while the computational power needed to analyze the data collected by these machines rode Moore's law right into the App Store. This convergence birthed a new generation of neurotechnology—or what could be called brain-enhancing, consciousness-raising technology.`;
     assert.ok(text.length > 500);
@@ -308,20 +320,21 @@ describe('listNotesIndex', () => {
   });
 });
 
-describe('isSafeBookIdSegment', () => {
-  it('accepts plain book ids', () => {
-    assert.equal(isSafeBookIdSegment('bk1'), true);
-    assert.equal(isSafeBookIdSegment('book-a_2'), true);
+describe('normalizeReaderState', () => {
+  it('trims chapter/cfi and floors sectionIndex', () => {
+    assert.deepEqual(
+      normalizeReaderState({
+        chapter: '  Ch 1  ',
+        cfi: '  epubcfi(/6)  ',
+        sectionIndex: 2.9,
+      }),
+      { chapter: 'Ch 1', cfi: 'epubcfi(/6)', sectionIndex: 2 },
+    );
   });
 
-  it('rejects empty, dotted, or path-like values', () => {
-    assert.equal(isSafeBookIdSegment(''), false);
-    assert.equal(isSafeBookIdSegment('  bk1'), false);
-    assert.equal(isSafeBookIdSegment('.'), false);
-    assert.equal(isSafeBookIdSegment('..'), false);
-    assert.equal(isSafeBookIdSegment('../extract/x'), false);
-    assert.equal(isSafeBookIdSegment('a/b'), false);
-    assert.equal(isSafeBookIdSegment('a\\b'), false);
-    assert.equal(isSafeBookIdSegment('bk\ninjected'), false);
+  it('returns null when empty', () => {
+    assert.equal(normalizeReaderState(null), null);
+    assert.equal(normalizeReaderState({}), null);
+    assert.equal(normalizeReaderState({ sectionIndex: -1 }), null);
   });
 });

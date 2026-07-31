@@ -16,7 +16,8 @@ import {
 } from '../createModel.mjs';
 import { createHttpAbort } from '../agent/httpAbort.mjs';
 import { createSessionStore } from '../agent/sessionStore.mjs';
-import { isSafeBookIdSegment } from '../agent/prompt.mjs';
+import { isSafeBookIdSegment } from '../agent/notesOkf.mjs';
+import { normalizeReaderState } from '../agent/prompt.mjs';
 import { runTurn } from '../agent/runTurn.mjs';
 import { discoverSkills } from '../agent/skills/discover.mjs';
 import { resolveLoopbackToken } from './loopbackToken.mjs';
@@ -116,34 +117,6 @@ function sendBodyError(res, req, error) {
     return true;
   }
   return false;
-}
-
-/**
- * Optional client reading position for the reading-context envelope.
- * @param {unknown} raw
- * @returns {{ chapter?: string, cfi?: string, sectionIndex?: number } | null}
- */
-function normalizeReaderState(raw) {
-  if (!raw || typeof raw !== 'object') return null;
-  const chapter =
-    typeof /** @type {{ chapter?: unknown }} */ (raw).chapter === 'string'
-      ? /** @type {{ chapter: string }} */ (raw).chapter.trim()
-      : '';
-  const cfi =
-    typeof /** @type {{ cfi?: unknown }} */ (raw).cfi === 'string'
-      ? /** @type {{ cfi: string }} */ (raw).cfi.trim()
-      : '';
-  const sectionRaw = /** @type {{ sectionIndex?: unknown }} */ (raw).sectionIndex;
-  const sectionIndex =
-    typeof sectionRaw === 'number' && Number.isFinite(sectionRaw) && sectionRaw >= 0
-      ? Math.floor(sectionRaw)
-      : undefined;
-  if (!chapter && !cfi && sectionIndex === undefined) return null;
-  return {
-    ...(chapter ? { chapter } : {}),
-    ...(cfi ? { cfi } : {}),
-    ...(sectionIndex !== undefined ? { sectionIndex } : {}),
-  };
 }
 
 const server = http.createServer(async (req, res) => {
