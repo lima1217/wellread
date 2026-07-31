@@ -302,6 +302,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
+    handleMouseDown,
     handlePointerDown,
     handlePointerMove,
     handleNativeTouchMove,
@@ -381,6 +382,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
         opts,
       );
     }
+    detail.doc?.addEventListener('mousedown', handleMouseDown);
     detail.doc?.addEventListener('pointerdown', handlePointerDown.bind(null, doc, index), opts);
     detail.doc?.addEventListener('pointermove', handlePointerMove.bind(null, doc, index), opts);
     detail.doc?.addEventListener('pointercancel', handlePointerCancel.bind(null, doc, index));
