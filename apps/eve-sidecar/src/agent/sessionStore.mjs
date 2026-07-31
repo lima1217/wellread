@@ -28,6 +28,7 @@ import { randomBytes } from 'node:crypto';
  *   tools?: Array<{ id: string, name: string, args?: unknown, result?: unknown }>,
  *   modelMessages?: unknown[],
  *   compacted?: boolean,
+ *   parts?: unknown[],
  * }} SessionMessage
  *
  * @typedef {SessionMeta & { messages: SessionMessage[] }} Session

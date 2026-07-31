@@ -96,7 +96,9 @@ supports local replica-shaped persistence—not hosted multi-device sync APIs.
   `testModelConnection.ts`
 
 Sidecar implementation lives in `apps/eve-sidecar` (`server/`, `agent/`,
-`books/`).
+`books/`). Shared SessionMessage ↔ UIMessage conversion lives in
+`packages/eve-message` (`@wellread/eve-message`). Turns stream AI SDK UIMessage
+SSE (not custom NDJSON) — see `docs/architecture.md` §6.3.
 
 ### Reader domain folders (still present)
 

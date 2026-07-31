@@ -51,12 +51,19 @@ function rewriteServerEntry(srcPath, destPath) {
 
 function installProdNodeModules() {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  /** @type {Record<string, string>} */
+  const dependencies = {};
+  for (const [name, version] of Object.entries(pkg.dependencies || {})) {
+    // workspace:* packages are vendored into .output/node_modules after npm install.
+    if (typeof version === 'string' && version.startsWith('workspace:')) continue;
+    dependencies[name] = version;
+  }
   const slim = {
     name: pkg.name,
     version: pkg.version,
     private: true,
     type: 'module',
-    dependencies: pkg.dependencies || {},
+    dependencies,
   };
   writeFileSync(join(outRoot, 'package.json'), `${JSON.stringify(slim, null, 2)}\n`);
   const result = spawnSync(
@@ -86,8 +93,23 @@ export function build() {
   // Read-only default skills: same relative path as repo (…/bundled-skills from agent/skills).
   cpSync(join(root, 'bundled-skills'), join(outRoot, 'bundled-skills'), { recursive: true });
   installProdNodeModules();
+  vendorWorkspacePackage('@wellread/eve-message', join(root, '../../packages/eve-message'));
 
   console.log('eve-sidecar build ok:', outServer);
+}
+
+/**
+ * Copy a workspace package into `.output/node_modules` after npm install
+ * (npm cannot resolve pnpm workspace:* links inside the slim .output tree).
+ * @param {string} name
+ * @param {string} pkgRoot
+ */
+function vendorWorkspacePackage(name, pkgRoot) {
+  const dest = join(outRoot, 'node_modules', ...name.split('/'));
+  rmSync(dest, { recursive: true, force: true });
+  mkdirSync(dest, { recursive: true });
+  cpSync(join(pkgRoot, 'package.json'), join(dest, 'package.json'));
+  cpSync(join(pkgRoot, 'src'), join(dest, 'src'), { recursive: true });
 }
 
 const isMain =

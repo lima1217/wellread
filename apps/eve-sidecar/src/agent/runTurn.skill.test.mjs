@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it } from 'node:test';
-import { runTurn } from './runTurn.mjs';
+import { runTurn, consumeUIMessageStream } from './runTurn.mjs';
 import { invalidateSkillsCache } from './skills/discover.mjs';
 import { setBundledSkillsRootForTests } from './skills/bundledRoot.mjs';
 
@@ -22,6 +22,13 @@ function emptySession() {
     updatedAt: Date.now(),
     messages: [],
   };
+}
+
+/**
+ * @param {Parameters<typeof runTurn>[0]} input
+ */
+async function run(input) {
+  await consumeUIMessageStream(runTurn(input));
 }
 
 function capturePromptModel(sink) {
@@ -104,12 +111,11 @@ describe('runTurn skill expansion', () => {
       const session = emptySession();
       const wire =
         '> Call me Ishmael.\n> — 《Loomings》\n\n/skill:summarize this chapter';
-      await runTurn({
+      await run({
         model: capturePromptModel(sink),
         session,
         userMessage: wire,
         getBooksRoot: () => booksRoot,
-        onEvent: () => {},
         tools: {},
         readerState: { chapter: 'Loomings', cfi: 'epubcfi(/6/2!)' },
         generateTextFn: async () => ({ text: '', usage: {} }),
@@ -137,12 +143,11 @@ describe('runTurn skill expansion', () => {
       const sink = {};
       const session = emptySession();
       const wire = '> Call me Ishmael.\n> — 《Loomings》';
-      await runTurn({
+      await run({
         model: capturePromptModel(sink),
         session,
         userMessage: wire,
         getBooksRoot: () => booksRoot,
-        onEvent: () => {},
         tools: {},
         generateTextFn: async () => ({ text: 'ok', usage: {} }),
       });
@@ -166,14 +171,12 @@ describe('runTurn skill expansion', () => {
         '---\nname: Summarize\ndescription: Summary\n---\nBe concise about the chapter.\n',
       );
       const sink = {};
-      const events = [];
       const session = emptySession();
-      await runTurn({
+      await run({
         model: capturePromptModel(sink),
         session,
         userMessage: '/skill:summarize this chapter',
         getBooksRoot: () => booksRoot,
-        onEvent: (e) => events.push(e),
         tools: {},
         generateTextFn: async () => ({ text: '', usage: {} }),
       });
@@ -190,10 +193,7 @@ describe('runTurn skill expansion', () => {
       assert.match(modelUser, /Be concise about the chapter/);
       assert.match(modelUser, /\n\nthis chapter$/);
 
-      // Session / wire event keep the slash short form for UI.
       assert.equal(session.messages[0]?.content, '/skill:summarize this chapter');
-      const userEvent = events.find((e) => e.type === 'message.user');
-      assert.equal(userEvent?.content, '/skill:summarize this chapter');
     } finally {
       rmSync(booksRoot, { recursive: true, force: true });
     }
@@ -221,12 +221,11 @@ describe('runTurn skill expansion', () => {
         createdAt: Date.now(),
       });
       const sink = {};
-      await runTurn({
+      await run({
         model: capturePromptModel(sink),
         session,
         userMessage: 'I pick network effects, score 5.',
         getBooksRoot: () => booksRoot,
-        onEvent: () => {},
         tools: {},
         generateTextFn: async () => ({ text: '', usage: {} }),
       });
@@ -251,18 +250,16 @@ describe('runTurn skill expansion', () => {
     try {
       mkdirSync(join(booksRoot, 'skills'), { recursive: true });
       const sink = {};
-      await runTurn({
+      await run({
         model: capturePromptModel(sink),
         session: emptySession(),
         userMessage: '/skill:nope',
         getBooksRoot: () => booksRoot,
-        onEvent: () => {},
         tools: {},
         generateTextFn: async () => ({ text: '', usage: {} }),
       });
       const system = systemTextFromPrompt(sink.prompt);
       assert.doesNotMatch(system, /## Active skill/);
-      // Bundled defaults may still appear in the catalog; unknown ids must not expand.
       assert.doesNotMatch(system, /- nope:/);
       const userTexts = userTextsFromPrompt(sink.prompt);
       assert.equal(userTexts.at(-1), '/skill:nope');

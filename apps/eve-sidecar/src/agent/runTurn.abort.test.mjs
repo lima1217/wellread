@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { runTurn } from './runTurn.mjs';
+import { runTurn, consumeUIMessageStream } from './runTurn.mjs';
 
 /**
  * @returns {import('./sessionStore.mjs').Session}
@@ -15,6 +15,16 @@ function emptySession() {
     updatedAt: Date.now(),
     messages: [],
   };
+}
+
+/**
+ * @param {Parameters<typeof runTurn>[0]} input
+ */
+async function run(input) {
+  const chunks = await consumeUIMessageStream(runTurn(input));
+  const assistant =
+    input.session.messages.filter((m) => m.role === 'assistant').at(-1) ?? null;
+  return { chunks, assistant };
 }
 
 /**
@@ -63,11 +73,10 @@ function abortableModel(ac) {
 describe('runTurn abort', () => {
   it('rolls back the user message when abortSignal is already aborted', async () => {
     const session = emptySession();
-    const events = [];
     const ac = new AbortController();
     ac.abort();
 
-    const result = await runTurn({
+    const { chunks, assistant } = await run({
       model: /** @type {any} */ ({
         specificationVersion: 'v2',
         provider: 'test',
@@ -79,45 +88,45 @@ describe('runTurn abort', () => {
       session,
       userMessage: 'explain this',
       getBooksRoot: () => '/tmp/books-should-not-matter',
-      onEvent: (event) => events.push(event),
       abortSignal: ac.signal,
     });
 
-    assert.equal(result, null);
+    assert.equal(assistant, null);
     assert.equal(session.messages.length, 0);
-    assert.equal(events.some((e) => e.type === 'message.user'), true);
-    assert.deepEqual(
-      events.filter((e) => e.type === 'done'),
-      [{ type: 'done', aborted: true }],
+    assert.equal(
+      chunks.some((c) => c.type === 'abort'),
+      true,
     );
   });
 
   it('stops streaming and rolls back when abortSignal fires mid-turn', async () => {
     const session = emptySession();
-    const events = [];
     const ac = new AbortController();
 
-    const result = await runTurn({
+    const { chunks, assistant } = await run({
       model: /** @type {any} */ (abortableModel(ac)),
       session,
       userMessage: 'keep going',
       getBooksRoot: () => '/tmp/books-should-not-matter',
-      onEvent: (event) => events.push(event),
       abortSignal: ac.signal,
     });
 
-    assert.equal(result, null);
+    assert.equal(assistant, null);
     assert.equal(session.messages.length, 0);
-    assert.equal(events.at(-1)?.type, 'done');
-    assert.equal(events.at(-1)?.aborted, true);
-    assert.equal(events.some((e) => e.type === 'message.assistant'), false);
+    assert.equal(
+      chunks.some((c) => c.type === 'abort'),
+      true,
+    );
+    assert.equal(
+      session.messages.some((m) => m.role === 'assistant'),
+      false,
+    );
   });
 
   it('rolls back the user message when the model returns an empty reply', async () => {
     const session = emptySession();
-    const events = [];
 
-    const result = await runTurn({
+    const { chunks, assistant } = await run({
       model: /** @type {any} */ ({
         specificationVersion: 'v2',
         provider: 'test',
@@ -146,27 +155,23 @@ describe('runTurn abort', () => {
       session,
       userMessage: 'say something',
       getBooksRoot: () => '/tmp/books-should-not-matter',
-      onEvent: (event) => events.push(event),
     });
 
-    assert.equal(result, null);
+    assert.equal(assistant, null);
     assert.equal(session.messages.length, 0);
     assert.equal(
-      events.some((e) => e.type === 'error' && /empty reply/i.test(String(e.message))),
+      chunks.some(
+        (c) => c.type === 'error' && /empty reply/i.test(String(c.errorText)),
+      ),
       true,
-    );
-    assert.deepEqual(
-      events.filter((e) => e.type === 'done'),
-      [{ type: 'done' }],
     );
   });
 
   it('treats Stop (abort mid-connect) as aborted, not empty reply', async () => {
     const session = emptySession();
-    const events = [];
     const ac = new AbortController();
 
-    const result = await runTurn({
+    const { chunks, assistant } = await run({
       model: /** @type {any} */ ({
         specificationVersion: 'v2',
         provider: 'test',
@@ -203,27 +208,27 @@ describe('runTurn abort', () => {
       session,
       userMessage: 'keep going',
       getBooksRoot: () => '/tmp/books-should-not-matter',
-      onEvent: (event) => events.push(event),
       abortSignal: ac.signal,
     });
 
-    assert.equal(result, null);
+    assert.equal(assistant, null);
     assert.equal(session.messages.length, 0);
     assert.equal(
-      events.some((e) => e.type === 'error' && /empty reply/i.test(String(e.message))),
+      chunks.some(
+        (c) => c.type === 'error' && /empty reply/i.test(String(c.errorText)),
+      ),
       false,
     );
-    assert.deepEqual(
-      events.filter((e) => e.type === 'done'),
-      [{ type: 'done', aborted: true }],
+    assert.equal(
+      chunks.some((c) => c.type === 'abort'),
+      true,
     );
   });
 
   it('surfaces provider stream errors instead of masking them as empty reply', async () => {
     const session = emptySession();
-    const events = [];
 
-    const result = await runTurn({
+    const { chunks, assistant } = await run({
       model: /** @type {any} */ ({
         specificationVersion: 'v2',
         provider: 'test',
@@ -239,19 +244,14 @@ describe('runTurn abort', () => {
       session,
       userMessage: 'say something',
       getBooksRoot: () => '/tmp/books-should-not-matter',
-      onEvent: (event) => events.push(event),
     });
 
-    assert.equal(result, null);
+    assert.equal(assistant, null);
     assert.equal(session.messages.length, 0);
-    const errorEvent = events.find((e) => e.type === 'error');
-    assert.ok(errorEvent, 'expected an error event');
-    assert.match(String(errorEvent.message), /provider exploded/i);
-    assert.equal(/empty reply/i.test(String(errorEvent.message)), false);
-    assert.deepEqual(
-      events.filter((e) => e.type === 'done'),
-      [{ type: 'done' }],
-    );
+    const errorChunk = chunks.find((c) => c.type === 'error');
+    assert.ok(errorChunk, 'expected an error chunk');
+    assert.match(String(errorChunk.errorText), /provider exploded/i);
+    assert.equal(/empty reply/i.test(String(errorChunk.errorText)), false);
   });
 
   it('persists the session after compress even when the turn later fails', async () => {
@@ -268,11 +268,10 @@ describe('runTurn abort', () => {
       ...emptySession(),
       messages,
     };
-    const events = [];
     /** @type {import('./sessionStore.mjs').Session[]} */
     const persisted = [];
 
-    const result = await runTurn({
+    const { chunks } = await run({
       model: /** @type {any} */ ({
         specificationVersion: 'v2',
         provider: 'test',
@@ -288,7 +287,6 @@ describe('runTurn abort', () => {
       session,
       userMessage: 'after compress',
       getBooksRoot: () => '/tmp/books-should-not-matter',
-      onEvent: (event) => events.push(event),
       contextWindowTokens: 1000,
       generateTextFn: async () => ({ text: 'Compacted prior turns.' }),
       persistSession: (s) => {
@@ -299,15 +297,15 @@ describe('runTurn abort', () => {
       },
     });
 
-    assert.equal(result, null);
-    assert.equal(events.some((e) => e.type === 'context.compressed'), true);
-    assert.equal(events.some((e) => e.type === 'error'), true);
+    assert.equal(
+      chunks.some((c) => c.type === 'data-eve-context-compressed'),
+      true,
+    );
+    assert.equal(chunks.some((c) => c.type === 'error'), true);
     assert.ok(persisted.length >= 1);
     assert.equal(persisted[0].messages[0]?.compacted, true);
-    // Final persist after rollback must not keep the unanswered user.
     const lastPersist = persisted[persisted.length - 1];
     assert.equal(lastPersist.messages.some((m) => m.content === 'after compress'), false);
-    // Failed turn must not leave an unanswered user message.
     assert.equal(session.messages.some((m) => m.content === 'after compress'), false);
     assert.equal(session.messages[0]?.compacted, true);
   });

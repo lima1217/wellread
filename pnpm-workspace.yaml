@@ -2,6 +2,7 @@ packages:
   - apps/*
   - apps/readest-app/extensions/*
   - packages/foliate-js
+  - packages/eve-message
 
 allowBuilds:
   core-js: true

@@ -209,6 +209,27 @@ describe('shouldShowPendingReply', () => {
       ]),
     ).toBe(false);
   });
+
+  it('is false when the current turn only has tool parts so far', () => {
+    expect(
+      shouldShowPendingReply(true, [
+        { role: 'user', content: 'why?' },
+        {
+          role: 'assistant',
+          content: '',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolCallId: 't1',
+              toolName: 'grep',
+              state: 'input-available',
+              input: {},
+            },
+          ],
+        },
+      ]),
+    ).toBe(false);
+  });
 });
 
 describe('formatWorkDuration', () => {

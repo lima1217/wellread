@@ -6,13 +6,59 @@ const createEveSession = vi.fn();
 const getEveSession = vi.fn();
 const streamEveTurn = vi.fn();
 
-vi.mock('@/services/wellread/assistant/eveClient', () => ({
-  createEveSession: (...args: unknown[]) => createEveSession(...args),
-  getEveSession: (...args: unknown[]) => getEveSession(...args),
-  streamEveTurn: (...args: unknown[]) => streamEveTurn(...args),
-}));
+vi.mock('@/services/wellread/assistant/eveClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/wellread/assistant/eveClient')>();
+  return {
+    ...actual,
+    createEveSession: (...args: unknown[]) => createEveSession(...args),
+    getEveSession: (...args: unknown[]) => getEveSession(...args),
+    streamEveTurn: (...args: unknown[]) => streamEveTurn(...args),
+  };
+});
 
 import { useEveAgent } from '@/services/wellread/assistant/useEveAgent';
+
+type UiPart = Record<string, unknown>;
+
+function assistantUi(
+  id: string,
+  parts: UiPart[],
+): { type: 'ui-message'; message: { id: string; role: 'assistant'; parts: UiPart[] } } {
+  return { type: 'ui-message', message: { id, role: 'assistant', parts } };
+}
+
+function textPart(text: string): UiPart {
+  return { type: 'text', text, state: 'done' };
+}
+
+function reasoningPart(text: string): UiPart {
+  return { type: 'reasoning', text, state: 'done' };
+}
+
+function toolPart(toolCallId: string, toolName: string, input: unknown, output?: unknown): UiPart {
+  if (output === undefined) {
+    return { type: 'dynamic-tool', toolCallId, toolName, state: 'input-available', input };
+  }
+  return {
+    type: 'dynamic-tool',
+    toolCallId,
+    toolName,
+    state: 'output-available',
+    input,
+    output,
+  };
+}
+
+function sessionMeta(id: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    bookId: 'book-1',
+    title: 'Chat',
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  };
+}
 
 describe('useEveAgent', () => {
   beforeEach(() => {
@@ -79,13 +125,13 @@ describe('useEveAgent', () => {
 
     await waitFor(() => {
       expect(result.current.messages).toEqual([
-        {
+        expect.objectContaining({
           id: 'u1',
           role: 'user',
           content: 'Why did he stop?',
           createdAt: 1,
           quotes: [{ text: 'But back to Hardy.', chapterTitle: null }],
-        },
+        }),
       ]);
     });
   });
@@ -100,7 +146,11 @@ describe('useEveAgent', () => {
       messages: [],
     });
     streamEveTurn.mockImplementation(async function* () {
-      yield { type: 'done' as const };
+      // Turn completes when the generator returns; reconcileFromDisk follows.
+    });
+    getEveSession.mockResolvedValue({
+      ...sessionMeta('ses_new'),
+      messages: [{ id: 'u1', role: 'user', content: 'What is vocation?', createdAt: 1 }],
     });
 
     const { result } = renderHook(() =>
@@ -147,15 +197,16 @@ describe('useEveAgent', () => {
       release = resolve;
     });
     streamEveTurn.mockImplementation(async function* () {
-      yield { type: 'message.user' as const, id: 'u1', content: 'What is vocation?' };
-      yield { type: 'message.assistant.delta' as const, id: 'a1', delta: 'Hello' };
+      yield assistantUi('a1', [textPart('Hello')]);
       await gate;
-      yield {
-        type: 'message.assistant' as const,
-        id: 'a1',
-        content: 'Hello',
-      };
-      yield { type: 'done' as const };
+      yield assistantUi('a1', [textPart('Hello')]);
+    });
+    getEveSession.mockResolvedValue({
+      ...sessionMeta('ses_new'),
+      messages: [
+        { id: 'u1', role: 'user', content: 'What is vocation?', createdAt: 1 },
+        { id: 'a1', role: 'assistant', content: 'Hello', createdAt: 2 },
+      ],
     });
 
     const { result, rerender } = renderHook(
@@ -257,15 +308,13 @@ describe('useEveAgent', () => {
       release = resolve;
     });
     streamEveTurn.mockImplementation(async function* (_id, _text, signal: AbortSignal) {
-      yield { type: 'message.user' as const, id: 'u1', content: 'streaming…' };
-      yield { type: 'message.assistant.delta' as const, id: 'a1', delta: 'partial' };
+      yield assistantUi('a1', [textPart('partial')]);
       await gate;
       if (signal.aborted) {
         const err = new Error('aborted');
         err.name = 'AbortError';
         throw err;
       }
-      yield { type: 'done' as const };
     });
 
     const { result, rerender } = renderHook(
@@ -320,11 +369,6 @@ describe('useEveAgent', () => {
         messages: [],
       });
     streamEveTurn.mockImplementation(async function* () {
-      yield {
-        type: 'message.user' as const,
-        id: 'u1',
-        content: '> quoted\n\nWhy?',
-      };
       yield { type: 'error' as const, message: 'boom' };
     });
     const onSendFailed = vi.fn();
@@ -398,24 +442,23 @@ describe('useEveAgent', () => {
   });
 
   it('shows an optimistic user message before the first stream event, then replaces it', async () => {
-    getEveSession.mockResolvedValue({
-      id: 'ses_existing',
-      bookId: 'book-1',
-      title: 'Chat',
-      createdAt: 1,
-      updatedAt: 1,
-      messages: [],
-    });
-
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
     streamEveTurn.mockImplementation(async function* () {
       await gate;
-      yield { type: 'message.user' as const, id: 'u1', content: 'What is vocation?' };
-      yield { type: 'done' as const };
+      yield* [] as Array<{ type: 'abort' }>;
     });
+    getEveSession
+      .mockResolvedValueOnce({
+        ...sessionMeta('ses_existing'),
+        messages: [],
+      })
+      .mockResolvedValueOnce({
+        ...sessionMeta('ses_existing'),
+        messages: [{ id: 'u1', role: 'user', content: 'What is vocation?', createdAt: 1 }],
+      });
 
     const { result } = renderHook(() =>
       useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
@@ -466,30 +509,28 @@ describe('useEveAgent', () => {
       messages: [],
     });
     streamEveTurn.mockImplementation(async function* () {
-      yield { type: 'message.user' as const, id: 'u1', content: 'Why?' };
-      yield {
-        type: 'message.assistant.reasoning.delta' as const,
-        id: 'a1',
-        delta: 'step ',
-      };
-      yield {
-        type: 'message.assistant.reasoning.delta' as const,
-        id: 'a1',
-        delta: 'two',
-      };
-      yield {
-        type: 'message.assistant.delta' as const,
-        id: 'a1',
-        delta: 'Because vocation.',
-      };
-      yield {
-        type: 'message.assistant' as const,
-        id: 'a1',
-        content: 'Because vocation.',
-        reasoning: 'step two',
-      };
-      yield { type: 'done' as const };
+      yield assistantUi('a1', [reasoningPart('step ')]);
+      yield assistantUi('a1', [reasoningPart('step two')]);
+      yield assistantUi('a1', [reasoningPart('step two'), textPart('Because vocation.')]);
     });
+    getEveSession
+      .mockResolvedValueOnce({
+        ...sessionMeta('ses_existing'),
+        messages: [],
+      })
+      .mockResolvedValueOnce({
+        ...sessionMeta('ses_existing'),
+        messages: [
+          { id: 'u1', role: 'user', content: 'Why?', createdAt: 1 },
+          {
+            id: 'a1',
+            role: 'assistant',
+            content: 'Because vocation.',
+            reasoning: 'step two',
+            createdAt: 2,
+          },
+        ],
+      });
 
     const { result } = renderHook(() =>
       useEveAgent({
@@ -521,34 +562,29 @@ describe('useEveAgent', () => {
   });
 
   it('exposes in-flight tools before assistant text arrives and clears them when done', async () => {
-    getEveSession.mockResolvedValue({
-      id: 'ses_existing',
-      bookId: 'book-1',
-      title: 'Chat',
-      createdAt: 1,
-      updatedAt: 1,
-      messages: [],
-    });
-
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+    getEveSession
+      .mockResolvedValueOnce({
+        ...sessionMeta('ses_existing'),
+        messages: [],
+      })
+      .mockResolvedValueOnce({
+        ...sessionMeta('ses_existing'),
+        messages: [
+          { id: 'u1', role: 'user', content: 'Why?', createdAt: 1 },
+          { id: 'a1', role: 'assistant', content: 'Because…', createdAt: 2 },
+        ],
+      });
     streamEveTurn.mockImplementation(async function* () {
-      yield { type: 'message.user' as const, id: 'u1', content: 'Why?' };
-      yield {
-        type: 'tool.start' as const,
-        id: 't1',
-        name: 'search_extract',
-        args: { q: 'vocation' },
-      };
+      yield assistantUi('a1', [toolPart('t1', 'search_extract', { q: 'vocation' })]);
       await gate;
-      yield {
-        type: 'message.assistant.delta' as const,
-        id: 'a1',
-        delta: 'Because…',
-      };
-      yield { type: 'done' as const };
+      yield assistantUi('a1', [
+        toolPart('t1', 'search_extract', { q: 'vocation' }, { hits: 1 }),
+        textPart('Because…'),
+      ]);
     });
 
     const { result } = renderHook(() =>
@@ -585,19 +621,28 @@ describe('useEveAgent', () => {
   });
 
   it('applies context.compressed by dropping removed ids and prepending the summary', async () => {
-    getEveSession.mockResolvedValue({
-      id: 'ses_existing',
-      bookId: 'book-1',
-      title: 'Chat',
-      createdAt: 1,
-      updatedAt: 1,
-      messages: [
-        { id: 'old1', role: 'user', content: 'earlier', createdAt: 1 },
-        { id: 'old2', role: 'assistant', content: 'reply', createdAt: 2 },
-      ],
-    });
+    getEveSession
+      .mockResolvedValueOnce({
+        ...sessionMeta('ses_existing'),
+        messages: [
+          { id: 'old1', role: 'user', content: 'earlier', createdAt: 1 },
+          { id: 'old2', role: 'assistant', content: 'reply', createdAt: 2 },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ...sessionMeta('ses_existing'),
+        messages: [
+          {
+            id: 'sum1',
+            role: 'assistant',
+            content: '[Conversation summary]\nPrior turns compacted.',
+            createdAt: 3,
+            compacted: true,
+          },
+          { id: 'u1', role: 'user', content: 'new question', createdAt: 4 },
+        ],
+      });
     streamEveTurn.mockImplementation(async function* () {
-      yield { type: 'message.user' as const, id: 'u1', content: 'new question' };
       yield {
         type: 'context.compressed' as const,
         beforeTokens: 900,
@@ -612,7 +657,6 @@ describe('useEveAgent', () => {
           compacted: true,
         },
       };
-      yield { type: 'done' as const };
     });
 
     const { result } = renderHook(() =>
@@ -629,43 +673,39 @@ describe('useEveAgent', () => {
       await result.current.send();
     });
 
-    expect(result.current.messages).toEqual([
-      expect.objectContaining({
-        id: 'sum1',
-        compacted: true,
-        content: '[Conversation summary]\nPrior turns compacted.',
-      }),
-      expect.objectContaining({ id: 'u1', role: 'user', content: 'new question' }),
-    ]);
+    await waitFor(() => {
+      expect(result.current.messages).toEqual([
+        expect.objectContaining({
+          id: 'sum1',
+          compacted: true,
+          content: '[Conversation summary]\nPrior turns compacted.',
+        }),
+        expect.objectContaining({ id: 'u1', role: 'user', content: 'new question' }),
+      ]);
+    });
   });
 
   it('toasts on context.compress_failed without aborting the turn', async () => {
     const dispatchSpy = vi.spyOn(eventDispatcher, 'dispatch');
-    getEveSession.mockResolvedValue({
-      id: 'ses_existing',
-      bookId: 'book-1',
-      title: 'Chat',
-      createdAt: 1,
-      updatedAt: 1,
-      messages: [{ id: 'old1', role: 'user', content: 'earlier', createdAt: 1 }],
-    });
+    getEveSession
+      .mockResolvedValueOnce({
+        ...sessionMeta('ses_existing'),
+        messages: [{ id: 'old1', role: 'user', content: 'earlier', createdAt: 1 }],
+      })
+      .mockResolvedValueOnce({
+        ...sessionMeta('ses_existing'),
+        messages: [
+          { id: 'old1', role: 'user', content: 'earlier', createdAt: 1 },
+          { id: 'u1', role: 'user', content: 'new question', createdAt: 2 },
+          { id: 'a1', role: 'assistant', content: 'still answering', createdAt: 3 },
+        ],
+      });
     streamEveTurn.mockImplementation(async function* () {
-      yield { type: 'message.user' as const, id: 'u1', content: 'new question' };
       yield {
         type: 'context.compress_failed' as const,
         message: 'summarizer down',
       };
-      yield {
-        type: 'message.assistant.delta' as const,
-        id: 'a1',
-        delta: 'still answering',
-      };
-      yield {
-        type: 'message.assistant' as const,
-        id: 'a1',
-        content: 'still answering',
-      };
-      yield { type: 'done' as const };
+      yield assistantUi('a1', [textPart('still answering')]);
     });
 
     const { result } = renderHook(() =>
@@ -682,6 +722,9 @@ describe('useEveAgent', () => {
       await result.current.send();
     });
 
+    await waitFor(() => {
+      expect(result.current.status).toBe('ready');
+    });
     expect(dispatchSpy).toHaveBeenCalledWith(
       'toast',
       expect.objectContaining({
@@ -709,13 +752,8 @@ describe('useEveAgent', () => {
       messages: [{ id: 'kept', role: 'user', content: 'prior', createdAt: 1 }],
     });
 
-    streamEveTurn.mockImplementation(async function* (_sid, _msg, _signal: AbortSignal) {
-      yield { type: 'message.user' as const, id: 'u1', content: 'stop me' };
-      yield {
-        type: 'message.assistant.delta' as const,
-        id: 'a1',
-        delta: 'partial ',
-      };
+    streamEveTurn.mockImplementation(async function* () {
+      yield assistantUi('a1', [textPart('partial ')]);
       const err = new Error('aborted');
       err.name = 'AbortError';
       throw err;
@@ -754,12 +792,7 @@ describe('useEveAgent', () => {
     });
 
     streamEveTurn.mockImplementation(async function* (_sid, _msg, signal: AbortSignal) {
-      yield { type: 'message.user' as const, id: 'u1', content: 'stop me' };
-      yield {
-        type: 'message.assistant.delta' as const,
-        id: 'a1',
-        delta: 'partial ',
-      };
+      yield assistantUi('a1', [textPart('partial ')]);
       // plugin-http shape: Error('Request cancelled'), name !== 'AbortError'.
       await new Promise<never>((_resolve, reject) => {
         const fail = () => reject(new Error('Request cancelled'));
@@ -809,12 +842,11 @@ describe('useEveAgent', () => {
     });
 
     streamEveTurn.mockImplementation(async function* (_sid, _msg, signal: AbortSignal) {
-      yield { type: 'message.user' as const, id: 'u1', content: 'stop me' };
       await new Promise<void>((resolve) => {
         if (signal.aborted) resolve();
         else signal.addEventListener('abort', () => resolve(), { once: true });
       });
-      // Buffered NDJSON from a misclassified server abort — must not stick as UI error.
+      // Buffered side-channel error from a misclassified server abort — must not stick as UI error.
       yield {
         type: 'error' as const,
         message:
@@ -883,7 +915,6 @@ describe('useEveAgent', () => {
     });
 
     streamEveTurn.mockImplementation(async function* () {
-      yield { type: 'message.user' as const, id: 'u1', content: 'boom' };
       yield { type: 'error' as const, message: 'model failed' };
     });
 
@@ -956,7 +987,6 @@ describe('useEveAgent', () => {
       });
 
     streamEveTurn.mockImplementation(async function* () {
-      yield { type: 'message.user' as const, id: 'u1', content: 'Why?' };
       yield { type: 'error' as const, message: 'Model returned an empty reply' };
     });
 
@@ -1002,7 +1032,6 @@ describe('useEveAgent', () => {
       });
 
     streamEveTurn.mockImplementation(async function* () {
-      yield { type: 'message.user' as const, id: 'u1', content: 'Why?' };
       yield { type: 'error' as const, message: 'Model returned an empty reply' };
     });
 
@@ -1054,13 +1083,8 @@ describe('useEveAgent', () => {
       });
 
     streamEveTurn.mockImplementation(async function* () {
-      yield { type: 'message.user' as const, id: 'u1', content: 'interrupted' };
-      yield {
-        type: 'message.assistant.delta' as const,
-        id: 'a1',
-        delta: 'partial',
-      };
-      yield { type: 'done' as const, aborted: true };
+      yield assistantUi('a1', [textPart('partial')]);
+      yield { type: 'abort' as const };
     });
 
     const { result } = renderHook(() =>
