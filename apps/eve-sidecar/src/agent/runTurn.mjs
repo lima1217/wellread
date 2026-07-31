@@ -4,7 +4,12 @@
 
 import { streamText, stepCountIs } from 'ai';
 import { randomBytes } from 'node:crypto';
-import { normalizeThinkingMode, turnFetchContext } from '../createModel.mjs';
+import {
+  normalizeApiMode,
+  normalizeThinkingMode,
+  THINK_MODE_REASONING_EFFORT,
+  turnFetchContext,
+} from '../createModel.mjs';
 import {
   createAnswerContentGate,
   pickAnswerFromSteps,
@@ -12,6 +17,10 @@ import {
 import { isDegenerateAnswer } from './answerQuality.mjs';
 import { maybeCompressSession } from './contextCompress.mjs';
 import { isAbortError } from './httpAbort.mjs';
+import {
+  buildModelMessages,
+  serializeModelMessages,
+} from './modelHistory.mjs';
 import {
   appendReadingContext,
   buildReadingContextEnvelope,
@@ -44,6 +53,7 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   abortSignal?: AbortSignal,
  *   contextWindowTokens?: number,
  *   thinkingMode?: 'think' | 'fast',
+ *   apiMode?: 'chat' | 'responses',
  *   readerState?: { chapter?: string | null, cfi?: string | null, sectionIndex?: number | null } | null,
  *   generateTextFn?: import('ai').generateText,
  *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
@@ -54,6 +64,7 @@ export async function runTurn(input) {
   const { model, session, userMessage, getBooksRoot, onEvent, abortSignal } = input;
   const persistSession = input.persistSession;
   const thinkingMode = normalizeThinkingMode(input.thinkingMode);
+  const apiMode = normalizeApiMode(input.apiMode);
   const prepared = prepareUserTurn(userMessage, getBooksRoot);
   const modelUserMessage = prepared.modelContent;
   const turnQuotes = prepared.quotes;
@@ -63,6 +74,9 @@ export async function runTurn(input) {
     role: /** @type {const} */ ('user'),
     content: prepared.sessionContent,
     createdAt: Date.now(),
+    ...(prepared.modelContent !== prepared.sessionContent
+      ? { modelContent: prepared.modelContent }
+      : {}),
   };
   session.messages.push(userMsg);
   onEvent({ type: 'message.user', id: userId, content: prepared.sessionContent });
@@ -100,14 +114,14 @@ export async function runTurn(input) {
     priorSources,
     notesIndex,
   });
-  const system = appendReadingContext(
-    buildSystemPrompt({
-      bookId: session.bookId,
-      bookTitle: session.bookTitle,
-      skills,
-    }),
-    envelope,
-  );
+  const instructions = buildSystemPrompt({
+    bookId: session.bookId,
+    bookTitle: session.bookTitle,
+    skills,
+  });
+  // Full system for compression + soft-landing; Responses puts stable
+  // instructions in providerOptions and turn envelope in `system`.
+  const system = appendReadingContext(instructions, envelope);
 
   const contextWindowTokens =
     Number(input.contextWindowTokens) > 0
@@ -144,13 +158,11 @@ export async function runTurn(input) {
   /** @type {Array<{ id: string, name: string, args?: unknown, result?: unknown }>} */
   const toolTrace = [];
 
-  const history = session.messages
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .slice(0, -1)
-    .map((m) => ({
-      role: /** @type {'user' | 'assistant'} */ (m.role),
-      content: m.content,
-    }));
+  const historyMessages = buildModelMessages({
+    messages: session.messages,
+    excludeMessageId: userId,
+    currentUserModelContent: modelUserMessage,
+  });
 
   const maxToolRounds = resolveMaxToolRounds(
     input.maxToolRounds ?? process.env.EVE_MAX_TOOL_ROUNDS,
@@ -184,25 +196,46 @@ export async function runTurn(input) {
           onEvent({ type: 'message.assistant.delta', id: assistantId, delta });
         });
 
-        const result = streamText({
+        /** @type {Record<string, unknown>} */
+        const streamOptions = {
           model,
-          system,
-          messages: [...history, { role: 'user', content: modelUserMessage }],
+          messages: historyMessages,
           tools,
           abortSignal,
           // N tool-capable steps + 1 soft-landing answer (tools disabled).
           stopWhen: stepCountIs(maxToolRounds + 1),
           prepareStep: ({ stepNumber }) => {
+            // Responses keeps stable catalog in providerOptions.instructions —
+            // soft-landing must not re-inject it via `system` (would duplicate).
             const prep = prepareToolExhaustionStep({
               stepNumber,
               maxToolRounds,
-              system,
+              system: apiMode === 'responses' ? envelope || '' : system,
             });
             softLandingStep = Boolean(prep);
             if (softLandingStep) usedSoftLanding = true;
             return prep;
           },
-        });
+        };
+
+        if (apiMode === 'responses') {
+          // Stable catalog/skills → instructions; turn-varying envelope → system.
+          streamOptions.system = envelope || undefined;
+          streamOptions.providerOptions = {
+            openai: {
+              store: false,
+              instructions,
+              reasoningEffort:
+                thinkingMode === 'think' ? THINK_MODE_REASONING_EFFORT : 'none',
+            },
+          };
+        } else {
+          streamOptions.system = system;
+        }
+
+        const result = streamText(
+          /** @type {Parameters<typeof streamText>[0]} */ (streamOptions),
+        );
 
         // Visible answer = tool-free steps only. Soft-landing (budget spent)
         // never promotes model prose — content becomes a toolTrace ledger.
@@ -218,6 +251,12 @@ export async function runTurn(input) {
           }
           if (part.type === 'start-step') {
             answerGate.startStep();
+            continue;
+          }
+          if (part.type === 'reasoning-delta') {
+            // Reasoning UI is fed by fetch-layer onReasoningDelta (Chat
+            // reasoning_content + DeepSeek Responses reasoning_text). Skip SDK
+            // duplicates here.
             continue;
           }
           if (part.type === 'text-delta') {
@@ -330,6 +369,15 @@ export async function runTurn(input) {
           return settle.error(DEGENERATE_ANSWER_ERROR);
         }
 
+        /** @type {unknown[] | undefined} */
+        let modelMessages;
+        try {
+          const response = await result.response;
+          modelMessages = serializeModelMessages(response?.messages);
+        } catch {
+          modelMessages = undefined;
+        }
+
         const sources = collectSourcesFromTools(toolTrace);
         const reasoningText = reasoning.trim();
         const assistantMsg = {
@@ -340,6 +388,7 @@ export async function runTurn(input) {
           ...(reasoningText ? { reasoning: reasoningText } : {}),
           ...(sources.length ? { sources } : {}),
           ...(toolTrace.length ? { tools: toolTrace } : {}),
+          ...(modelMessages ? { modelMessages } : {}),
         };
         session.messages.push(assistantMsg);
         maybeApplyFirstTurnTitle(session, userMessage);

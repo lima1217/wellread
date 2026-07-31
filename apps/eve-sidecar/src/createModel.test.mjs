@@ -1,14 +1,19 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  adaptResponsesInputItem,
+  adaptResponsesOutputItem,
   createLanguageModel,
+  isResponsesRequest,
   normalizeApiMode,
   normalizeModelEnv,
   normalizeThinkingMode,
   patchChatCompletionBody,
+  patchResponsesBody,
   THINK_MODE_REASONING_EFFORT,
   supportsThinkingExtension,
   transformCompletionPayload,
+  transformResponsesPayload,
   turnFetchContext,
   withModelFetchPatch,
 } from './createModel.mjs';
@@ -119,6 +124,151 @@ describe('patchChatCompletionBody', () => {
     assert.equal('thinking' in out, false);
     assert.equal('reasoning_effort' in out, false);
     assert.deepEqual(out.messages, [{ role: 'system', content: 'sys' }]);
+  });
+});
+
+describe('isResponsesRequest', () => {
+  it('detects /responses URLs and input-only bodies', () => {
+    assert.equal(isResponsesRequest('https://api.deepseek.com/responses'), true);
+    assert.equal(
+      isResponsesRequest('https://api.deepseek.com/v1/chat/completions'),
+      false,
+    );
+    assert.equal(isResponsesRequest('', { input: 'hi' }), true);
+    assert.equal(isResponsesRequest('', { messages: [] }), false);
+  });
+});
+
+describe('patchResponsesBody', () => {
+  it('forces store false and sets reasoning effort from thinking mode', () => {
+    const think = patchResponsesBody(
+      {
+        model: 'deepseek-v4-flash',
+        input: 'hi',
+        store: true,
+        previous_response_id: 'resp_x',
+        thinking: { type: 'enabled' },
+      },
+      'think',
+    );
+    assert.equal(think.store, false);
+    assert.equal(think.previous_response_id, undefined);
+    assert.equal(think.thinking, undefined);
+    assert.deepEqual(think.reasoning, { effort: 'high' });
+
+    const fast = patchResponsesBody({ model: 'deepseek-v4-flash', input: 'hi' }, 'fast');
+    assert.deepEqual(fast.reasoning, { effort: 'none' });
+  });
+
+  it('rewrites OpenAI summary reasoning items to DeepSeek content when opted in', () => {
+    const out = patchResponsesBody(
+      {
+        model: 'deepseek-v4-flash',
+        input: [
+          {
+            type: 'reasoning',
+            id: 'rs_1',
+            summary: [{ type: 'summary_text', text: 'step' }],
+            encrypted_content: 'enc',
+          },
+        ],
+      },
+      'think',
+      { adaptDeepSeekReasoning: true },
+    );
+    assert.deepEqual(out.input[0], {
+      type: 'reasoning',
+      id: 'rs_1',
+      content: [{ type: 'reasoning_text', text: 'step' }],
+    });
+  });
+
+  it('preserves OpenAI encrypted_content when DeepSeek adapt is off', () => {
+    const item = {
+      type: 'reasoning',
+      id: 'rs_1',
+      summary: [{ type: 'summary_text', text: 'step' }],
+      encrypted_content: 'enc',
+    };
+    const out = patchResponsesBody(
+      { model: 'gpt-4.1', input: [item] },
+      'think',
+      { injectThinking: false, adaptDeepSeekReasoning: false },
+    );
+    assert.equal(out.reasoning, undefined);
+    assert.deepEqual(out.input[0], item);
+  });
+});
+
+describe('adaptResponsesOutputItem / transformResponsesPayload', () => {
+  it('maps reasoning content to summary and placeholder encrypted_content', () => {
+    assert.deepEqual(
+      adaptResponsesOutputItem({
+        type: 'reasoning',
+        id: 'rs_1',
+        content: [{ type: 'reasoning_text', text: 'cot' }],
+      }),
+      {
+        type: 'reasoning',
+        id: 'rs_1',
+        content: [{ type: 'reasoning_text', text: 'cot' }],
+        summary: [{ type: 'summary_text', text: 'cot' }],
+        encrypted_content: '',
+      },
+    );
+  });
+
+  it('keeps a real encrypted_content string from the host', () => {
+    assert.equal(
+      /** @type {{ encrypted_content?: string }} */ (
+        adaptResponsesOutputItem({
+          type: 'reasoning',
+          id: 'rs_1',
+          summary: [{ type: 'summary_text', text: 'cot' }],
+          encrypted_content: 'enc-blob',
+        })
+      ).encrypted_content,
+      'enc-blob',
+    );
+  });
+
+  it('rewrites DeepSeek reasoning_text stream events when opted in', () => {
+    /** @type {string[]} */
+    const deltas = [];
+    const out = transformResponsesPayload(
+      {
+        type: 'response.reasoning_text.delta',
+        item_id: 'rs_1',
+        delta: 'think',
+      },
+      {
+        thinkingMode: 'think',
+        onReasoningDelta: (d) => deltas.push(d),
+        adaptDeepSeekReasoning: true,
+      },
+    );
+    assert.deepEqual(deltas, ['think']);
+    assert.equal(out.type, 'response.reasoning_summary_text.delta');
+    assert.equal(out.summary_index, 0);
+  });
+
+  it('leaves OpenAI stream events unchanged when DeepSeek adapt is off', () => {
+    const event = {
+      type: 'response.reasoning_summary_text.delta',
+      delta: 'think',
+      summary_index: 0,
+    };
+    assert.equal(
+      transformResponsesPayload(event, { adaptDeepSeekReasoning: false }),
+      event,
+    );
+  });
+});
+
+describe('adaptResponsesInputItem', () => {
+  it('keeps non-reasoning items unchanged', () => {
+    const item = { type: 'function_call', call_id: 'c1', name: 'read_file' };
+    assert.equal(adaptResponsesInputItem(item), item);
   });
 });
 
@@ -363,5 +513,46 @@ describe('createLanguageModel', () => {
     assert.deepEqual(JSON.parse(/** @type {string} */ (sentBody)).thinking, {
       type: 'disabled',
     });
+  });
+
+  it('wires Responses fetch that injects reasoning.effort and store:false', async () => {
+    /** @type {string | undefined} */
+    let sentBody;
+    /** @type {typeof fetch | undefined} */
+    let patchedFetch;
+    const createOpenAI = (opts) => {
+      patchedFetch = opts.fetch;
+      const provider = () => ({});
+      provider.chat = () => ({});
+      provider.responses = () => ({});
+      return provider;
+    };
+    createLanguageModel(
+      normalizeModelEnv({ apiKey: 'sk-test', apiMode: 'responses' }),
+      {
+        createOpenAI,
+        baseFetch: async (_url, init) => {
+          sentBody = typeof init?.body === 'string' ? init.body : undefined;
+          return new Response('{}', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        },
+      },
+    );
+    assert.ok(patchedFetch);
+    await turnFetchContext.run({ thinkingMode: 'think' }, () =>
+      patchedFetch('https://api.deepseek.com/responses', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'deepseek-v4-flash',
+          input: 'hi',
+          store: true,
+        }),
+      }),
+    );
+    const parsed = JSON.parse(/** @type {string} */ (sentBody));
+    assert.equal(parsed.store, false);
+    assert.deepEqual(parsed.reasoning, { effort: 'high' });
   });
 });

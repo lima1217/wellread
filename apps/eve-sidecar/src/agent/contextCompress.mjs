@@ -23,13 +23,33 @@ export function estimateTokens(text) {
 }
 
 /**
- * @param {Array<{ content?: string }>} messages
+ * @param {Array<{
+ *   content?: string,
+ *   reasoning?: string,
+ *   tools?: unknown,
+ *   modelMessages?: unknown,
+ * }>} messages
  * @returns {number}
  */
 export function estimateMessagesTokens(messages) {
   let total = 0;
   for (const m of messages) {
     total += estimateTokens(m.content) + MSG_OVERHEAD_TOKENS;
+    total += estimateTokens(m.reasoning);
+    if (m.tools != null) {
+      try {
+        total += estimateTokens(JSON.stringify(m.tools));
+      } catch {
+        // ignore non-serializable tool traces
+      }
+    }
+    if (m.modelMessages != null) {
+      try {
+        total += estimateTokens(JSON.stringify(m.modelMessages));
+      } catch {
+        // ignore non-serializable transcripts
+      }
+    }
   }
   return total;
 }
@@ -80,7 +100,8 @@ export function planCompression(input) {
 
   for (let i = messages.length - 2; i >= 0; i--) {
     const candidate = messages[i];
-    const add = estimateTokens(candidate.content) + MSG_OVERHEAD_TOKENS;
+    // Same estimator as beforeTokens / keepTokens — include reasoning/tools/modelMessages.
+    const add = estimateMessagesTokens([candidate]);
     if (keepTokens + add > keepBudget) break;
     keep.unshift(candidate);
     keepTokens += add;

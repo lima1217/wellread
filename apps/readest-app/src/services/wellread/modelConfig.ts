@@ -16,8 +16,9 @@ export type ModelProfile = {
   contextWindowTokens: number;
   /**
    * `chat` → Chat Completions (`provider.chat`, /v1/chat/completions).
-   * `responses` → OpenAI Responses API (`provider.responses`, /v1/responses).
-   * Default `chat` — required for DeepSeek and most OpenAI-compatible hosts.
+   * `responses` → OpenAI/DeepSeek Responses API (`provider.responses`, /v1/responses).
+   * Default `chat` for broad OpenAI-compatible hosts; DeepSeek Flash also
+   * supports `responses` (stateless — no store / previous_response_id).
    */
   apiMode: ModelApiMode;
 };

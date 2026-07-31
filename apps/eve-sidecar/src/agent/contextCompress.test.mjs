@@ -25,6 +25,26 @@ describe('contextCompress estimates', () => {
     ]);
     assert.equal(tokens, estimateTokens('abcd') + 4 + estimateTokens('abcd') + 4);
   });
+
+  it('counts reasoning, tools, and modelMessages in the estimate', () => {
+    const tokens = estimateMessagesTokens([
+      {
+        role: 'assistant',
+        content: 'abcd',
+        reasoning: 'abcd',
+        tools: [{ id: 't1' }],
+        modelMessages: [{ role: 'assistant', content: 'wire' }],
+      },
+    ]);
+    const toolsTokens = estimateTokens(JSON.stringify([{ id: 't1' }]));
+    const modelTokens = estimateTokens(
+      JSON.stringify([{ role: 'assistant', content: 'wire' }]),
+    );
+    assert.equal(
+      tokens,
+      estimateTokens('abcd') + 4 + estimateTokens('abcd') + toolsTokens + modelTokens,
+    );
+  });
 });
 
 describe('planCompression', () => {
@@ -93,6 +113,32 @@ describe('planCompression', () => {
     assert.ok(plan);
     assert.deepEqual(plan.keepIds, ['huge']);
     assert.deepEqual(plan.dropIds, ['old', 'old_a']);
+  });
+
+  it('uses full message weight (modelMessages) when deciding what to keep', () => {
+    // Content-only looks tiny, but modelMessages make each older turn heavy.
+    // Keep-loop must not treat them as cheap content-only rows.
+    const fat = {
+      id: 'fat_a',
+      role: 'assistant',
+      content: 'ok',
+      createdAt: 1,
+      modelMessages: [{ role: 'assistant', content: 'y'.repeat(2000) }],
+    };
+    const messages = [
+      { id: 'u1', role: 'user', content: 'x'.repeat(2000), createdAt: 1 },
+      fat,
+      { id: 'u2', role: 'user', content: 'x'.repeat(2000), createdAt: 1 },
+    ];
+    const plan = planCompression({
+      messages,
+      systemPrompt,
+      contextWindowTokens: window,
+    });
+    assert.ok(plan);
+    // Newest user kept; fat assistant should not sneak into keep via content-only estimate.
+    assert.ok(plan.keepIds.includes('u2'));
+    assert.ok(plan.dropIds.includes('fat_a'));
   });
 
   it('returns null when only one oversized message (nothing to summarize)', () => {

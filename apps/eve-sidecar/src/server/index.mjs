@@ -289,6 +289,7 @@ const server = http.createServer(async (req, res) => {
             abortSignal,
             contextWindowTokens: modelContextWindowTokens,
             thinkingMode,
+            apiMode: modelConfig.apiMode,
             readerState,
             persistSession: (s) => sessions.save(s),
           });
