@@ -1,8 +1,19 @@
 /**
- * Minimal eve-compatible HTTP client for Reading Assistant sessions.
+ * Eve-compatible HTTP client for Reading Assistant sessions.
+ * Turns stream AI SDK UIMessage chunks (SSE).
  */
 
+import { sessionToUIMessage, uiMessageToSession } from '@wellread/eve-message';
+import {
+  parseJsonEventStream,
+  readUIMessageStream,
+  uiMessageChunkSchema,
+  type UIMessage,
+  type UIMessageChunk,
+} from 'ai';
 import { eveFetch } from './eveFetch';
+
+type EveUIMessagePart = UIMessage['parts'][number];
 
 export type EveSource = {
   cfi: string;
@@ -36,7 +47,9 @@ export type EveMessage = {
   role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt: number;
-  /** Model chain-of-thought when Thinking Mode is Think (not part of the answer body). */
+  /** Ordered UI parts when available (preferred for rendering). */
+  parts?: EveUIMessagePart[];
+  /** Model chain-of-thought when Thinking Mode is Think (denormalized). */
   reasoning?: string;
   /** Client-side Pending Quotes attached to this user turn (not always persisted). */
   quotes?: EveMessageQuote[];
@@ -60,19 +73,7 @@ export type EveSession = EveSessionMeta & { messages: EveMessage[] };
 export type ThinkingMode = 'think' | 'fast';
 
 export type EveStreamEvent =
-  | { type: 'message.user'; id: string; content: string }
-  | { type: 'message.assistant.delta'; id: string; delta: string }
-  | { type: 'message.assistant.reasoning.delta'; id: string; delta: string }
-  | {
-      type: 'message.assistant';
-      id: string;
-      content: string;
-      reasoning?: string;
-      sources?: EveSource[];
-      tools?: EveToolTrace[];
-    }
-  | { type: 'tool.start'; id: string; name: string; args?: unknown }
-  | { type: 'tool.end'; id: string; name: string; result?: unknown }
+  | { type: 'ui-message'; message: UIMessage }
   | {
       type: 'context.compressed';
       beforeTokens: number;
@@ -89,7 +90,7 @@ export type EveStreamEvent =
     }
   | { type: 'context.compress_failed'; message: string }
   | { type: 'error'; message: string }
-  | { type: 'done'; aborted?: boolean };
+  | { type: 'abort'; reason?: string };
 
 function authHeaders(token: string | undefined): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -174,6 +175,28 @@ export async function deleteEveSession(id: string): Promise<void> {
   if (!res.ok && res.status !== 204) throw new Error(`delete session failed: ${res.status}`);
 }
 
+/** Convert Response body → UIMessageChunk stream (AI SDK SSE). */
+export function responseToUIMessageChunkStream(
+  body: ReadableStream<Uint8Array>,
+): ReadableStream<UIMessageChunk> {
+  return parseJsonEventStream({
+    stream: body,
+    schema: uiMessageChunkSchema,
+  }).pipeThrough(
+    new TransformStream<
+      { success: true; value: UIMessageChunk } | { success: false; error: unknown },
+      UIMessageChunk
+    >({
+      transform(chunk, controller) {
+        if (!chunk.success) {
+          throw chunk.error instanceof Error ? chunk.error : new Error(String(chunk.error));
+        }
+        controller.enqueue(chunk.value);
+      },
+    }),
+  );
+}
+
 export async function* streamEveTurn(
   sessionId: string,
   message: string,
@@ -209,26 +232,121 @@ export async function* streamEveTurn(
     const detail = await res.text().catch(() => '');
     throw new Error(`turn failed: ${res.status} ${detail}`);
   }
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
+
+  const chunkStream = responseToUIMessageChunkStream(res.body);
+  const [forSide, forMessages] = chunkStream.tee();
+
+  const sideReader = forSide.getReader();
+  const sideQueue: EveStreamEvent[] = [];
+  let sideDone = false;
+  let sideError: unknown = null;
+
+  const pumpSide = (async () => {
+    try {
+      while (true) {
+        const { done, value } = await sideReader.read();
+        if (done) break;
+        const side = uiChunkToSideEvent(value);
+        if (side) sideQueue.push(side);
+      }
+    } catch (err) {
+      sideError = err;
+    } finally {
+      sideDone = true;
+    }
+  })();
+
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let nl = buffer.indexOf('\n');
-      while (nl >= 0) {
-        const line = buffer.slice(0, nl).trim();
-        buffer = buffer.slice(nl + 1);
-        if (line) yield JSON.parse(line) as EveStreamEvent;
-        nl = buffer.indexOf('\n');
+    for await (const uiMessage of readUIMessageStream({ stream: forMessages })) {
+      while (sideQueue.length) {
+        yield sideQueue.shift()!;
+      }
+      if (sideError) throw sideError;
+      yield { type: 'ui-message', message: uiMessage };
+    }
+    await pumpSide;
+    if (sideError) throw sideError;
+    while (sideQueue.length) {
+      yield sideQueue.shift()!;
+    }
+    // Wait briefly if side pump still finishing after messages end.
+    while (!sideDone) {
+      await new Promise((r) => setTimeout(r, 0));
+      while (sideQueue.length) {
+        yield sideQueue.shift()!;
       }
     }
-    const tail = buffer.trim();
-    if (tail) yield JSON.parse(tail) as EveStreamEvent;
   } finally {
-    // Consumer may break/throw on error events before the stream ends.
-    await reader.cancel().catch(() => {});
+    await sideReader.cancel().catch(() => {});
+    await forMessages.cancel?.().catch(() => {});
   }
+}
+
+function uiChunkToSideEvent(chunk: UIMessageChunk): EveStreamEvent | null {
+  if (chunk.type === 'error') {
+    return { type: 'error', message: chunk.errorText };
+  }
+  if (chunk.type === 'abort') {
+    return { type: 'abort', reason: 'reason' in chunk ? String(chunk.reason ?? '') : undefined };
+  }
+  if (chunk.type === 'data-eve-context-compressed') {
+    const data = chunk.data as {
+      beforeTokens: number;
+      afterTokens: number;
+      targetTokens: number;
+      removedIds: string[];
+      summary: {
+        id: string;
+        role: 'assistant' | 'user' | 'system';
+        content: string;
+        createdAt: number;
+        compacted?: boolean;
+      };
+    };
+    return { type: 'context.compressed', ...data };
+  }
+  if (chunk.type === 'data-eve-context-compress-failed') {
+    const data = chunk.data as { message: string };
+    return { type: 'context.compress_failed', message: data.message };
+  }
+  return null;
+}
+
+/** Flatten UIMessage → EveMessage for store/render helpers (shared converter). */
+export function uiMessageToEveMessage(
+  message: UIMessage,
+  extras?: { quotes?: EveMessageQuote[]; createdAt?: number },
+): EveMessage {
+  const session = uiMessageToSession(message, { createdAt: extras?.createdAt });
+  return {
+    id: session.id,
+    role: session.role,
+    content: session.content,
+    createdAt: session.createdAt,
+    ...(session.parts?.length ? { parts: session.parts as EveUIMessagePart[] } : {}),
+    ...(session.reasoning ? { reasoning: session.reasoning } : {}),
+    ...(session.tools?.length ? { tools: session.tools } : {}),
+    ...(session.sources?.length ? { sources: session.sources } : {}),
+    ...(session.compacted ? { compacted: true } : {}),
+    ...(extras?.quotes?.length ? { quotes: extras.quotes } : {}),
+  };
+}
+
+/** Ensure disk messages have denormalized fields + ordered parts for UI. */
+export function normalizeEveMessage(msg: EveMessage): EveMessage {
+  const ui = sessionToUIMessage({
+    id: msg.id,
+    role: msg.role,
+    content: msg.content,
+    createdAt: msg.createdAt,
+    ...(msg.reasoning ? { reasoning: msg.reasoning } : {}),
+    ...(msg.tools?.length ? { tools: msg.tools } : {}),
+    ...(msg.sources?.length ? { sources: msg.sources } : {}),
+    ...(msg.compacted ? { compacted: true } : {}),
+    ...(msg.parts?.length ? { parts: msg.parts } : {}),
+  });
+  return uiMessageToEveMessage(ui as UIMessage, {
+    quotes: msg.quotes,
+    createdAt: msg.createdAt,
+  });
 }

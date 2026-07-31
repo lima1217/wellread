@@ -39,21 +39,20 @@ import {
   shouldShowPendingReply,
   SKILL_SLASH_PREFIX,
   stripAssistantCfiCitations,
-  summarizeToolTrace,
 } from '@/services/wellread/assistant/helpers';
 import { useEveAgent } from '@/services/wellread/assistant/useEveAgent';
 import {
   useReadingAssistantStore,
   type PendingQuote,
 } from '@/services/wellread/assistant/readingAssistantStore';
-import type {
-  EveMessage,
-  EveMessageQuote,
-  EveSkillSummary,
-  EveSource,
-  EveToolTrace,
+import {
+  listEveSkills,
+  type EveMessage,
+  type EveMessageQuote,
+  type EveSkillSummary,
+  type EveSource,
+  type EveToolTrace,
 } from '@/services/wellread/assistant/eveClient';
-import { listEveSkills } from '@/services/wellread/assistant/eveClient';
 import { openExternalUrl } from '@/utils/open';
 
 interface AIAssistantProps {
@@ -294,96 +293,51 @@ const markdownBodyClass = clsx(
   '[&_tr:last-child_td]:border-b-0',
 );
 
-/** T3: always-visible summary + Details expands params. */
-function ToolTrace({ tools }: { tools: EveToolTrace[] }) {
+/** One tool step in the activity timeline (live or completed). */
+function ToolStep({ tool }: { tool: EveToolTrace }) {
   const _ = useTranslation();
   const [open, setOpen] = useState(false);
-  if (!tools.length) return null;
-  const summary = summarizeToolTrace(tools);
+  const pending = tool.result === undefined;
   return (
-    <div className='text-base-content/60 mt-2 flex flex-col gap-1 font-sans text-[0.85em] leading-snug select-none'>
-      <div className='flex items-baseline gap-1.5'>
-        <span>{summary ? _(summary) : _('Tool activity')}</span>
-        <button
-          type='button'
-          className={clsx('underline decoration-from-font underline-offset-2', focusRing)}
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? _('Collapse') : _('Details')}
-        </button>
-      </div>
-      {open ? (
-        <div className='border-base-content/25 text-base-content/80 space-y-0.5 break-words border-s-2 ps-2 font-mono'>
-          {tools.map((t) => (
-            <div key={t.id}>
-              <span className='font-semibold'>{t.name}</span>
-              {t.args ? (
-                <span className='text-base-content/60'> {JSON.stringify(t.args)}</span>
-              ) : null}
-              {t.result &&
-              typeof t.result === 'object' &&
-              t.result !== null &&
-              'path' in t.result &&
-              (t.result as { ok?: boolean }).ok ? (
-                <span className='text-success'> → {(t.result as { path: string }).path}</span>
-              ) : null}
-            </div>
-          ))}
+    <div className='text-base-content/60 border-base-content/15 eink-bordered mb-2 border-s ps-2.5 font-sans text-[0.85em] leading-snug'>
+      <button
+        type='button'
+        className={clsx(
+          'hover:text-base-content/80 flex w-full items-baseline gap-1.5 text-start',
+          focusRing,
+        )}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className='font-medium'>{tool.name}</span>
+        <span className='text-base-content/40'>
+          {pending ? _('Running…') : open ? _('Collapse') : _('Details')}
+        </span>
+      </button>
+      {open && !pending ? (
+        <div className='text-base-content/70 mt-1 space-y-0.5 break-words font-mono'>
+          {tool.args != null ? <div>{JSON.stringify(tool.args)}</div> : null}
+          {tool.result != null ? (
+            <div className='text-base-content/50'>{JSON.stringify(tool.result)}</div>
+          ) : null}
         </div>
       ) : null}
     </div>
   );
 }
 
-/** B1: stacked left-rule quotes inside the user bubble. */
-function QuoteStack({ quotes }: { quotes: EveMessageQuote[] }) {
-  if (!quotes.length) return null;
-  return (
-    <div className='mb-1.5 flex flex-col gap-1 pb-0.5'>
-      {quotes.map((q) => {
-        const chapter = q.chapterTitle?.trim();
-        const full = chapter ? `${q.text} — 《${chapter}》` : q.text;
-        return (
-          <div
-            key={`${chapter ?? ''}:${q.text}`}
-            title={full}
-            className='border-base-content/25 text-base-content/70 line-clamp-2 border-s-2 ps-1.5 text-[0.85em] leading-snug'
-          >
-            {q.text}
-            {chapter ? <span className='text-base-content/50'> — 《{chapter}》</span> : null}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Quiet wait cue while the assistant has no visible reply yet. */
-function PendingReplyDots({ lookingUp }: { lookingUp: boolean }) {
+function ReasoningBlock({
+  reasoning,
+  forceCollapsed,
+}: {
+  reasoning: string;
+  forceCollapsed?: boolean;
+}) {
   const _ = useTranslation();
-  const label = lookingUp ? _('Looking up…') : _('Thinking…');
-  return (
-    <div
-      className={clsx(
-        messageTypeClass,
-        'text-base-content/55 me-1 flex items-center gap-2 px-0.5 py-0.5',
-      )}
-      role='status'
-    >
-      <span className='font-sans text-[0.85em] leading-none'>{label}</span>
-      <span className='assistant-pending-dots inline-flex items-center gap-1' aria-hidden='true'>
-        <span className='bg-base-content size-1 rounded-full' />
-        <span className='bg-base-content size-1 rounded-full' />
-        <span className='bg-base-content size-1 rounded-full' />
-      </span>
-    </div>
-  );
-}
-
-function ReasoningBlock({ reasoning }: { reasoning: string }) {
-  const _ = useTranslation();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(!forceCollapsed);
+  useEffect(() => {
+    if (forceCollapsed) setOpen(false);
+  }, [forceCollapsed]);
   if (!reasoning.trim()) return null;
   return (
     <details
@@ -410,6 +364,153 @@ function ReasoningBlock({ reasoning }: { reasoning: string }) {
         {reasoning}
       </pre>
     </details>
+  );
+}
+
+/** Render assistant parts in stream order: reasoning → tools → text. */
+function AssistantPartsView({
+  msg,
+  bookKey,
+  isLive,
+}: {
+  msg: EveMessage;
+  bookKey: string;
+  isLive: boolean;
+}) {
+  const _ = useTranslation();
+  const hasText = Boolean(msg.content.trim());
+  const parts = msg.parts;
+
+  if (!parts?.length) {
+    return (
+      <>
+        {msg.reasoning?.trim() ? (
+          <ReasoningBlock reasoning={msg.reasoning} forceCollapsed={hasText && !isLive} />
+        ) : null}
+        {(msg.tools ?? []).map((t) => (
+          <ToolStep key={t.id} tool={t} />
+        ))}
+        {hasText ? (
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={createAssistantMarkdownComponents({
+              bookKey,
+              sources: msg.sources,
+              passageLabel: _('Passage'),
+            })}
+          >
+            {linkifyBareEpubCfi(msg.content, msg.sources, _('Passage'))}
+          </ReactMarkdown>
+        ) : null}
+      </>
+    );
+  }
+
+  const nodes: ReactNode[] = [];
+  let reasoningBuf = '';
+  const flushReasoning = (key: string) => {
+    if (!reasoningBuf.trim()) return;
+    nodes.push(
+      <ReasoningBlock key={key} reasoning={reasoningBuf} forceCollapsed={hasText && !isLive} />,
+    );
+    reasoningBuf = '';
+  };
+
+  parts.forEach((part, i) => {
+    if (part.type === 'reasoning') {
+      reasoningBuf += part.text;
+      return;
+    }
+    flushReasoning(`reasoning-${i}`);
+    if (part.type === 'dynamic-tool') {
+      nodes.push(
+        <ToolStep
+          key={part.toolCallId}
+          tool={{
+            id: part.toolCallId,
+            name: part.toolName,
+            args: part.input,
+            result: 'output' in part ? part.output : undefined,
+          }}
+        />,
+      );
+      return;
+    }
+    if (typeof part.type === 'string' && part.type.startsWith('tool-') && 'toolCallId' in part) {
+      nodes.push(
+        <ToolStep
+          key={part.toolCallId}
+          tool={{
+            id: part.toolCallId,
+            name: part.type.slice('tool-'.length),
+            args: 'input' in part ? part.input : undefined,
+            result: 'output' in part ? part.output : undefined,
+          }}
+        />,
+      );
+      return;
+    }
+    if (part.type === 'text' && part.text.trim()) {
+      nodes.push(
+        <ReactMarkdown
+          key={`text-${i}`}
+          remarkPlugins={[remarkGfm]}
+          components={createAssistantMarkdownComponents({
+            bookKey,
+            sources: msg.sources,
+            passageLabel: _('Passage'),
+          })}
+        >
+          {linkifyBareEpubCfi(part.text, msg.sources, _('Passage'))}
+        </ReactMarkdown>,
+      );
+    }
+  });
+  flushReasoning('reasoning-tail');
+  return <>{nodes}</>;
+}
+
+/** B1: stacked left-rule quotes inside the user bubble. */
+function QuoteStack({ quotes }: { quotes: EveMessageQuote[] }) {
+  if (!quotes.length) return null;
+  return (
+    <div className='mb-1.5 flex flex-col gap-1 pb-0.5'>
+      {quotes.map((q) => {
+        const chapter = q.chapterTitle?.trim();
+        const full = chapter ? `${q.text} — 《${chapter}》` : q.text;
+        return (
+          <div
+            key={`${chapter ?? ''}:${q.text}`}
+            title={full}
+            className='border-base-content/25 text-base-content/70 line-clamp-2 border-s-2 ps-1.5 text-[0.85em] leading-snug'
+          >
+            {q.text}
+            {chapter ? <span className='text-base-content/50'> — 《{chapter}》</span> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Quiet wait cue while the assistant has no visible reply yet. */
+function PendingReplyDots() {
+  const _ = useTranslation();
+  return (
+    <div
+      className={clsx(
+        messageTypeClass,
+        'text-base-content/55 me-1 flex items-center gap-2 px-0.5 py-0.5',
+      )}
+      role='status'
+    >
+      <span className='font-sans text-[0.85em] leading-none'>{_('Thinking…')}</span>
+      <span className='assistant-pending-dots inline-flex items-center gap-1' aria-hidden='true'>
+        <span className='bg-base-content size-1 rounded-full' />
+        <span className='bg-base-content size-1 rounded-full' />
+        <span className='bg-base-content size-1 rounded-full' />
+      </span>
+    </div>
   );
 }
 
@@ -677,7 +778,6 @@ const ReadingAssistantChat = ({
   const busy = agent.status === 'submitted' || agent.status === 'streaming';
   const canSend = Boolean(agent.composer.trim()) && !busy;
   const showPendingReply = shouldShowPendingReply(busy, agent.messages);
-  const lookingUp = showPendingReply && agent.inFlightTools.length > 0;
 
   const handleSend = useCallback(() => {
     if (!agent.composer.trim() || busy) return;
@@ -769,33 +869,18 @@ const ReadingAssistantChat = ({
               ) : null}
               {msg.role === 'assistant' ? (
                 <div className={markdownBodyClass}>
-                  {msg.reasoning?.trim() ? <ReasoningBlock reasoning={msg.reasoning} /> : null}
-                  {msg.content.trim() ? (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={createAssistantMarkdownComponents({
-                        bookKey,
-                        sources: msg.sources,
-                        passageLabel: _('Passage'),
-                      })}
-                    >
-                      {linkifyBareEpubCfi(msg.content, msg.sources, _('Passage'))}
-                    </ReactMarkdown>
-                  ) : null}
+                  <AssistantPartsView msg={msg} bookKey={bookKey} isLive={isLiveAssistant} />
                 </div>
               ) : (
                 <div>{msg.content}</div>
               )}
-              {msg.role === 'assistant' && msg.tools?.length ? (
-                <ToolTrace tools={msg.tools} />
-              ) : null}
               {msg.role === 'assistant' && msg.content.trim() ? (
                 <CopyMessageButton content={msg.content} workedMs={workedMs} />
               ) : null}
             </div>
           );
         })}
-        {showPendingReply ? <PendingReplyDots lookingUp={lookingUp} /> : null}
+        {showPendingReply ? <PendingReplyDots /> : null}
         {agent.error ? (
           <p className={clsx('text-error select-text text-pretty', messageTypeClass)} role='alert'>
             {agent.error.message}

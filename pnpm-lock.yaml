@@ -70,6 +70,9 @@ importers:
       '@ai-sdk/openai':
         specifier: ^2.0.0
         version: 2.0.114(zod@3.25.76)
+      '@wellread/eve-message':
+        specifier: workspace:*
+        version: link:../../packages/eve-message
       ai:
         specifier: ^5.0.0
         version: 5.0.186(zod@3.25.76)
@@ -178,12 +181,18 @@ importers:
       '@tybys/wasm-util':
         specifier: ^0.10.1
         version: 0.10.2
+      '@wellread/eve-message':
+        specifier: workspace:*
+        version: link:../../packages/eve-message
       '@zip.js/zip.js':
         specifier: ^2.8.16
         version: 2.8.26
       abortcontroller-polyfill:
         specifier: ^1.7.8
         version: 1.7.8
+      ai:
+        specifier: 5.0.186
+        version: 5.0.186(zod@4.4.3)
       aws4fetch:
         specifier: ^1.0.20
         version: 1.0.20
@@ -500,6 +509,8 @@ importers:
       wrangler:
         specifier: ^4.85.0
         version: 4.90.0
+
+  packages/eve-message: {}
 
   packages/foliate-js:
     dependencies:
@@ -7440,6 +7451,13 @@ snapshots:
       '@vercel/oidc': 3.1.0
       zod: 3.25.76
 
+  '@ai-sdk/gateway@2.0.88(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.3
+      '@ai-sdk/provider-utils': 3.0.25(patch_hash=4611a356f4bb4e6f1196858719f8cb03947a41850257ee0527b0ec03f927dd6d)(zod@4.4.3)
+      '@vercel/oidc': 3.1.0
+      zod: 4.4.3
+
   '@ai-sdk/openai@2.0.114(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
@@ -7452,6 +7470,13 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.8
       zod: 3.25.76
+
+  '@ai-sdk/provider-utils@3.0.25(patch_hash=4611a356f4bb4e6f1196858719f8cb03947a41850257ee0527b0ec03f927dd6d)(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.3
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.8
+      zod: 4.4.3
 
   '@ai-sdk/provider-utils@3.0.30(zod@3.25.76)':
     dependencies:
@@ -10634,6 +10659,14 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.25(patch_hash=4611a356f4bb4e6f1196858719f8cb03947a41850257ee0527b0ec03f927dd6d)(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
       zod: 3.25.76
+
+  ai@5.0.186(zod@4.4.3):
+    dependencies:
+      '@ai-sdk/gateway': 2.0.88(zod@4.4.3)
+      '@ai-sdk/provider': 2.0.3
+      '@ai-sdk/provider-utils': 3.0.25(patch_hash=4611a356f4bb4e6f1196858719f8cb03947a41850257ee0527b0ec03f927dd6d)(zod@4.4.3)
+      '@opentelemetry/api': 1.9.0
+      zod: 4.4.3
 
   ajv-formats@2.1.1(ajv@8.20.0):
     optionalDependencies:

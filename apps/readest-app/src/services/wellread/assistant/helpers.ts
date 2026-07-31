@@ -357,13 +357,18 @@ export function stripAssistantCfiCitations(markdown: string): string {
 }
 
 /**
- * Show the pending-reply dots only while the *current* turn has no assistant text.
- * Prior assistant messages in the session must not suppress later waits.
- * Reasoning-only bubbles (Think mode) still count as a visible reply cue.
+ * Show the pending-reply dots only while the *current* turn has no visible
+ * assistant activity. Reasoning, tools, or text each count as a visible cue.
  */
 export function shouldShowPendingReply(
   busy: boolean,
-  messages: ReadonlyArray<{ role: string; content: string; reasoning?: string }>,
+  messages: ReadonlyArray<{
+    role: string;
+    content: string;
+    reasoning?: string;
+    tools?: unknown[];
+    parts?: unknown[];
+  }>,
 ): boolean {
   if (!busy) return false;
   const last = messages[messages.length - 1];
@@ -371,6 +376,8 @@ export function shouldShowPendingReply(
   if (last.role === 'assistant') {
     if (last.content.trim().length > 0) return false;
     if ((last.reasoning ?? '').trim().length > 0) return false;
+    if ((last.tools?.length ?? 0) > 0) return false;
+    if ((last.parts?.length ?? 0) > 0) return false;
   }
   return true;
 }

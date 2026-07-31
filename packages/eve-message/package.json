@@ -1,0 +1,16 @@
+{
+  "name": "@wellread/eve-message",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SessionMessage ↔ UIMessage conversion for Reading Assistant (shared by eve-sidecar and readest-app).",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "scripts": {
+    "test": "node --test src/**/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

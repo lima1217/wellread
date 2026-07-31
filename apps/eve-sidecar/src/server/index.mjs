@@ -9,6 +9,7 @@
 import http from 'node:http';
 import { mkdirSync } from 'node:fs';
 import { createOpenAI } from '@ai-sdk/openai';
+import { pipeUIMessageStreamToResponse } from 'ai';
 import {
   createLanguageModel,
   normalizeModelEnv,
@@ -260,32 +261,15 @@ const server = http.createServer(async (req, res) => {
         const thinkingMode = normalizeThinkingMode(body.thinkingMode);
         const readerState = normalizeReaderState(body.readerState);
 
-        res.writeHead(200, {
-          'content-type': 'application/x-ndjson; charset=utf-8',
-          'cache-control': 'no-cache',
-          connection: 'keep-alive',
-          ...corsHeaders(req),
-        });
-
         // Client AbortController cancels the fetch; propagate into streamText.
         const { signal: abortSignal, settle: settleAbort } = createHttpAbort(req, res);
 
-        const writeEvent = (event) => {
-          if (res.writableEnded || res.destroyed) return;
-          try {
-            res.write(`${JSON.stringify(event)}\n`);
-          } catch {
-            // Client gone — abort path will stop the model/tools.
-          }
-        };
-
         try {
-          await runTurn({
+          const stream = runTurn({
             model: languageModel,
             session,
             userMessage: message,
             getBooksRoot,
-            onEvent: writeEvent,
             abortSignal,
             contextWindowTokens: modelContextWindowTokens,
             thinkingMode,
@@ -293,18 +277,37 @@ const server = http.createServer(async (req, res) => {
             readerState,
             persistSession: (s) => sessions.save(s),
           });
+          pipeUIMessageStreamToResponse({
+            response: res,
+            stream,
+            headers: corsHeaders(req),
+          });
+          // Wait until the response finishes so the turn gate stays held.
+          await new Promise((resolve) => {
+            if (res.writableEnded) {
+              resolve();
+              return;
+            }
+            res.on('finish', resolve);
+            res.on('close', resolve);
+          });
           sessions.save(session);
         } catch (error) {
-          writeEvent({
-            type: 'error',
-            message: error instanceof Error ? error.message : String(error),
-          });
-          // Persist rollbacks (e.g. compress-then-fail dropped the in-flight user).
+          if (!res.headersSent) {
+            sendJson(
+              res,
+              500,
+              {
+                error: 'internal',
+                message: error instanceof Error ? error.message : String(error),
+              },
+              req,
+            );
+          }
           sessions.save(session);
         } finally {
           settleAbort();
         }
-        if (!res.writableEnded) res.end();
       } finally {
         turnGate.release(id);
       }

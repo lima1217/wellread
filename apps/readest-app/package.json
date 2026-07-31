@@ -102,6 +102,8 @@
     "@tybys/wasm-util": "^0.10.1",
     "@zip.js/zip.js": "^2.8.16",
     "abortcontroller-polyfill": "^1.7.8",
+    "ai": "5.0.186",
+    "@wellread/eve-message": "workspace:*",
     "aws4fetch": "^1.0.20",
     "buffer": "^6.0.3",
     "clsx": "^2.1.1",

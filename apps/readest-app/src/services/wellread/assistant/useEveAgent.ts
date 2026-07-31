@@ -6,7 +6,9 @@ import { stubTranslation as _ } from '@/utils/misc';
 import {
   createEveSession,
   getEveSession,
+  normalizeEveMessage,
   streamEveTurn,
+  uiMessageToEveMessage,
   type EveMessage,
   type EveReaderState,
   type EveToolTrace,
@@ -14,6 +16,15 @@ import {
 } from './eveClient';
 import { formatPendingQuotesForTurn, hydrateEveMessagesForDisplay } from './helpers';
 import type { PendingQuote } from './readingAssistantStore';
+
+function toolsInFlightFromMessage(msg: EveMessage): EveToolTrace[] {
+  const tools = msg.tools ?? [];
+  return tools.filter((t) => t.result === undefined);
+}
+
+function hydrateMessages(messages: EveMessage[]): EveMessage[] {
+  return hydrateEveMessagesForDisplay(messages).map(normalizeEveMessage);
+}
 
 export type UseEveAgentStatus = 'ready' | 'submitted' | 'streaming' | 'error';
 
@@ -107,7 +118,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
         if (cancelled) return;
         activeSessionIdRef.current = session.id;
         setActiveSessionId(session.id);
-        setMessages(hydrateEveMessagesForDisplay(session.messages));
+        setMessages(hydrateMessages(session.messages));
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -132,7 +143,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
       const session = await getEveSession(id);
       // History / New chat may have moved on while this fetch was in flight.
       if (activeSessionIdRef.current !== id) return;
-      setMessages(hydrateEveMessagesForDisplay(session.messages));
+      setMessages(hydrateMessages(session.messages));
     } catch {
       // Keep local messages if refetch fails; disk remains source of truth on reopen.
     }
@@ -197,9 +208,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
       abortRef.current = controller;
 
       let assistantId: string | null = null;
-      let tools: EveToolTrace[] = [];
       let userCommitted = false;
-      let committedUserId: string | null = null;
       let needsReconcile = false;
 
       try {
@@ -208,108 +217,38 @@ export function useEveAgent(options: UseEveAgentOptions) {
           thinkingMode,
           readerState: readerState ?? undefined,
         })) {
-          if (event.type === 'message.user') {
+          // First streamed event means the server accepted the turn (user committed).
+          if (!userCommitted) {
             userCommitted = true;
-            committedUserId = event.id;
-            setMessages((prev) => {
-              const withoutOptimistic = prev.filter((m) => m.id !== optimisticUserId);
-              if (withoutOptimistic.some((m) => m.id === event.id)) return withoutOptimistic;
-              return [
-                ...withoutOptimistic,
-                {
-                  id: event.id,
-                  role: 'user',
-                  content: displayContent,
-                  createdAt: Date.now(),
-                  ...(optimisticQuotes ? { quotes: optimisticQuotes } : {}),
-                },
-              ];
-            });
             setStatus('streaming');
-          } else if (event.type === 'tool.start' || event.type === 'tool.end') {
-            if (event.type === 'tool.start') {
-              tools = [...tools, { id: event.id, name: event.name, args: event.args }];
-            } else {
-              tools = tools.map((t) => (t.id === event.id ? { ...t, result: event.result } : t));
-            }
-            setInFlightTools(tools);
-          } else if (event.type === 'message.assistant.reasoning.delta') {
-            assistantId = event.id;
+          }
+          if (event.type === 'ui-message') {
+            if (event.message.role !== 'assistant') continue;
+            const eveMsg = uiMessageToEveMessage(event.message);
+            assistantId = eveMsg.id;
+            setInFlightTools(toolsInFlightFromMessage(eveMsg));
             setMessages((prev) => {
-              const existing = prev.find((m) => m.id === event.id);
-              if (!existing) {
-                return [
-                  ...prev,
-                  {
-                    id: event.id,
-                    role: 'assistant',
-                    content: '',
-                    reasoning: event.delta,
-                    createdAt: Date.now(),
-                    tools: tools.length ? tools : undefined,
-                  },
-                ];
-              }
-              return prev.map((m) =>
-                m.id === event.id ? { ...m, reasoning: (m.reasoning ?? '') + event.delta } : m,
-              );
-            });
-          } else if (event.type === 'message.assistant.delta') {
-            assistantId = event.id;
-            setMessages((prev) => {
-              const existing = prev.find((m) => m.id === event.id);
-              if (!existing) {
-                return [
-                  ...prev,
-                  {
-                    id: event.id,
-                    role: 'assistant',
-                    content: event.delta,
-                    createdAt: Date.now(),
-                    tools: tools.length ? tools : undefined,
-                  },
-                ];
-              }
-              return prev.map((m) =>
-                m.id === event.id ? { ...m, content: m.content + event.delta } : m,
-              );
-            });
-          } else if (event.type === 'message.assistant') {
-            assistantId = event.id;
-            setMessages((prev) => {
-              const without = prev.filter((m) => m.id !== event.id);
-              return [
-                ...without,
-                {
-                  id: event.id,
-                  role: 'assistant',
-                  content: event.content,
-                  reasoning: event.reasoning,
-                  createdAt: Date.now(),
-                  sources: event.sources,
-                  tools: event.tools ?? (tools.length ? tools : undefined),
-                },
-              ];
+              const withoutAssistant = prev.filter((m) => m.id !== eveMsg.id);
+              return [...withoutAssistant, eveMsg];
             });
           } else if (event.type === 'context.compressed') {
+            // Keep the optimistic user bubble through the rest of the stream;
+            // reconcileFromDisk swaps it for the server user id when the turn ends.
             setMessages((prev) => {
               const removed = new Set(event.removedIds);
-              removed.add(optimisticUserId);
               const kept = prev.filter((m) => !removed.has(m.id));
               return [
-                {
+                normalizeEveMessage({
                   id: event.summary.id,
                   role: event.summary.role,
                   content: event.summary.content,
                   createdAt: event.summary.createdAt,
                   compacted: true,
-                },
+                }),
                 ...kept,
               ];
             });
           } else if (event.type === 'context.compress_failed') {
-            // Soft failure: session unchanged; turn continues on the server.
-            // Keep agent.error / status for hard turn failures only.
             if (event.message) {
               console.warn('[eve] context.compress_failed:', event.message);
             }
@@ -319,19 +258,18 @@ export function useEveAgent(options: UseEveAgentOptions) {
             });
           } else if (event.type === 'error') {
             throw new Error(event.message);
-          } else if (event.type === 'done') {
-            setInFlightTools([]);
-            setStatus('ready');
-            if (event.aborted) {
-              needsReconcile = true;
-            }
+          } else if (event.type === 'abort') {
+            needsReconcile = true;
           }
         }
-        if (assistantId === null) {
-          setInFlightTools([]);
-          setStatus('ready');
-        }
+        setInFlightTools([]);
+        setStatus('ready');
         if (needsReconcile) {
+          const dropIds = new Set([optimisticUserId, assistantId].filter(Boolean) as string[]);
+          setMessages((prev) => prev.filter((m) => !dropIds.has(m.id)));
+          await reconcileFromDisk(sessionIdForTurn);
+        } else {
+          // Resolve optimistic user id / sources from disk after a successful turn.
           await reconcileFromDisk(sessionIdForTurn);
         }
       } catch (err) {
@@ -346,9 +284,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
           // Mirror server rollback locally. Do not refetch here: Stop aborts the
           // fetch before the server may have re-persisted after dropInFlightUser,
           // and a stale getEveSession would resurrect the unanswered user.
-          const dropIds = new Set(
-            [optimisticUserId, committedUserId, assistantId].filter(Boolean) as string[],
-          );
+          const dropIds = new Set([optimisticUserId, assistantId].filter(Boolean) as string[]);
           setMessages((prev) => prev.filter((m) => !dropIds.has(m.id)));
           setStatus('ready');
           return;

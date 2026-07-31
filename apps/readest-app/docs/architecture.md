@@ -205,6 +205,15 @@ product.
   (`modelConfig.ts`, `modelApiKey.ts`)
 - Book context: extract / CFI chunking under `services/wellread/extract`
 - Runtime: eve sidecar agent loop, tool rounds, scoped Books search
+- Shared message conversion: `packages/eve-message` (`@wellread/eve-message`) —
+  SessionMessage ↔ AI SDK UIMessage; sessions persist ordered `parts`
+
+**Protocol (breaking):** `POST /eve/v1/sessions/:id/turns` streams AI SDK
+**UIMessage SSE** (`text/event-stream` via `pipeUIMessageStreamToResponse`),
+not the former custom NDJSON (`application/x-ndjson` with `message.*` /
+`tool.*` / `done` events). Clients must consume UIMessage chunks (plus
+Wellread `data-eve-context-*` side events). There is no dual-write or
+versioned path — bump the app and sidecar together.
 
 ### 6.4 Dictionaries, OPDS, translators, annotations, RSVP
 

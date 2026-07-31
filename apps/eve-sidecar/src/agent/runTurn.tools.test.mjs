@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { tool } from 'ai';
 import { z } from 'zod';
-import { runTurn } from './runTurn.mjs';
+import {
+  enrichUIMessageStreamWithSources,
+  runTurn,
+  consumeUIMessageStream,
+} from './runTurn.mjs';
 
 /**
  * @returns {import('./sessionStore.mjs').Session}
@@ -17,6 +21,16 @@ function emptySession() {
     updatedAt: Date.now(),
     messages: [],
   };
+}
+
+/**
+ * @param {Parameters<typeof runTurn>[0]} input
+ */
+async function run(input) {
+  const chunks = await consumeUIMessageStream(runTurn(input));
+  const assistant =
+    input.session.messages.filter((m) => m.role === 'assistant').at(-1) ?? null;
+  return { chunks, assistant };
 }
 
 /**
@@ -79,7 +93,6 @@ function toolThenAnswerModel() {
 
 /**
  * Step 1 narrates then calls a tool; step 2 returns the real answer.
- * Visible content must not include the narration.
  */
 function narrateThenToolThenAnswerModel() {
   let callCount = 0;
@@ -189,8 +202,6 @@ function answerWithWriteFileModel() {
           rawCall: { rawPrompt: null, rawSettings: {} },
         };
       }
-      // Empty follow-up (under budget) so confirmation comes from toolTrace,
-      // not a later tool-free prose step.
       return {
         stream: new ReadableStream({
           start(controller) {
@@ -336,11 +347,9 @@ function narrateWithGrepOnlyModel() {
   };
 }
 
-describe('runTurn answer content gating', () => {
-  it('omits tool-step narration from the visible assistant answer', async () => {
+describe('runTurn visible model output', () => {
+  it('keeps tool-step narration in the visible assistant answer', async () => {
     const session = emptySession();
-    /** @type {Array<Record<string, unknown>>} */
-    const events = [];
     const tools = {
       lookup: tool({
         description: 'lookup',
@@ -349,35 +358,28 @@ describe('runTurn answer content gating', () => {
       }),
     };
 
-    const result = await runTurn({
+    const { chunks, assistant } = await run({
       model: /** @type {any} */ (narrateThenToolThenAnswerModel()),
       session,
       userMessage: '1968 到今天发生了什么？',
       getBooksRoot: () => '/tmp/books-should-not-matter',
       tools,
       maxToolRounds: 2,
-      onEvent: (event) => events.push(event),
     });
 
-    assert.ok(result);
-    assert.equal(result.content, '指数型技术。');
-    assert.equal(
-      result.content.includes('让我继续读'),
-      false,
-      'tool-step narration must not enter content',
-    );
-    const deltas = events
-      .filter((e) => e.type === 'message.assistant.delta')
-      .map((e) => e.delta)
+    assert.ok(assistant);
+    assert.match(assistant.content, /让我继续读/);
+    assert.match(assistant.content, /指数型技术。/);
+    const deltas = chunks
+      .filter((c) => c.type === 'text-delta')
+      .map((c) => c.delta)
       .join('');
-    assert.equal(deltas.includes('让我继续读'), false);
-    assert.equal(deltas.includes('指数型技术。'), true);
+    assert.match(deltas, /让我继续读/);
+    assert.match(deltas, /指数型技术。/);
   });
 
-  it('synthesizes write confirmation from write_file paths', async () => {
+  it('keeps mixed write_file step narration', async () => {
     const session = emptySession();
-    /** @type {Array<Record<string, unknown>>} */
-    const events = [];
     const tools = {
       write_file: tool({
         description: 'write',
@@ -386,25 +388,22 @@ describe('runTurn answer content gating', () => {
       }),
     };
 
-    const result = await runTurn({
+    const { assistant } = await run({
       model: /** @type {any} */ (answerWithWriteFileModel()),
       session,
       userMessage: '保存这条笔记',
       getBooksRoot: () => '/tmp/books-should-not-matter',
       tools,
       maxToolRounds: 2,
-      onEvent: (event) => events.push(event),
     });
 
-    assert.ok(result);
-    assert.equal(result.content, '已写入：log.md');
-    assert.equal(session.messages.at(-1)?.content, '已写入：log.md');
+    assert.ok(assistant);
+    assert.equal(assistant.content, '已写入笔记。');
+    assert.equal(session.messages.at(-1)?.content, '已写入笔记。');
   });
 
-  it('does not recover research-tool narration when there is no final answer', async () => {
+  it('keeps research narration when soft-landing is empty', async () => {
     const session = emptySession();
-    /** @type {Array<Record<string, unknown>>} */
-    const events = [];
     const tools = {
       grep: tool({
         description: 'grep',
@@ -413,26 +412,22 @@ describe('runTurn answer content gating', () => {
       }),
     };
 
-    const result = await runTurn({
+    const { assistant } = await run({
       model: /** @type {any} */ (narrateWithGrepOnlyModel()),
       session,
       userMessage: '搜一下',
       getBooksRoot: () => '/tmp/books-should-not-matter',
       tools,
       maxToolRounds: 2,
-      onEvent: (event) => events.push(event),
     });
 
-    // Soft-landing replaces model prose with a tool ledger.
-    assert.ok(result);
-    assert.match(result.content, /工具调用次数已用尽/);
-    assert.equal(result.content.includes('让我继续搜'), false);
+    assert.ok(assistant);
+    assert.match(assistant.content, /让我继续搜/);
+    assert.doesNotMatch(assistant.content, /工具调用次数已用尽/);
   });
 
-  it('replaces degenerate soft-landing prose with a tool ledger', async () => {
+  it('surfaces degenerate soft-landing prose as-is', async () => {
     const session = emptySession();
-    /** @type {Array<Record<string, unknown>>} */
-    const events = [];
     const tools = {
       read_file: tool({
         description: 'read',
@@ -441,34 +436,92 @@ describe('runTurn answer content gating', () => {
       }),
     };
 
-    const result = await runTurn({
+    const { chunks, assistant } = await run({
       model: /** @type {any} */ (toolThenDegenerateSoftLandingModel()),
       session,
       userMessage: '核对全部 chunk',
       getBooksRoot: () => '/tmp/books-should-not-matter',
       tools,
       maxToolRounds: 2,
-      onEvent: (event) => events.push(event),
     });
 
-    assert.ok(result);
-    assert.match(result.content, /工具调用次数已用尽/);
-    assert.match(result.content, /chunk-1\.md/);
-    assert.equal(result.content.includes('让我继续'), false);
+    assert.ok(assistant);
+    assert.match(assistant.content, /让我继续/);
+    assert.doesNotMatch(assistant.content, /工具调用次数已用尽/);
     assert.equal(
-      events.some((e) => e.type === 'error'),
+      chunks.some((c) => c.type === 'error'),
       false,
     );
   });
 });
 
-describe('runTurn tool trace timing', () => {
-  it('emits tool.start while the tool is still running, before tool.end', async () => {
+describe('runTurn parts persistence + live sources', () => {
+  it('persists ordered parts (text can interleave with tools)', async () => {
     const session = emptySession();
-    /** @type {Array<Record<string, unknown>>} */
-    const events = [];
+    const tools = {
+      grep: tool({
+        description: 'grep',
+        inputSchema: z.object({ q: z.string() }),
+        execute: async ({ q }) => ({ hits: [q] }),
+      }),
+    };
+
+    const { assistant } = await run({
+      model: /** @type {any} */ (narrateThenToolThenAnswerModel()),
+      session,
+      userMessage: 'Who is Ahab?',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools,
+      maxToolRounds: 2,
+    });
+
+    assert.ok(assistant);
+    assert.ok(Array.isArray(assistant.parts));
+    assert.ok(assistant.parts.length >= 2);
+    const types = assistant.parts.map((p) => p.type);
+    assert.ok(types.includes('text'));
+    assert.ok(types.includes('dynamic-tool') || types.some((t) => String(t).startsWith('tool-')));
+  });
+
+  it('emits message-metadata.sources as tool outputs arrive', async () => {
+    const chunkMd = `---
+cfi: "epubcfi(/6/2!)"
+title: "Loomings"
+---
+Call me Ishmael.
+`;
+    const base = new ReadableStream({
+      start(controller) {
+        controller.enqueue({
+          type: 'tool-input-available',
+          toolCallId: 'tc1',
+          toolName: 'read_file',
+          input: { path: '/workspace/x.md' },
+        });
+        controller.enqueue({
+          type: 'tool-output-available',
+          toolCallId: 'tc1',
+          output: { ok: true, path: '/workspace/x.md', content: chunkMd },
+        });
+        controller.enqueue({ type: 'finish', finishReason: 'stop' });
+        controller.close();
+      },
+    });
+
+    const chunks = await consumeUIMessageStream(enrichUIMessageStreamWithSources(base));
+    const meta = chunks.find((c) => c.type === 'message-metadata');
+    assert.ok(meta, 'expected message-metadata chunk');
+    assert.equal(meta.messageMetadata?.sources?.[0]?.cfi, 'epubcfi(/6/2!)');
+  });
+});
+
+describe('runTurn tool trace timing', () => {
+  it('emits tool-input before tool-output while the tool is still running', async () => {
+    const session = emptySession();
     let toolRunning = false;
-    let sawStartWhileRunning = false;
+    let sawInputWhileRunning = false;
+    /** @type {import('ai').UIMessageChunk[]} */
+    const chunks = [];
 
     const tools = {
       slow: tool({
@@ -483,34 +536,45 @@ describe('runTurn tool trace timing', () => {
       }),
     };
 
-    const result = await runTurn({
+    const stream = runTurn({
       model: /** @type {any} */ (toolThenAnswerModel()),
       session,
       userMessage: 'Who is Ahab?',
       getBooksRoot: () => '/tmp/books-should-not-matter',
       tools,
-      // Keep a spare tool-capable step so the final prose is not soft-landing.
       maxToolRounds: 2,
-      onEvent: (event) => {
-        events.push(event);
-        if (event.type === 'tool.start' && toolRunning) {
-          sawStartWhileRunning = true;
-        }
-      },
     });
+    const reader = stream.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      if (
+        (value.type === 'tool-input-available' ||
+          value.type === 'tool-input-start') &&
+        toolRunning
+      ) {
+        sawInputWhileRunning = true;
+      }
+    }
 
-    assert.ok(result);
-    const start = events.find((e) => e.type === 'tool.start');
-    const end = events.find((e) => e.type === 'tool.end');
-    assert.ok(start, 'expected tool.start');
-    assert.ok(end, 'expected tool.end');
-    assert.equal(start.name, 'slow');
-    assert.equal(end.name, 'slow');
-    assert.equal(start.id, end.id);
-    assert.ok(
-      events.indexOf(start) < events.indexOf(end),
-      'tool.start must precede tool.end',
+    const assistant =
+      session.messages.filter((m) => m.role === 'assistant').at(-1) ?? null;
+    assert.ok(assistant);
+    const inputIdx = chunks.findIndex(
+      (c) => c.type === 'tool-input-available' || c.type === 'tool-input-start',
     );
-    assert.equal(sawStartWhileRunning, true, 'tool.start must arrive during tool execution');
+    const outputIdx = chunks.findIndex((c) => c.type === 'tool-output-available');
+    assert.ok(inputIdx >= 0, 'expected tool-input-* chunk');
+    assert.ok(outputIdx >= 0, 'expected tool-output-available chunk');
+    assert.ok(
+      inputIdx < outputIdx,
+      'tool-input-* must precede tool-output-available',
+    );
+    assert.equal(
+      sawInputWhileRunning,
+      true,
+      'tool-input-* must arrive during tool execution',
+    );
   });
 });

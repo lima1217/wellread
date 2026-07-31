@@ -78,6 +78,7 @@ const nextConfig = {
   },
   transpilePackages: [
     'streamdown',
+    '@wellread/eve-message',
     ...(isDev
       ? []
       : [

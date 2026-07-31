@@ -1,8 +1,9 @@
 /**
  * Run one chat turn with AI SDK streamText + Books tools.
+ * Emits an AI SDK UIMessage chunk stream (model output shown as-is).
  */
 
-import { streamText, stepCountIs } from 'ai';
+import { createUIMessageStream, streamText, stepCountIs } from 'ai';
 import { randomBytes } from 'node:crypto';
 import {
   normalizeApiMode,
@@ -10,11 +11,6 @@ import {
   THINK_MODE_REASONING_EFFORT,
   turnFetchContext,
 } from '../createModel.mjs';
-import {
-  createAnswerContentGate,
-  pickAnswerFromSteps,
-} from './answerContent.mjs';
-import { isDegenerateAnswer } from './answerQuality.mjs';
 import { maybeCompressSession } from './contextCompress.mjs';
 import { isAbortError } from './httpAbort.mjs';
 import {
@@ -31,13 +27,15 @@ import {
 } from './prompt.mjs';
 import { maybeApplyFirstTurnTitle } from './sessionStore.mjs';
 import { discoverSkills } from './skills/discover.mjs';
-import { formatToolLedger, formatWriteConfirmation } from './toolLedger.mjs';
 import { createReadingTools } from './tools.mjs';
 import { prepareToolExhaustionStep, resolveMaxToolRounds } from './toolRounds.mjs';
+import {
+  sessionToUIMessage,
+  textFromUIMessage,
+  toolsFromUIMessage,
+  uiMessageToSession,
+} from './uiMessage.mjs';
 import { prepareUserTurn } from './userTurn.mjs';
-
-export const DEGENERATE_ANSWER_ERROR =
-  'Model returned a degenerate reply after the tool budget was spent. Try a narrower question.';
 
 /** Fallback when caller omits contextWindowTokens (matches createModel default). */
 const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
@@ -48,7 +46,6 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   session: import('./sessionStore.mjs').Session,
  *   userMessage: string,
  *   getBooksRoot: () => string,
- *   onEvent: (event: Record<string, unknown>) => void,
  *   maxToolRounds?: number,
  *   abortSignal?: AbortSignal,
  *   contextWindowTokens?: number,
@@ -59,9 +56,10 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
  *   tools?: import('ai').ToolSet,
  * }} input
+ * @returns {ReadableStream<import('ai').UIMessageChunk>}
  */
-export async function runTurn(input) {
-  const { model, session, userMessage, getBooksRoot, onEvent, abortSignal } = input;
+export function runTurn(input) {
+  const { model, session, userMessage, getBooksRoot, abortSignal } = input;
   const persistSession = input.persistSession;
   const thinkingMode = normalizeThinkingMode(input.thinkingMode);
   const apiMode = normalizeApiMode(input.apiMode);
@@ -79,18 +77,14 @@ export async function runTurn(input) {
       : {}),
   };
   session.messages.push(userMsg);
-  onEvent({ type: 'message.user', id: userId, content: prepared.sessionContent });
 
-  const settle = createTurnSettler({
-    session,
-    userId,
-    onEvent,
-    persistSession,
-  });
-
-  if (abortSignal?.aborted) {
-    return settle.aborted();
-  }
+  const dropUser = () => {
+    const last = session.messages[session.messages.length - 1];
+    if (last && last.id === userId && last.role === 'user') {
+      session.messages.pop();
+    }
+    persistSession?.(session);
+  };
 
   let skills = [];
   let booksRoot = '';
@@ -119,8 +113,6 @@ export async function runTurn(input) {
     bookTitle: session.bookTitle,
     skills,
   });
-  // Full system for compression + soft-landing; Responses puts stable
-  // instructions in providerOptions and turn envelope in `system`.
   const system = appendReadingContext(instructions, envelope);
 
   const contextWindowTokens =
@@ -128,324 +120,321 @@ export async function runTurn(input) {
       ? Number(input.contextWindowTokens)
       : DEFAULT_CONTEXT_WINDOW_TOKENS;
 
-  try {
-    const compressed = await maybeCompressSession({
-      model,
-      session,
-      systemPrompt: system,
-      contextWindowTokens,
-      onEvent,
-      abortSignal,
-      generateTextFn: input.generateTextFn,
-    });
-    if (compressed) {
-      persistSession?.(session);
-    }
-  } catch (error) {
-    if (isAbortError(error) || abortSignal?.aborted) {
-      return settle.aborted();
-    }
-    settle.drop();
-    throw error;
-  }
-
-  if (abortSignal?.aborted) {
-    return settle.aborted();
-  }
-
   const tools =
     input.tools ?? createReadingTools({ getBooksRoot, bookId: session.bookId });
-  /** @type {Array<{ id: string, name: string, args?: unknown, result?: unknown }>} */
-  const toolTrace = [];
-
-  const historyMessages = buildModelMessages({
-    messages: session.messages,
-    excludeMessageId: userId,
-    currentUserModelContent: modelUserMessage,
-  });
 
   const maxToolRounds = resolveMaxToolRounds(
     input.maxToolRounds ?? process.env.EVE_MAX_TOOL_ROUNDS,
   );
 
   const assistantId = `msg_${randomBytes(6).toString('hex')}`;
-  let reasoning = '';
+  /** @type {import('ai').StreamTextResult<any, any> | null} */
+  let streamResult = null;
+  let persisted = false;
+  /** Set on abort/error/empty so onFinish never persists a partial orphan. */
+  let skipPersist = false;
 
-  try {
-    return await turnFetchContext.run(
-      {
-        thinkingMode,
-        onReasoningDelta:
-          thinkingMode === 'think'
-            ? (delta) => {
-                if (abortSignal?.aborted) return;
-                reasoning += delta;
-                onEvent({
-                  type: 'message.assistant.reasoning.delta',
-                  id: assistantId,
-                  delta,
-                });
-              }
-            : undefined,
-      },
-      async () => {
-        // Flags set from prepareStep (more reliable than fullStream start-step).
-        let softLandingStep = false;
-        let usedSoftLanding = false;
-        const answerGate = createAnswerContentGate((delta) => {
-          onEvent({ type: 'message.assistant.delta', id: assistantId, delta });
-        });
+  const markFailed = () => {
+    skipPersist = true;
+    dropUser();
+  };
 
-        /** @type {Record<string, unknown>} */
-        const streamOptions = {
+  const originalMessages = session.messages
+    .filter((m) => m.id !== userId)
+    .map(sessionToUIMessage);
+
+  return createUIMessageStream({
+    originalMessages,
+    generateId: () => assistantId,
+    onFinish: async ({ responseMessage, isAborted }) => {
+      if (persisted) return;
+      if (skipPersist || isAborted || abortSignal?.aborted) {
+        if (!skipPersist) dropUser();
+        return;
+      }
+
+      const text = textFromUIMessage(responseMessage).trim();
+      const toolTrace = toolsFromUIMessage(responseMessage);
+      // Tools-only turns still count: keep the ledger even without prose.
+      if (!text && !toolTrace.length) {
+        dropUser();
+        return;
+      }
+
+      const sources = collectSourcesFromTools(toolTrace);
+
+      /** @type {unknown[] | undefined} */
+      let modelMessages;
+      try {
+        if (streamResult) {
+          const response = await streamResult.response;
+          modelMessages = serializeModelMessages(response?.messages);
+        }
+      } catch {
+        modelMessages = undefined;
+      }
+
+      const assistantMsg = uiMessageToSession(responseMessage, {
+        createdAt: Date.now(),
+        sources: sources.length ? sources : undefined,
+        modelMessages,
+      });
+      // Ensure denormalized tools/sources even if parts used tool-* types.
+      if (toolTrace.length && !assistantMsg.tools?.length) {
+        assistantMsg.tools = toolTrace;
+      }
+      if (sources.length) {
+        assistantMsg.sources = sources;
+      }
+
+      session.messages.push(assistantMsg);
+      maybeApplyFirstTurnTitle(session, userMessage);
+      persistSession?.(session);
+      persisted = true;
+    },
+    execute: async ({ writer }) => {
+      if (abortSignal?.aborted) {
+        markFailed();
+        writer.write({ type: 'abort', reason: 'client aborted' });
+        return;
+      }
+
+      try {
+        const compressed = await maybeCompressSession({
           model,
-          messages: historyMessages,
-          tools,
-          abortSignal,
-          // N tool-capable steps + 1 soft-landing answer (tools disabled).
-          stopWhen: stepCountIs(maxToolRounds + 1),
-          prepareStep: ({ stepNumber }) => {
-            // Responses keeps stable catalog in providerOptions.instructions —
-            // soft-landing must not re-inject it via `system` (would duplicate).
-            const prep = prepareToolExhaustionStep({
-              stepNumber,
-              maxToolRounds,
-              system: apiMode === 'responses' ? envelope || '' : system,
-            });
-            softLandingStep = Boolean(prep);
-            if (softLandingStep) usedSoftLanding = true;
-            return prep;
+          session,
+          systemPrompt: system,
+          contextWindowTokens,
+          onEvent: (event) => {
+            if (event.type === 'context.compressed') {
+              writer.write({
+                type: 'data-eve-context-compressed',
+                data: {
+                  beforeTokens: event.beforeTokens,
+                  afterTokens: event.afterTokens,
+                  targetTokens: event.targetTokens,
+                  removedIds: event.removedIds,
+                  summary: event.summary,
+                },
+              });
+            } else if (event.type === 'context.compress_failed') {
+              writer.write({
+                type: 'data-eve-context-compress-failed',
+                data: { message: event.message },
+              });
+            }
           },
-        };
-
-        if (apiMode === 'responses') {
-          // Stable catalog/skills → instructions; turn-varying envelope → system.
-          streamOptions.system = envelope || undefined;
-          streamOptions.providerOptions = {
-            openai: {
-              store: false,
-              instructions,
-              reasoningEffort:
-                thinkingMode === 'think' ? THINK_MODE_REASONING_EFFORT : 'none',
-            },
-          };
-        } else {
-          streamOptions.system = system;
+          abortSignal,
+          generateTextFn: input.generateTextFn,
+        });
+        if (compressed) {
+          persistSession?.(session);
         }
-
-        const result = streamText(
-          /** @type {Parameters<typeof streamText>[0]} */ (streamOptions),
-        );
-
-        // Visible answer = tool-free steps only. Soft-landing (budget spent)
-        // never promotes model prose — content becomes a toolTrace ledger.
-        /** Captured from fullStream `error` parts — AI SDK yields these instead of throwing. */
-        let streamError = /** @type {unknown} */ (null);
-        for await (const part of result.fullStream) {
-          if (abortSignal?.aborted || part.type === 'abort') {
-            return settle.aborted();
-          }
-          if (part.type === 'error') {
-            streamError = part.error;
-            continue;
-          }
-          if (part.type === 'start-step') {
-            answerGate.startStep();
-            continue;
-          }
-          if (part.type === 'reasoning-delta') {
-            // Reasoning UI is fed by fetch-layer onReasoningDelta (Chat
-            // reasoning_content + DeepSeek Responses reasoning_text). Skip SDK
-            // duplicates here.
-            continue;
-          }
-          if (part.type === 'text-delta') {
-            answerGate.onTextDelta(part.text);
-            continue;
-          }
-          if (part.type === 'tool-call') {
-            answerGate.onToolCall(part.toolName);
-            const id = part.toolCallId || `tool_${randomBytes(4).toString('hex')}`;
-            const entry = {
-              id,
-              name: part.toolName,
-              args: part.input,
-            };
-            toolTrace.push(entry);
-            onEvent({ type: 'tool.start', id, name: entry.name, args: entry.args });
-            continue;
-          }
-          if (part.type === 'tool-result') {
-            const id = part.toolCallId;
-            const existing = toolTrace.find((t) => t.id === id);
-            if (existing) {
-              existing.result = part.output;
-            }
-            onEvent({
-              type: 'tool.end',
-              id,
-              name: part.toolName,
-              result: part.output,
-            });
-            continue;
-          }
-          if (part.type === 'tool-error') {
-            const id = part.toolCallId;
-            const existing = toolTrace.find((t) => t.id === id);
-            const errResult = {
-              error: part.error instanceof Error ? part.error.message : String(part.error),
-            };
-            if (existing) {
-              existing.result = errResult;
-            }
-            onEvent({
-              type: 'tool.end',
-              id,
-              name: part.toolName,
-              result: errResult,
-            });
-            continue;
-          }
-          if (part.type === 'finish-step') {
-            answerGate.finishStep({ promote: !softLandingStep });
-          }
+      } catch (error) {
+        if (isAbortError(error) || abortSignal?.aborted) {
+          markFailed();
+          writer.write({ type: 'abort', reason: 'client aborted' });
+          return;
         }
+        markFailed();
+        writer.write({
+          type: 'error',
+          errorText: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
 
-        if (abortSignal?.aborted) {
-          return settle.aborted();
-        }
+      if (abortSignal?.aborted) {
+        markFailed();
+        writer.write({ type: 'abort', reason: 'client aborted' });
+        return;
+      }
 
-        if (streamError != null) {
-          if (isAbortError(streamError)) {
-            return settle.aborted();
-          }
-          return settle.error(
-            streamError instanceof Error ? streamError.message : String(streamError),
-          );
-        }
+      // Build after compress so this turn's model context matches disk/UI.
+      const historyMessages = buildModelMessages({
+        messages: session.messages,
+        excludeMessageId: userId,
+        currentUserModelContent: modelUserMessage,
+      });
 
-        let content = '';
-        if (usedSoftLanding) {
-          content = formatToolLedger(toolTrace);
-          answerGate.adoptFallback(content);
-        } else {
-          content = answerGate.getContent();
-          // Never use result.text — it concatenates every step. Prefer tool-free
-          // step text; else synthesize write confirmations from write_file paths.
-          if (!content.trim()) {
+      let reasoningId = /** @type {string | null} */ (null);
+      const closeReasoning = () => {
+        if (!reasoningId) return;
+        writer.write({ type: 'reasoning-end', id: reasoningId });
+        reasoningId = null;
+      };
+
+      try {
+        await turnFetchContext.run(
+          {
+            thinkingMode,
+            onReasoningDelta:
+              thinkingMode === 'think'
+                ? (delta) => {
+                    if (abortSignal?.aborted || !delta) return;
+                    if (!reasoningId) {
+                      reasoningId = `reasoning_${assistantId}`;
+                      writer.write({ type: 'reasoning-start', id: reasoningId });
+                    }
+                    writer.write({
+                      type: 'reasoning-delta',
+                      id: reasoningId,
+                      delta,
+                    });
+                  }
+                : undefined,
+          },
+          async () => {
+            const result = streamText(
+              /** @type {Parameters<typeof streamText>[0]} */ ({
+                model,
+                messages: historyMessages,
+                tools,
+                abortSignal,
+                stopWhen: stepCountIs(maxToolRounds + 1),
+                prepareStep: ({ stepNumber }) => {
+                  const prep = prepareToolExhaustionStep({
+                    stepNumber,
+                    maxToolRounds,
+                    system: apiMode === 'responses' ? envelope || '' : system,
+                  });
+                  return prep;
+                },
+                ...(apiMode === 'responses'
+                  ? {
+                      system: envelope || undefined,
+                      providerOptions: {
+                        openai: {
+                          store: false,
+                          instructions,
+                          reasoningEffort:
+                            thinkingMode === 'think'
+                              ? THINK_MODE_REASONING_EFFORT
+                              : 'none',
+                        },
+                      },
+                    }
+                  : { system }),
+              }),
+            );
+            streamResult = result;
+
+            writer.merge(
+              enrichUIMessageStreamWithSources(
+                result.toUIMessageStream({
+                  generateMessageId: () => assistantId,
+                  sendReasoning: false,
+                  sendStart: true,
+                  sendFinish: true,
+                  onError: (error) =>
+                    error instanceof Error ? error.message : String(error),
+                }),
+              ),
+            );
+
             try {
-              const fromSteps = pickAnswerFromSteps(await result.steps);
-              const fromWrites = fromSteps.trim()
-                ? ''
-                : formatWriteConfirmation(toolTrace);
-              const fallback = fromSteps.trim() ? fromSteps : fromWrites;
-              if (fallback.trim()) {
-                answerGate.adoptFallback(fallback);
-                content = answerGate.getContent();
+              const text = (await result.text).trim();
+              closeReasoning();
+              if (!text) {
+                const steps = await result.steps;
+                const hasTools = steps.some(
+                  (step) => (step.toolCalls?.length ?? 0) > 0,
+                );
+                if (!hasTools) {
+                  markFailed();
+                  writer.write({
+                    type: 'error',
+                    errorText:
+                      'Model returned an empty reply. Check API key/model.',
+                  });
+                }
               }
             } catch (error) {
+              closeReasoning();
               if (isAbortError(error) || abortSignal?.aborted) {
-                return settle.aborted();
+                markFailed();
+                writer.write({ type: 'abort', reason: 'client aborted' });
+                return;
               }
-              return settle.error(
-                error instanceof Error ? error.message : String(error),
-              );
+              markFailed();
+              writer.write({
+                type: 'error',
+                errorText: error instanceof Error ? error.message : String(error),
+              });
             }
-          }
+          },
+        );
+      } catch (error) {
+        closeReasoning();
+        if (isAbortError(error) || abortSignal?.aborted) {
+          markFailed();
+          writer.write({ type: 'abort', reason: 'client aborted' });
+          return;
         }
-
-        if (abortSignal?.aborted) {
-          return settle.aborted();
-        }
-
-        if (!content.trim()) {
-          return settle.error(
-            'Model returned an empty reply. Check API key/model.',
-          );
-        }
-
-        // Ledger content is ours; only screen natural (non-exhaustion) answers.
-        if (!usedSoftLanding && isDegenerateAnswer(content)) {
-          return settle.error(DEGENERATE_ANSWER_ERROR);
-        }
-
-        /** @type {unknown[] | undefined} */
-        let modelMessages;
-        try {
-          const response = await result.response;
-          modelMessages = serializeModelMessages(response?.messages);
-        } catch {
-          modelMessages = undefined;
-        }
-
-        const sources = collectSourcesFromTools(toolTrace);
-        const reasoningText = reasoning.trim();
-        const assistantMsg = {
-          id: assistantId,
-          role: /** @type {const} */ ('assistant'),
-          content,
-          createdAt: Date.now(),
-          ...(reasoningText ? { reasoning: reasoningText } : {}),
-          ...(sources.length ? { sources } : {}),
-          ...(toolTrace.length ? { tools: toolTrace } : {}),
-          ...(modelMessages ? { modelMessages } : {}),
-        };
-        session.messages.push(assistantMsg);
-        maybeApplyFirstTurnTitle(session, userMessage);
-        onEvent({
-          type: 'message.assistant',
-          id: assistantId,
-          content,
-          reasoning: reasoningText || undefined,
-          sources: sources.length ? sources : undefined,
-          tools: toolTrace.length ? toolTrace : undefined,
+        markFailed();
+        writer.write({
+          type: 'error',
+          errorText: error instanceof Error ? error.message : String(error),
         });
-        onEvent({ type: 'done' });
-        return assistantMsg;
-      },
-    );
-  } catch (error) {
-    if (isAbortError(error) || abortSignal?.aborted) {
-      return settle.aborted();
-    }
-    settle.drop();
-    throw error;
-  }
+      }
+    },
+  });
 }
 
 /**
- * One place owns in-flight user rollback + terminal events.
- * @param {{
- *   session: import('./sessionStore.mjs').Session,
- *   userId: string,
- *   onEvent: (event: Record<string, unknown>) => void,
- *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
- * }} ctx
+ * After each tool output, push message-metadata.sources so the client can
+ * resolve CFI citations during the live stream (not only after reconcile).
+ *
+ * @param {ReadableStream<import('ai').UIMessageChunk>} stream
+ * @returns {ReadableStream<import('ai').UIMessageChunk>}
  */
-function createTurnSettler(ctx) {
-  const drop = () => {
-    const last = ctx.session.messages[ctx.session.messages.length - 1];
-    if (last && last.id === ctx.userId && last.role === 'user') {
-      ctx.session.messages.pop();
-    }
-    // Re-persist after rollback so clients reconciling mid-turn (e.g. after
-    // compress-then-fail) never observe the unanswered user on disk.
-    ctx.persistSession?.(ctx.session);
-  };
+export function enrichUIMessageStreamWithSources(stream) {
+  /** @type {Map<string, { id: string, name: string, args?: unknown, result?: unknown }>} */
+  const toolsById = new Map();
+  let lastSourcesJson = '';
+  return stream.pipeThrough(
+    new TransformStream({
+      transform(chunk, controller) {
+        controller.enqueue(chunk);
+        if (chunk.type === 'tool-input-available') {
+          toolsById.set(chunk.toolCallId, {
+            id: chunk.toolCallId,
+            name: chunk.toolName,
+            args: chunk.input,
+          });
+          return;
+        }
+        if (chunk.type !== 'tool-output-available') return;
+        const prev = toolsById.get(chunk.toolCallId) ?? {
+          id: chunk.toolCallId,
+          name: 'tool',
+        };
+        toolsById.set(chunk.toolCallId, { ...prev, result: chunk.output });
+        const sources = collectSourcesFromTools([...toolsById.values()]);
+        const serialized = JSON.stringify(sources);
+        if (!sources.length || serialized === lastSourcesJson) return;
+        lastSourcesJson = serialized;
+        controller.enqueue({
+          type: 'message-metadata',
+          messageMetadata: { sources },
+        });
+      },
+    }),
+  );
+}
 
-  return {
-    drop,
-    aborted() {
-      drop();
-      ctx.onEvent({ type: 'done', aborted: true });
-      return null;
-    },
-    /** @param {string} message */
-    error(message) {
-      drop();
-      ctx.onEvent({ type: 'error', message });
-      ctx.onEvent({ type: 'done' });
-      return null;
-    },
-  };
+/**
+ * Drain a UIMessage chunk stream (for tests). Persists via runTurn onFinish.
+ * @param {ReadableStream<import('ai').UIMessageChunk>} stream
+ * @returns {Promise<import('ai').UIMessageChunk[]>}
+ */
+export async function consumeUIMessageStream(stream) {
+  const chunks = [];
+  const reader = stream.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  return chunks;
 }

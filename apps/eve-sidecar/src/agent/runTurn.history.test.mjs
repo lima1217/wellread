@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { tool } from 'ai';
 import { z } from 'zod';
-import { runTurn } from './runTurn.mjs';
+import { runTurn, consumeUIMessageStream } from './runTurn.mjs';
 
 function emptySession() {
   return {
@@ -14,6 +14,16 @@ function emptySession() {
     updatedAt: Date.now(),
     messages: [],
   };
+}
+
+/**
+ * @param {Parameters<typeof runTurn>[0]} input
+ */
+async function run(input) {
+  const chunks = await consumeUIMessageStream(runTurn(input));
+  const assistant =
+    input.session.messages.filter((m) => m.role === 'assistant').at(-1) ?? null;
+  return { chunks, assistant };
 }
 
 function answerModel(text = 'done') {
@@ -80,20 +90,18 @@ function capturePromptModel(sink, text = 'ok') {
 describe('runTurn model history', () => {
   it('persists modelMessages from the SDK response when available', async () => {
     const session = emptySession();
-    const result = await runTurn({
+    const { assistant } = await run({
       model: /** @type {any} */ (answerModel('hello')),
       session,
       userMessage: 'hi',
       getBooksRoot: () => '/tmp/books-should-not-matter',
       tools: {},
-      onEvent: () => {},
       generateTextFn: async () => ({ text: '', usage: {} }),
     });
-    assert.ok(result);
-    const assistant = session.messages.at(-1);
-    assert.equal(assistant?.role, 'assistant');
-    assert.equal(assistant?.content, 'hello');
-    assert.deepEqual(assistant?.modelMessages, [
+    assert.ok(assistant);
+    assert.equal(assistant.role, 'assistant');
+    assert.equal(assistant.content, 'hello');
+    assert.deepEqual(assistant.modelMessages, [
       { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
     ]);
   });
@@ -123,7 +131,7 @@ describe('runTurn model history', () => {
     });
 
     const sink = {};
-    await runTurn({
+    await run({
       model: /** @type {any} */ (capturePromptModel(sink)),
       session,
       userMessage: 'quote it',
@@ -135,7 +143,6 @@ describe('runTurn model history', () => {
           execute: async () => ({ ok: true }),
         }),
       },
-      onEvent: () => {},
       generateTextFn: async () => ({ text: '', usage: {} }),
     });
 
@@ -156,6 +163,43 @@ describe('runTurn model history', () => {
         p.content.some((c) => c?.type === 'reasoning'),
     );
     assert.ok(reasoning, 'expected reasoning part in history');
+  });
+
+  it('builds model history after compression so dropped turns leave the prompt', async () => {
+    const session = emptySession();
+    for (let i = 0; i < 20; i++) {
+      session.messages.push({
+        id: `m_${i}`,
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: 'x'.repeat(200),
+        createdAt: i,
+      });
+    }
+    const uniqueMarker = `UNIQUE_DROP_MARKER_${Date.now()}`;
+    session.messages[0].content = `${uniqueMarker}${'x'.repeat(180)}`;
+
+    const sink = {};
+    await run({
+      model: /** @type {any} */ (capturePromptModel(sink)),
+      session,
+      userMessage: 'after compress',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools: {},
+      contextWindowTokens: 1000,
+      generateTextFn: async () => ({
+        text: 'Compacted prior turns about the book.',
+      }),
+    });
+
+    assert.ok(session.messages[0]?.compacted, 'expected session compression');
+    assert.ok(Array.isArray(sink.prompt));
+    const promptBlob = JSON.stringify(sink.prompt);
+    assert.equal(
+      promptBlob.includes(uniqueMarker),
+      false,
+      'compressed-away content must not appear in this turn prompt',
+    );
+    assert.match(promptBlob, /Compacted prior turns/);
   });
 
   it('passes store:false instructions via providerOptions in responses mode', async () => {
@@ -190,7 +234,7 @@ describe('runTurn model history', () => {
       },
     };
 
-    await runTurn({
+    await run({
       model: /** @type {any} */ (model),
       session: emptySession(),
       userMessage: 'hi',
@@ -198,14 +242,12 @@ describe('runTurn model history', () => {
       tools: {},
       apiMode: 'responses',
       thinkingMode: 'think',
-      onEvent: () => {},
       generateTextFn: async () => ({ text: '', usage: {} }),
     });
 
     assert.equal(sink.opts?.providerOptions?.openai?.store, false);
     assert.equal(sink.opts?.providerOptions?.openai?.reasoningEffort, 'high');
     assert.match(String(sink.opts?.providerOptions?.openai?.instructions || ''), /Reading Assistant/);
-    // Turn system should not be the full catalog when envelope is empty.
     const systemMessages = Array.isArray(sink.opts?.prompt)
       ? sink.opts.prompt.filter((p) => p?.role === 'system')
       : [];
