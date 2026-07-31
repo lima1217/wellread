@@ -19,6 +19,10 @@ export const Overlay: React.FC<OverlayProps> = ({ onDismiss, className }) => {
     <div
       className={clsx('overlay fixed inset-0 cursor-default', className)}
       role='none'
+      // Pointer-only dismiss layer: hide it from screen readers so TalkBack /
+      // VoiceOver don't land on an unlabeled full-screen node whose activation
+      // dismisses the popup (Escape and the system back gesture still dismiss).
+      aria-hidden='true'
       tabIndex={-1}
       onClick={onDismiss}
       onContextMenu={onDismiss}
