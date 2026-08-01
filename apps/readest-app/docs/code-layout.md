@@ -92,7 +92,7 @@ supports local replica-shaped persistence—not hosted multi-device sync APIs.
 - `eveSidecar.ts`, `eveConnectionStore.ts`, `eveListen.ts`
 - `assistant/` — eve client, fetch, agent hook, session helpers
 - `extract/` — book extract / CFI chunking for assistant context
-- `modelConfig.ts`, `modelApiKey.ts`, `syncEveSidecarApiKey.ts`,
+- `modelConfig.ts`, `modelApiKey.ts`, `ensureEveSidecar.ts`,
   `testModelConnection.ts`
 
 Sidecar implementation lives in `apps/eve-sidecar` (`server/`, `agent/`,

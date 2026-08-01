@@ -1,7 +1,8 @@
 /**
- * Cold-start bridge: Rust bootstrap does not spawn (cannot read OS keychain).
- * After settings load, start/reload the sidecar once with the active
- * ModelProfile + keychain apiKey so cold start is a single process start.
+ * Cold-start / multi-window bridge: Rust bootstrap does not spawn (cannot read
+ * OS keychain). After settings load, ensure the sidecar is up with the active
+ * ModelProfile + keychain apiKey. Unlike reload, ensure skips respawn when the
+ * running process already matches the resolved fingerprint.
  */
 
 import { isTauriAppPlatform } from '@/services/environment';
@@ -12,20 +13,20 @@ import {
   toSidecarModelPayload,
   type ModelConfig,
 } from './modelConfig';
-import { reloadEveSidecar, type EveSidecarInfo } from './eveSidecar';
+import { ensureEveSidecar as ensureEveSidecarCommand, type EveSidecarInfo } from './eveSidecar';
 
-export async function syncEveSidecarApiKey(
+export async function ensureEveSidecar(
   modelConfig?: Partial<ModelConfig> | null,
 ): Promise<EveSidecarInfo | null> {
   if (!isTauriAppPlatform()) return null;
   const config = mergeModelConfig(modelConfig);
   if (!config.enabled) {
-    return reloadEveSidecar({ enabled: false });
+    return ensureEveSidecarCommand({ enabled: false });
   }
   const active = getActiveProfile(config);
   if (!active) return null;
   const apiKey = (await getModelApiKey(active.id)).trim();
   const payload = toSidecarModelPayload(config);
   if (!payload) return null;
-  return reloadEveSidecar({ ...payload, apiKey });
+  return ensureEveSidecarCommand({ ...payload, apiKey });
 }

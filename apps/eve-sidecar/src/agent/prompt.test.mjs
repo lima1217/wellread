@@ -30,8 +30,12 @@ describe('buildSystemPrompt', () => {
     assert.match(prompt, /\/workspace\/\.wellread\/notes\/abc123\//);
     assert.match(prompt, /current book/i);
     assert.match(prompt, /\bExtract:/);
+    assert.match(prompt, /toc\.md/);
+    assert.match(prompt, /chunks\/\*\.md/);
+    assert.match(prompt, /meta\.json/);
     assert.match(prompt, /\bNotes:/);
     assert.match(prompt, /Grounding is optional/i);
+    assert.doesNotMatch(prompt, /\*\*\/\*\*\.md/);
     assert.match(prompt, /answer freely/i);
     assert.match(prompt, /\bcite\b/i);
     assert.match(prompt, /\bcfi\b/i);

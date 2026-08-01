@@ -201,6 +201,7 @@
     "allow-verify-update-signature",
     "allow-install-nightly-update",
     "allow-get-eve-sidecar-info",
+    "allow-ensure-eve-sidecar",
     "allow-reload-eve-sidecar"
   ]
 }

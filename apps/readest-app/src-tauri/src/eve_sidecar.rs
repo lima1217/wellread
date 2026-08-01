@@ -1,5 +1,8 @@
 //! Eve sidecar lifecycle: spawn bundled Node + `.output`, discover port,
 //! inject loopback token, restart on model config reload, kill on exit.
+//!
+//! Connection state is process-global (Rust SSOT). Frontends subscribe to
+//! `eve-sidecar-changed` instead of caching listen URLs per webview.
 
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -9,10 +12,15 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
 const HEALTH_POLL: Duration = Duration::from_millis(200);
+pub const EVE_SIDECAR_CHANGED_EVENT: &str = "eve-sidecar-changed";
+
+const DEFAULT_BASE_URL: &str = "https://api.deepseek.com/v1";
+const DEFAULT_MODEL_ID: &str = "deepseek-v4-flash";
+const DEFAULT_CONTEXT_WINDOW: u64 = 1_000_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,10 +43,23 @@ pub struct ModelConfigPayload {
     pub api_key: Option<String>,
 }
 
+/// Resolved env identity for the running sidecar — used by `ensure` to skip
+/// PORT=0 respawns when a new webview boots with the same active profile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AppliedFingerprint {
+    enabled: bool,
+    base_url: String,
+    model_id: String,
+    context_window_tokens: u64,
+    api_mode: String,
+    api_key: String,
+}
+
 struct EveSidecarInner {
     child: Option<Child>,
     info: Option<EveSidecarInfo>,
     last_api_key: Option<String>,
+    last_fingerprint: Option<AppliedFingerprint>,
     /// Bumped on each start attempt so a stale health-check finish cannot
     /// overwrite a newer reload (last writer wins by generation).
     generation: u64,
@@ -46,6 +67,9 @@ struct EveSidecarInner {
 
 pub struct EveSidecarState {
     inner: Mutex<EveSidecarInner>,
+    /// Serializes ensure/reload spawn (including health wait) so two windows
+    /// cannot briefly run two Node children for the same boot.
+    start_lock: Mutex<()>,
 }
 
 impl EveSidecarState {
@@ -55,8 +79,62 @@ impl EveSidecarState {
                 child: None,
                 info: None,
                 last_api_key: None,
+                last_fingerprint: None,
                 generation: 0,
             }),
+            start_lock: Mutex::new(()),
+        }
+    }
+}
+
+fn resolve_api_mode(api_mode: Option<&str>) -> String {
+    match api_mode {
+        Some("responses") => "responses".into(),
+        _ => "chat".into(),
+    }
+}
+
+fn fingerprint_of(model: &ModelConfigPayload, api_key: &str) -> AppliedFingerprint {
+    AppliedFingerprint {
+        enabled: model.enabled != Some(false),
+        base_url: model
+            .base_url
+            .clone()
+            .unwrap_or_else(|| DEFAULT_BASE_URL.into()),
+        model_id: model
+            .model_id
+            .clone()
+            .unwrap_or_else(|| DEFAULT_MODEL_ID.into()),
+        context_window_tokens: model.context_window_tokens.unwrap_or(DEFAULT_CONTEXT_WINDOW),
+        api_mode: resolve_api_mode(model.api_mode.as_deref()),
+        api_key: api_key.to_string(),
+    }
+}
+
+fn emit_sidecar_changed(app: &AppHandle, info: Option<&EveSidecarInfo>) {
+    if let Err(err) = app.emit(EVE_SIDECAR_CHANGED_EVENT, info) {
+        log::warn!("emit {EVE_SIDECAR_CHANGED_EVENT} failed: {err}");
+    }
+}
+
+/// If the child has exited, clear cached listen info. Returns true when state
+/// was cleared (callers should broadcast `None`).
+fn reap_if_dead(inner: &mut EveSidecarInner) -> bool {
+    let Some(child) = inner.child.as_mut() else {
+        if inner.info.is_some() || inner.last_fingerprint.is_some() {
+            inner.info = None;
+            inner.last_fingerprint = None;
+            return true;
+        }
+        return false;
+    };
+    match child.try_wait() {
+        Ok(None) => false,
+        Ok(Some(_)) | Err(_) => {
+            inner.child = None;
+            inner.info = None;
+            inner.last_fingerprint = None;
+            true
         }
     }
 }
@@ -244,6 +322,7 @@ fn stop_locked(inner: &mut EveSidecarInner) {
         let _ = child.wait();
     }
     inner.info = None;
+    inner.last_fingerprint = None;
 }
 
 /// Build the HTTP client used for loopback readiness probes.
@@ -275,16 +354,26 @@ fn health_ok(url: &str, token: &str) -> bool {
 ///
 /// Returns `Ok(None)` when AI is disabled (`enabled == Some(false)`): any
 /// running child is stopped and nothing is spawned. Health probing runs
-/// without holding the state mutex so `get_eve_sidecar_info` stays responsive.
+/// without holding `inner` so `get_eve_sidecar_info` stays responsive, but
+/// `start_lock` serializes overlapping ensure/reload so only one spawn runs.
 pub fn start_or_restart(
     app: &AppHandle,
     model: ModelConfigPayload,
 ) -> Result<Option<EveSidecarInfo>, String> {
     let state = app.state::<EveSidecarState>();
+    let _start_guard = state.start_lock.lock().map_err(|e| e.to_string())?;
+    start_or_restart_locked(app, &state, model)
+}
 
-    // Hold the lock only for stop / env prep / spawn bookkeeping — not for the
+/// Caller must hold `state.start_lock`.
+fn start_or_restart_locked(
+    app: &AppHandle,
+    state: &EveSidecarState,
+    model: ModelConfigPayload,
+) -> Result<Option<EveSidecarInfo>, String> {
+    // Hold `inner` only for stop / env prep / spawn bookkeeping — not for the
     // up-to-30s health wait below.
-    let (mut child, token, base_url_rx, generation) = {
+    let (mut child, token, base_url_rx, generation, fingerprint) = {
         let mut inner = state.inner.lock().map_err(|e| e.to_string())?;
         stop_locked(&mut inner);
 
@@ -315,6 +404,7 @@ pub fn start_or_restart(
                 Some(key.clone())
             };
         }
+        let fingerprint = fingerprint_of(&model, &api_key);
 
         inner.generation = inner.generation.wrapping_add(1);
         let generation = inner.generation;
@@ -327,31 +417,13 @@ pub fn start_or_restart(
             .env("NITRO_PORT", "0")
             .env("EVE_LOOPBACK_TOKEN", &token)
             .env("EVE_DATA_DIR", &data_dir)
-            .env(
-                "EVE_MODEL_BASE_URL",
-                model
-                    .base_url
-                    .clone()
-                    .unwrap_or_else(|| "https://api.deepseek.com/v1".into()),
-            )
-            .env(
-                "EVE_MODEL_ID",
-                model
-                    .model_id
-                    .clone()
-                    .unwrap_or_else(|| "deepseek-v4-flash".into()),
-            )
+            .env("EVE_MODEL_BASE_URL", &fingerprint.base_url)
+            .env("EVE_MODEL_ID", &fingerprint.model_id)
             .env(
                 "EVE_MODEL_CONTEXT_WINDOW",
-                model.context_window_tokens.unwrap_or(1_000_000).to_string(),
+                fingerprint.context_window_tokens.to_string(),
             )
-            .env(
-                "EVE_MODEL_API_MODE",
-                match model.api_mode.as_deref() {
-                    Some("responses") => "responses",
-                    _ => "chat",
-                },
-            )
+            .env("EVE_MODEL_API_MODE", &fingerprint.api_mode)
             .env("EVE_MODEL_API_KEY", api_key)
             .env("EVE_BOOKS_ROOT", resolve_books_root(app))
             .stdout(Stdio::piped())
@@ -392,7 +464,7 @@ pub fn start_or_restart(
             }
         });
 
-        (child, token, rx, generation)
+        (child, token, rx, generation, fingerprint)
     };
 
     let base_url = match base_url_rx.recv_timeout(HEALTH_TIMEOUT) {
@@ -437,7 +509,59 @@ pub fn start_or_restart(
     }
     inner.child = Some(child);
     inner.info = Some(info.clone());
+    inner.last_fingerprint = Some(fingerprint);
     Ok(Some(info))
+}
+
+fn matching_running_info(
+    inner: &mut EveSidecarInner,
+    model: &ModelConfigPayload,
+) -> Option<EveSidecarInfo> {
+    let _ = reap_if_dead(inner);
+    let api_key = model
+        .api_key
+        .clone()
+        .or_else(|| inner.last_api_key.clone())
+        .unwrap_or_default();
+    let fingerprint = fingerprint_of(model, &api_key);
+    if inner.child.is_some()
+        && inner.info.is_some()
+        && inner.last_fingerprint.as_ref() == Some(&fingerprint)
+    {
+        return inner.info.clone();
+    }
+    None
+}
+
+/// Start only when needed: skip respawn when the child is alive and the
+/// resolved model fingerprint matches the running process.
+pub fn ensure(
+    app: &AppHandle,
+    model: ModelConfigPayload,
+) -> Result<Option<EveSidecarInfo>, String> {
+    if model.enabled == Some(false) {
+        return start_or_restart(app, model);
+    }
+
+    let state = app.state::<EveSidecarState>();
+    // Optimistic fast path — no start_lock when already correct.
+    {
+        let mut inner = state.inner.lock().map_err(|e| e.to_string())?;
+        if let Some(info) = matching_running_info(&mut inner, &model) {
+            return Ok(Some(info));
+        }
+    }
+
+    let _start_guard = state.start_lock.lock().map_err(|e| e.to_string())?;
+    // Re-check after a peer may have finished spawning under start_lock.
+    {
+        let mut inner = state.inner.lock().map_err(|e| e.to_string())?;
+        if let Some(info) = matching_running_info(&mut inner, &model) {
+            return Ok(Some(info));
+        }
+    }
+
+    start_or_restart_locked(app, &state, model)
 }
 
 pub fn shutdown(app: &AppHandle) {
@@ -445,12 +569,40 @@ pub fn shutdown(app: &AppHandle) {
         if let Ok(mut inner) = state.inner.lock() {
             stop_locked(&mut inner);
         }
+        emit_sidecar_changed(app, None);
     }
 }
 
 #[tauri::command]
-pub fn get_eve_sidecar_info(state: State<'_, EveSidecarState>) -> Option<EveSidecarInfo> {
-    state.inner.lock().ok().and_then(|g| g.info.clone())
+pub fn get_eve_sidecar_info(app: AppHandle, state: State<'_, EveSidecarState>) -> Option<EveSidecarInfo> {
+    let Ok(mut inner) = state.inner.lock() else {
+        return None;
+    };
+    if reap_if_dead(&mut inner) {
+        drop(inner);
+        emit_sidecar_changed(&app, None);
+        return None;
+    }
+    inner.info.clone()
+}
+
+#[tauri::command]
+pub fn ensure_eve_sidecar(
+    app: AppHandle,
+    model: Option<ModelConfigPayload>,
+) -> Result<Option<EveSidecarInfo>, String> {
+    let model = model.unwrap_or_else(|| read_model_config_from_settings(&app));
+    match ensure(&app, model) {
+        Ok(info) => {
+            emit_sidecar_changed(&app, info.as_ref());
+            Ok(info)
+        }
+        Err(err) => {
+            log::error!("ensure_eve_sidecar failed: {err}");
+            emit_sidecar_changed(&app, None);
+            Err(err)
+        }
+    }
 }
 
 #[tauri::command]
@@ -460,9 +612,13 @@ pub fn reload_eve_sidecar(
 ) -> Result<Option<EveSidecarInfo>, String> {
     let model = model.unwrap_or_else(|| read_model_config_from_settings(&app));
     match start_or_restart(&app, model) {
-        Ok(info) => Ok(info),
+        Ok(info) => {
+            emit_sidecar_changed(&app, info.as_ref());
+            Ok(info)
+        }
         Err(err) => {
             log::error!("reload_eve_sidecar failed: {err}");
+            emit_sidecar_changed(&app, None);
             Err(err)
         }
     }
@@ -475,21 +631,65 @@ pub fn bootstrap(app: &AppHandle) {
         return;
     }
     // Do not spawn here. Rust cannot read the OS keychain; the frontend
-    // `syncEveSidecarApiKey` starts the sidecar once after settings load with
+    // `ensureEveSidecar` starts the sidecar once after settings load with
     // the active ModelProfile + apiKey (P0-2: avoid wrong/keyless start then
-    // immediate restart).
-    log::info!("eve sidecar bootstrap deferred to frontend key sync");
+    // immediate restart). Subsequent windows call ensure (no PORT churn).
+    log::info!("eve sidecar bootstrap deferred to frontend ensure");
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{health_ok, parse_listen_url, parse_model_config_from_value};
+    use super::{
+        fingerprint_of, health_ok, parse_listen_url, parse_model_config_from_value,
+        ModelConfigPayload, DEFAULT_BASE_URL, DEFAULT_CONTEXT_WINDOW, DEFAULT_MODEL_ID,
+    };
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::Mutex;
     use std::thread;
 
     static PROXY_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn fingerprint_matches_for_identical_resolved_payloads() {
+        let a = ModelConfigPayload {
+            enabled: Some(true),
+            base_url: Some("https://api.example.com/v1".into()),
+            model_id: Some("demo".into()),
+            context_window_tokens: Some(128_000),
+            api_mode: Some("chat".into()),
+            api_key: Some("sk".into()),
+        };
+        let b = a.clone();
+        assert_eq!(fingerprint_of(&a, "sk"), fingerprint_of(&b, "sk"));
+    }
+
+    #[test]
+    fn fingerprint_changes_when_api_key_changes() {
+        let model = ModelConfigPayload {
+            enabled: Some(true),
+            base_url: Some("https://api.example.com/v1".into()),
+            model_id: Some("demo".into()),
+            context_window_tokens: Some(128_000),
+            api_mode: Some("chat".into()),
+            api_key: None,
+        };
+        assert_ne!(fingerprint_of(&model, "sk-a"), fingerprint_of(&model, "sk-b"));
+    }
+
+    #[test]
+    fn fingerprint_uses_deepseek_defaults_for_missing_endpoint_fields() {
+        let model = ModelConfigPayload {
+            enabled: Some(true),
+            ..ModelConfigPayload::default()
+        };
+        let fp = fingerprint_of(&model, "");
+        assert_eq!(fp.base_url, DEFAULT_BASE_URL);
+        assert_eq!(fp.model_id, DEFAULT_MODEL_ID);
+        assert_eq!(fp.context_window_tokens, DEFAULT_CONTEXT_WINDOW);
+        assert_eq!(fp.api_mode, "chat");
+        assert!(fp.enabled);
+    }
 
     #[test]
     fn parses_listen_line() {

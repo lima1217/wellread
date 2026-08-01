@@ -31,6 +31,7 @@ import {
   TURN_IN_FLIGHT_BODY,
   createTurnInFlightGate,
 } from './turnInFlight.mjs';
+import { waitForResponseEnd } from './waitForResponseEnd.mjs';
 
 const HOST = '127.0.0.1';
 
@@ -282,15 +283,8 @@ const server = http.createServer(async (req, res) => {
             stream,
             headers: corsHeaders(req),
           });
-          // Wait until the response finishes so the turn gate stays held.
-          await new Promise((resolve) => {
-            if (res.writableEnded) {
-              resolve();
-              return;
-            }
-            res.on('finish', resolve);
-            res.on('close', resolve);
-          });
+          // Hold the turn gate until the response ends (or abort/timeout).
+          await waitForResponseEnd(res);
           sessions.save(session);
         } catch (error) {
           if (!res.headersSent) {

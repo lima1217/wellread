@@ -11,6 +11,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from 'ai';
+import { useEveConnectionStore } from '../eveConnectionStore';
 import { eveFetch } from './eveFetch';
 
 type EveUIMessagePart = UIMessage['parts'][number];
@@ -100,10 +101,10 @@ function base(): { baseUrl: string; token?: string } {
   if (typeof window === 'undefined') {
     throw new Error('eve client requires browser');
   }
-  const w = window as Window & { EVE_BASE_URL?: string; EVE_LOOPBACK_TOKEN?: string };
-  const baseUrl = (w.EVE_BASE_URL || '').replace(/\/$/, '');
-  if (!baseUrl) throw new Error('EVE_BASE_URL not set');
-  return { baseUrl, token: w.EVE_LOOPBACK_TOKEN };
+  const info = useEveConnectionStore.getState().info;
+  const baseUrl = (info?.baseUrl || '').replace(/\/$/, '');
+  if (!baseUrl) throw new Error('eve sidecar not connected');
+  return { baseUrl, token: info?.token };
 }
 
 export async function listEveSessions(bookId: string): Promise<EveSessionMeta[]> {

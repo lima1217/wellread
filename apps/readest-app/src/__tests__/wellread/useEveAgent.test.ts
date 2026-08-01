@@ -781,6 +781,132 @@ describe('useEveAgent', () => {
     expect(result.current.status).toBe('ready');
   });
 
+  it('awaits Stop teardown before starting the next turn', async () => {
+    getEveSession.mockResolvedValue(
+      sessionMeta('ses_existing', {
+        messages: [{ id: 'kept', role: 'user', content: 'prior', createdAt: 1 }],
+      }),
+    );
+
+    let releaseTeardown!: () => void;
+    const teardownHang = new Promise<void>((resolve) => {
+      releaseTeardown = resolve;
+    });
+    const order: string[] = [];
+
+    streamEveTurn.mockImplementation(async function* (_sid, msg: string, signal: AbortSignal) {
+      if (msg === 'first') {
+        order.push('first-start');
+        await new Promise<never>((_resolve, reject) => {
+          const fail = async () => {
+            await teardownHang;
+            order.push('first-end');
+            reject(new Error('Request cancelled'));
+          };
+          if (signal.aborted) void fail();
+          else signal.addEventListener('abort', () => void fail(), { once: true });
+        });
+      }
+      order.push('second-start');
+      yield assistantUi('a2', [textPart('ok')]);
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1);
+    });
+
+    let firstSend!: Promise<void>;
+    await act(async () => {
+      firstSend = result.current.send({ message: 'first' });
+    });
+    await act(async () => {
+      result.current.stop();
+    });
+
+    let secondSend!: Promise<void>;
+    await act(async () => {
+      secondSend = result.current.send({ message: 'second' });
+    });
+
+    // Second turn must not start while the aborted first turn is still tearing down.
+    expect(order).toEqual(['first-start']);
+    releaseTeardown();
+    await act(async () => {
+      await Promise.all([firstSend, secondSend]);
+    });
+    expect(order).toEqual(['first-start', 'first-end', 'second-start']);
+    expect(result.current.error).toBeNull();
+    expect(result.current.status).toBe('ready');
+  });
+
+  it('retries turn_in_flight 409 after Stop before surfacing an error', async () => {
+    getEveSession
+      .mockResolvedValueOnce(
+        sessionMeta('ses_existing', {
+          messages: [{ id: 'kept', role: 'user', content: 'prior', createdAt: 1 }],
+        }),
+      )
+      .mockResolvedValue(
+        sessionMeta('ses_existing', {
+          messages: [
+            { id: 'kept', role: 'user', content: 'prior', createdAt: 1 },
+            { id: 'u2', role: 'user', content: 'again', createdAt: 2 },
+            { id: 'a2', role: 'assistant', content: 'recovered', createdAt: 3 },
+          ],
+        }),
+      );
+
+    let attempts = 0;
+    streamEveTurn.mockImplementation(async function* (_sid, msg: string, signal: AbortSignal) {
+      if (msg === 'first') {
+        await new Promise<never>((_resolve, reject) => {
+          const fail = () => reject(new Error('Request cancelled'));
+          if (signal.aborted) fail();
+          else signal.addEventListener('abort', fail, { once: true });
+        });
+      }
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error('turn failed: 409 {"error":"turn_in_flight"}');
+      }
+      yield assistantUi('a2', [textPart('recovered')]);
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1);
+    });
+
+    let firstSend!: Promise<void>;
+    await act(async () => {
+      firstSend = result.current.send({ message: 'first' });
+    });
+    await act(async () => {
+      result.current.stop();
+    });
+    await act(async () => {
+      await firstSend;
+    });
+
+    await act(async () => {
+      await result.current.send({ message: 'again' });
+    });
+
+    expect(attempts).toBe(2);
+    expect(result.current.error).toBeNull();
+    expect(result.current.status).toBe('ready');
+    expect(result.current.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: 'assistant', content: 'recovered' }),
+      ]),
+    );
+  });
+
   it('drops the in-flight turn after Tauri Request cancelled (Stop)', async () => {
     getEveSession.mockResolvedValue({
       id: 'ses_existing',

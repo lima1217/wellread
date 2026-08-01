@@ -11,6 +11,7 @@ import {
   uiMessageToEveMessage,
   type EveMessage,
   type EveReaderState,
+  type EveStreamEvent,
   type EveToolTrace,
   type ThinkingMode,
 } from './eveClient';
@@ -24,6 +25,48 @@ function toolsInFlightFromMessage(msg: EveMessage): EveToolTrace[] {
 
 function hydrateMessages(messages: EveMessage[]): EveMessage[] {
   return hydrateEveMessagesForDisplay(messages).map(normalizeEveMessage);
+}
+
+/** Sidecar per-session mutex — brief race after Stop while the prior turn releases. */
+function isTurnInFlightError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    /turn failed:\s*409\b/.test(err.message) &&
+    /turn_in_flight/.test(err.message)
+  );
+}
+
+const TURN_IN_FLIGHT_RETRIES = 3;
+const TURN_IN_FLIGHT_RETRY_MS = 100;
+
+async function* streamEveTurnRetrying(
+  sessionId: string,
+  message: string,
+  signal: AbortSignal,
+  options: {
+    thinkingMode: ThinkingMode;
+    readerState?: EveReaderState | null;
+  },
+): AsyncGenerator<EveStreamEvent> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= TURN_IN_FLIGHT_RETRIES; attempt++) {
+    if (signal.aborted) {
+      const err = new Error('Request cancelled');
+      err.name = 'AbortError';
+      throw err;
+    }
+    try {
+      yield* streamEveTurn(sessionId, message, signal, options);
+      return;
+    } catch (err) {
+      lastError = err;
+      if (!isTurnInFlightError(err) || attempt === TURN_IN_FLIGHT_RETRIES) {
+        throw err;
+      }
+      await new Promise((r) => setTimeout(r, TURN_IN_FLIGHT_RETRY_MS * (attempt + 1)));
+    }
+  }
+  throw lastError;
 }
 
 export type UseEveAgentStatus = 'ready' | 'submitted' | 'streaming' | 'error';
@@ -59,6 +102,10 @@ export function useEveAgent(options: UseEveAgentOptions) {
   const [composer, setComposer] = useState('');
   const [inFlightTools, setInFlightTools] = useState<EveToolTrace[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  /** In-flight send promise — Stop → resend awaits teardown before the next POST. */
+  const turnPromiseRef = useRef<Promise<void> | null>(null);
+  /** True after Stop until the aborted turn fully settles. */
+  const stoppingRef = useRef(false);
   /** Mirrors activeSessionId for async reconcile — ignore stale disk loads after switch. */
   const activeSessionIdRef = useRef<string | null>(sessionId ?? null);
   /** Session this hook instance created during send — skip disk reload for that id. */
@@ -87,6 +134,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
       if (!sessionId) {
         createdSessionIdRef.current = null;
         if (sessionChanged) {
+          stoppingRef.current = true;
           abortRef.current?.abort();
           abortRef.current = null;
           setInFlightTools([]);
@@ -107,6 +155,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
       // overwrite the session we are about to load.
       if (sessionChanged) {
         createdSessionIdRef.current = null;
+        stoppingRef.current = true;
         abortRef.current?.abort();
         abortRef.current = null;
         setInFlightTools([]);
@@ -131,10 +180,18 @@ export function useEveAgent(options: UseEveAgentOptions) {
   }, [bookId, bookTitle, sessionId]);
 
   const stop = useCallback(() => {
+    if (!turnPromiseRef.current) {
+      setInFlightTools([]);
+      setError(null);
+      setStatus('ready');
+      return;
+    }
+    stoppingRef.current = true;
     abortRef.current?.abort();
     abortRef.current = null;
     setInFlightTools([]);
     setError(null);
+    // Keep UI composable; send() awaits turnPromiseRef before the next POST.
     setStatus('ready');
   }, []);
 
@@ -153,158 +210,180 @@ export function useEveAgent(options: UseEveAgentOptions) {
     async (input?: SendTurnInput) => {
       const text = (input?.message ?? composer).trim();
       if (!text) return;
-      if (status === 'submitted' || status === 'streaming') return;
+
+      // Genuine double-send while a turn is active (not Stop → resend).
+      if (turnPromiseRef.current && !stoppingRef.current) return;
 
       const quotes = input?.quotes ?? [];
       const wireText = formatPendingQuotesForTurn(quotes, text);
       const displayContent = text;
 
-      let sessionIdForTurn = activeSessionId;
-      if (!sessionIdForTurn) {
+      const prior = turnPromiseRef.current;
+      const turn = (async () => {
+        if (prior) await prior.catch(() => {});
+        stoppingRef.current = false;
+
+        let sessionIdForTurn = activeSessionIdRef.current;
+        if (!sessionIdForTurn) {
+          try {
+            const session = await createEveSession({
+              bookId,
+              bookTitle,
+              title: bookTitle ? `Chat about ${bookTitle}` : undefined,
+            });
+            sessionIdForTurn = session.id;
+            createdSessionIdRef.current = session.id;
+            activeSessionIdRef.current = session.id;
+            setActiveSessionId(session.id);
+            setMessages(session.messages);
+            setStatus('ready');
+          } catch (err) {
+            setError(err instanceof Error ? err : new Error(String(err)));
+            setStatus('error');
+            input?.onSendFailed?.(quotes);
+            return;
+          }
+        }
+
+        const optimisticUserId = `optimistic-user-${Date.now()}`;
+        const optimisticQuotes = quotes.length
+          ? quotes.map((q) => ({
+              text: q.text,
+              chapterTitle: q.chapterTitle,
+            }))
+          : undefined;
+
+        setError(null);
+        setInFlightTools([]);
+        setStatus('submitted');
+        setComposer('');
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: optimisticUserId,
+            role: 'user',
+            content: displayContent,
+            createdAt: Date.now(),
+            ...(optimisticQuotes ? { quotes: optimisticQuotes } : {}),
+          },
+        ]);
+
+        const controller = new AbortController();
+        abortRef.current = controller;
+
+        let assistantId: string | null = null;
+        let userCommitted = false;
+        let needsReconcile = false;
+
         try {
-          const session = await createEveSession({
-            bookId,
-            bookTitle,
-            title: bookTitle ? `Chat about ${bookTitle}` : undefined,
-          });
-          sessionIdForTurn = session.id;
-          createdSessionIdRef.current = session.id;
-          activeSessionIdRef.current = session.id;
-          setActiveSessionId(session.id);
-          setMessages(session.messages);
+          const readerState = getReaderStateRef.current?.() ?? undefined;
+          for await (const event of streamEveTurnRetrying(
+            sessionIdForTurn,
+            wireText,
+            controller.signal,
+            {
+              thinkingMode,
+              readerState: readerState ?? undefined,
+            },
+          )) {
+            // First streamed event means the server accepted the turn (user committed).
+            if (!userCommitted) {
+              userCommitted = true;
+              setStatus('streaming');
+            }
+            if (event.type === 'ui-message') {
+              if (event.message.role !== 'assistant') continue;
+              const eveMsg = uiMessageToEveMessage(event.message);
+              assistantId = eveMsg.id;
+              setInFlightTools(toolsInFlightFromMessage(eveMsg));
+              setMessages((prev) => {
+                const withoutAssistant = prev.filter((m) => m.id !== eveMsg.id);
+                return [...withoutAssistant, eveMsg];
+              });
+            } else if (event.type === 'context.compressed') {
+              // Keep the optimistic user bubble through the rest of the stream;
+              // reconcileFromDisk swaps it for the server user id when the turn ends.
+              setMessages((prev) => {
+                const removed = new Set(event.removedIds);
+                const kept = prev.filter((m) => !removed.has(m.id));
+                return [
+                  normalizeEveMessage({
+                    id: event.summary.id,
+                    role: event.summary.role,
+                    content: event.summary.content,
+                    createdAt: event.summary.createdAt,
+                    compacted: true,
+                  }),
+                  ...kept,
+                ];
+              });
+            } else if (event.type === 'context.compress_failed') {
+              if (event.message) {
+                console.warn('[eve] context.compress_failed:', event.message);
+              }
+              eventDispatcher.dispatch('toast', {
+                type: 'warning',
+                message: _("Couldn't compress chat history; continuing with full context"),
+              });
+            } else if (event.type === 'error') {
+              throw new Error(event.message);
+            } else if (event.type === 'abort') {
+              needsReconcile = true;
+            }
+          }
+          setInFlightTools([]);
           setStatus('ready');
+          if (needsReconcile) {
+            const dropIds = new Set([optimisticUserId, assistantId].filter(Boolean) as string[]);
+            setMessages((prev) => prev.filter((m) => !dropIds.has(m.id)));
+            await reconcileFromDisk(sessionIdForTurn);
+          } else {
+            // Resolve optimistic user id / sources from disk after a successful turn.
+            await reconcileFromDisk(sessionIdForTurn);
+          }
         } catch (err) {
+          setInFlightTools([]);
+          // Tauri plugin-http aborts as Error('Request cancelled'), not AbortError.
+          // Prefer the controller we own so Stop never falls into reconcileFromDisk.
+          const aborted =
+            controller.signal.aborted ||
+            (err as Error).name === 'AbortError' ||
+            (err instanceof Error && err.message === 'Request cancelled');
+          if (aborted) {
+            // Mirror server rollback locally. Do not refetch here: Stop aborts the
+            // fetch before the server may have re-persisted after dropInFlightUser,
+            // and a stale getEveSession would resurrect the unanswered user.
+            const dropIds = new Set([optimisticUserId, assistantId].filter(Boolean) as string[]);
+            setMessages((prev) => prev.filter((m) => !dropIds.has(m.id)));
+            setStatus('ready');
+            return;
+          }
           setError(err instanceof Error ? err : new Error(String(err)));
           setStatus('error');
-          input?.onSendFailed?.(quotes);
-          return;
-        }
-      }
-
-      const optimisticUserId = `optimistic-user-${Date.now()}`;
-      const optimisticQuotes = quotes.length
-        ? quotes.map((q) => ({
-            text: q.text,
-            chapterTitle: q.chapterTitle,
-          }))
-        : undefined;
-
-      setError(null);
-      setInFlightTools([]);
-      setStatus('submitted');
-      setComposer('');
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: optimisticUserId,
-          role: 'user',
-          content: displayContent,
-          createdAt: Date.now(),
-          ...(optimisticQuotes ? { quotes: optimisticQuotes } : {}),
-        },
-      ]);
-
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      let assistantId: string | null = null;
-      let userCommitted = false;
-      let needsReconcile = false;
-
-      try {
-        const readerState = getReaderStateRef.current?.() ?? undefined;
-        for await (const event of streamEveTurn(sessionIdForTurn, wireText, controller.signal, {
-          thinkingMode,
-          readerState: readerState ?? undefined,
-        })) {
-          // First streamed event means the server accepted the turn (user committed).
+          // Only restore the live bar if the user turn never landed (AC1.5).
           if (!userCommitted) {
-            userCommitted = true;
-            setStatus('streaming');
+            input?.onSendFailed?.(quotes);
           }
-          if (event.type === 'ui-message') {
-            if (event.message.role !== 'assistant') continue;
-            const eveMsg = uiMessageToEveMessage(event.message);
-            assistantId = eveMsg.id;
-            setInFlightTools(toolsInFlightFromMessage(eveMsg));
-            setMessages((prev) => {
-              const withoutAssistant = prev.filter((m) => m.id !== eveMsg.id);
-              return [...withoutAssistant, eveMsg];
-            });
-          } else if (event.type === 'context.compressed') {
-            // Keep the optimistic user bubble through the rest of the stream;
-            // reconcileFromDisk swaps it for the server user id when the turn ends.
-            setMessages((prev) => {
-              const removed = new Set(event.removedIds);
-              const kept = prev.filter((m) => !removed.has(m.id));
-              return [
-                normalizeEveMessage({
-                  id: event.summary.id,
-                  role: event.summary.role,
-                  content: event.summary.content,
-                  createdAt: event.summary.createdAt,
-                  compacted: true,
-                }),
-                ...kept,
-              ];
-            });
-          } else if (event.type === 'context.compress_failed') {
-            if (event.message) {
-              console.warn('[eve] context.compress_failed:', event.message);
-            }
-            eventDispatcher.dispatch('toast', {
-              type: 'warning',
-              message: _("Couldn't compress chat history; continuing with full context"),
-            });
-          } else if (event.type === 'error') {
-            throw new Error(event.message);
-          } else if (event.type === 'abort') {
-            needsReconcile = true;
+          await reconcileFromDisk(sessionIdForTurn);
+        } finally {
+          abortRef.current = null;
+          // Allow later prop-driven reloads of this session (e.g. bookTitle change).
+          if (createdSessionIdRef.current === sessionIdForTurn) {
+            createdSessionIdRef.current = null;
           }
         }
-        setInFlightTools([]);
-        setStatus('ready');
-        if (needsReconcile) {
-          const dropIds = new Set([optimisticUserId, assistantId].filter(Boolean) as string[]);
-          setMessages((prev) => prev.filter((m) => !dropIds.has(m.id)));
-          await reconcileFromDisk(sessionIdForTurn);
-        } else {
-          // Resolve optimistic user id / sources from disk after a successful turn.
-          await reconcileFromDisk(sessionIdForTurn);
-        }
-      } catch (err) {
-        setInFlightTools([]);
-        // Tauri plugin-http aborts as Error('Request cancelled'), not AbortError.
-        // Prefer the controller we own so Stop never falls into reconcileFromDisk.
-        const aborted =
-          controller.signal.aborted ||
-          (err as Error).name === 'AbortError' ||
-          (err instanceof Error && err.message === 'Request cancelled');
-        if (aborted) {
-          // Mirror server rollback locally. Do not refetch here: Stop aborts the
-          // fetch before the server may have re-persisted after dropInFlightUser,
-          // and a stale getEveSession would resurrect the unanswered user.
-          const dropIds = new Set([optimisticUserId, assistantId].filter(Boolean) as string[]);
-          setMessages((prev) => prev.filter((m) => !dropIds.has(m.id)));
-          setStatus('ready');
-          return;
-        }
-        setError(err instanceof Error ? err : new Error(String(err)));
-        setStatus('error');
-        // Only restore the live bar if the user turn never landed (AC1.5).
-        if (!userCommitted) {
-          input?.onSendFailed?.(quotes);
-        }
-        await reconcileFromDisk(sessionIdForTurn);
+      })();
+
+      turnPromiseRef.current = turn;
+      try {
+        await turn;
       } finally {
-        abortRef.current = null;
-        // Allow later prop-driven reloads of this session (e.g. bookTitle change).
-        if (createdSessionIdRef.current === sessionIdForTurn) {
-          createdSessionIdRef.current = null;
+        if (turnPromiseRef.current === turn) {
+          turnPromiseRef.current = null;
         }
       }
     },
-    [activeSessionId, bookId, bookTitle, composer, reconcileFromDisk, status, thinkingMode],
+    [bookId, bookTitle, composer, reconcileFromDisk, thinkingMode],
   );
 
   const reset = useCallback(() => {

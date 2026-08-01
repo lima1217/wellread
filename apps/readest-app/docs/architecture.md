@@ -95,10 +95,13 @@ flowchart TB
 - Source: `apps/eve-sidecar`
 - Bundled into the app via Tauri resources (`eve/.output`) and a platform Node
   binary under `src-tauri/binaries`
-- Lifecycle owned by Rust (`src-tauri/src/eve_sidecar.rs`): bootstrap on launch,
-  `reload_eve_sidecar` when the active model profile changes, shutdown on exit
+- Lifecycle owned by Rust (`src-tauri/src/eve_sidecar.rs`): process-global SSOT
+  for listen URL + token; `ensure_eve_sidecar` (fingerprint skip-respawn) on
+  cold start / new windows after keychain load; `reload_eve_sidecar` when the
+  active model profile changes; `eve-sidecar-changed` broadcasts to webviews;
+  shutdown on exit
 - Frontend bridge: `src/services/wellread/eveSidecar.ts` +
-  `eveConnectionStore.ts` + `assistant/*`
+  `ensureEveSidecar.ts` + `eveConnectionStore.ts` + `assistant/*`
 - Security model: listen on loopback only, random bearer token, book tools
   sandboxed to the library Books tree
 

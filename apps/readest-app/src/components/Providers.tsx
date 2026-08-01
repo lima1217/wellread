@@ -22,8 +22,11 @@ import { CommandPaletteProvider, CommandPalette } from '@/components/command-pal
 import AtmosphereOverlay from '@/components/AtmosphereOverlay';
 import AppLockScreen from '@/components/AppLockScreen';
 import AppLockDialog from '@/components/settings/AppLockDialog';
-import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
-import { syncEveSidecarApiKey } from '@/services/wellread/syncEveSidecarApiKey';
+import {
+  startEveConnectionSync,
+  useEveConnectionStore,
+} from '@/services/wellread/eveConnectionStore';
+import { ensureEveSidecar } from '@/services/wellread/ensureEveSidecar';
 import { useAppLockStore } from '@/store/appLockStore';
 
 const Providers = ({ children }: { children: React.ReactNode }) => {
@@ -93,10 +96,13 @@ const Providers = ({ children }: { children: React.ReactNode }) => {
           salt: settings.pinCodeSalt,
           biometricUnlockEnabled: !!settings.biometricUnlockEnabled,
         });
-        // Rust bootstrap defers spawn; start once here with keychain apiKey +
-        // active ModelProfile so cold start is a single sidecar process.
-        await syncEveSidecarApiKey(settings.modelConfig);
-        await useEveConnectionStore.getState().refresh();
+        // Rust bootstrap defers spawn; ensure here with keychain apiKey +
+        // active ModelProfile. Extra windows reuse the running process.
+        const info = await ensureEveSidecar(settings.modelConfig);
+        useEveConnectionStore.getState().applyInfo(info);
+        if (!info) {
+          await useEveConnectionStore.getState().refresh();
+        }
       });
     }
   }, [
@@ -116,7 +122,20 @@ const Providers = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    void useEveConnectionStore.getState().refresh();
+    let cancelled = false;
+    let stopSync: (() => void) | undefined;
+    void (async () => {
+      stopSync = await startEveConnectionSync();
+      if (cancelled) {
+        stopSync();
+        return;
+      }
+      await useEveConnectionStore.getState().refresh();
+    })();
+    return () => {
+      cancelled = true;
+      stopSync?.();
+    };
   }, []);
 
   // Make sure appService is available in all children components

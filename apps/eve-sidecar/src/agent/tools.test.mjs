@@ -132,6 +132,21 @@ describe('authorizeOkfNotesWrite', () => {
 });
 
 describe('createReadingTools envelopes', () => {
+  it('describes glob/grep by role without wide-path examples', () => {
+    const tools = createReadingTools({ getBooksRoot: () => '/tmp', bookId: 'bk1' });
+    assert.match(tools.glob.description, /List file paths/i);
+    assert.match(tools.grep.description, /file contents/i);
+    assert.equal(
+      tools.glob.inputSchema.shape.pattern.description,
+      'Glob path pattern under /workspace/.wellread/',
+    );
+    assert.doesNotMatch(tools.glob.description, /\*\*\/\*\*/);
+    assert.doesNotMatch(
+      tools.glob.inputSchema.shape.pattern.description ?? '',
+      /\*\*\/\*\*/,
+    );
+  });
+
   it('write_file succeeds inside OKF package and soft-rejects outside', async () => {
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'eve-tools-notes-')));
     const bookId = 'bk1';

@@ -318,6 +318,8 @@ pub fn run() {
             #[cfg(desktop)]
             eve_sidecar::get_eve_sidecar_info,
             #[cfg(desktop)]
+            eve_sidecar::ensure_eve_sidecar,
+            #[cfg(desktop)]
             eve_sidecar::reload_eve_sidecar,
         ])
         .plugin(tauri_plugin_fs::init())

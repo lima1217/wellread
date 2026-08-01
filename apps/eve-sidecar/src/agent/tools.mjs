@@ -262,11 +262,9 @@ export function createReadingTools(options) {
     }),
 
     glob: tool({
-      description: 'Find extract/notes paths under /workspace/.wellread/.',
+      description: 'List file paths under /workspace/.wellread/ that match a glob pattern.',
       inputSchema: z.object({
-        pattern: z
-          .string()
-          .describe('Glob pattern, e.g. /workspace/.wellread/extract/<bookId>/**/*.md'),
+        pattern: z.string().describe('Glob path pattern under /workspace/.wellread/'),
       }),
       execute: async ({ pattern }) => {
         try {
@@ -284,13 +282,14 @@ export function createReadingTools(options) {
     }),
 
     grep: tool({
-      description: 'Search extract/notes text under /workspace/.wellread/.',
+      description:
+        'Search file contents under /workspace/.wellread/ (returns path, line, matching text).',
       inputSchema: z.object({
-        pattern: z.string().describe('Search string or regex (regex mode default true)'),
+        pattern: z.string().describe('Substring or regex to match against file lines'),
         path: z
           .string()
           .optional()
-          .describe('Optional path prefix under /workspace/.wellread/ to scope the search'),
+          .describe('Optional directory or file prefix under /workspace/.wellread/ to scope the search'),
         regex: z
           .boolean()
           .optional()

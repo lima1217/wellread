@@ -95,20 +95,34 @@ vi.mock('@/store/readerStore', () => ({
   }),
 }));
 
+const assistantPanelState = vi.hoisted(() => ({
+  isAssistantPanelVisible: true,
+  isAssistantPanelPinned: true,
+  setAssistantPanelVisible: vi.fn((visible: boolean) => {
+    assistantPanelState.isAssistantPanelVisible = visible;
+  }),
+}));
+
 vi.mock('@/store/assistantPanelStore', () => ({
   useAssistantPanelStore: Object.assign(
     () => ({
       assistantPanelWidth: '30%',
-      isAssistantPanelVisible: true,
-      isAssistantPanelPinned: true,
+      get isAssistantPanelVisible() {
+        return assistantPanelState.isAssistantPanelVisible;
+      },
+      get isAssistantPanelPinned() {
+        return assistantPanelState.isAssistantPanelPinned;
+      },
       setAssistantPanelPin: vi.fn(),
       getAssistantPanelWidth: () => '30%',
       setAssistantPanelWidth: vi.fn(),
-      setAssistantPanelVisible: vi.fn(),
+      setAssistantPanelVisible: assistantPanelState.setAssistantPanelVisible,
       toggleAssistantPanelPin: vi.fn(),
     }),
     {
-      getState: () => ({ isAssistantPanelPinned: true }),
+      getState: () => ({
+        isAssistantPanelPinned: assistantPanelState.isAssistantPanelPinned,
+      }),
     },
   ),
 }));
@@ -156,9 +170,12 @@ describe('AssistantPanel chat↔history pane', () => {
   beforeEach(() => {
     chatLifecycle.mounts = 0;
     chatLifecycle.unmounts = 0;
+    assistantPanelState.isAssistantPanelVisible = true;
+    assistantPanelState.isAssistantPanelPinned = true;
     setActiveSession.mockReset();
     clearPendingQuotes.mockReset();
     createEveSession.mockReset();
+    assistantPanelState.setAssistantPanelVisible.mockClear();
   });
 
   afterEach(() => cleanup());
@@ -173,6 +190,18 @@ describe('AssistantPanel chat↔history pane', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Chat History' }));
 
     expect(screen.getByTestId('chat-history')).toBeTruthy();
+    expect(screen.getByTestId('ai-assistant')).toBeTruthy();
+    expect(chatLifecycle.unmounts).toBe(0);
+    expect(chatLifecycle.mounts).toBe(1);
+  });
+
+  it('keeps AIAssistant mounted when the panel is closed after opening', () => {
+    const { rerender } = render(<AssistantPanel />);
+    expect(chatLifecycle.mounts).toBe(1);
+
+    assistantPanelState.isAssistantPanelVisible = false;
+    rerender(<AssistantPanel />);
+
     expect(screen.getByTestId('ai-assistant')).toBeTruthy();
     expect(chatLifecycle.unmounts).toBe(0);
     expect(chatLifecycle.mounts).toBe(1);

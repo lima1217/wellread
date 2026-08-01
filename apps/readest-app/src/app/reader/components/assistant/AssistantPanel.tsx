@@ -51,10 +51,22 @@ const AssistantPanel: React.FC = ({}) => {
   const isMobile = useMediaQuery({ maxWidth: 639 });
   const [isFullHeightInMobile, setIsFullHeightInMobile] = useState(isMobile);
   const [pane, setPane] = useState<AssistantPane>('chat');
+  // Keep chat mounted after the first open so closing the panel cannot abort an
+  // in-flight turn (unmount → HTTP cancel → sidecar dropUser → "history lost").
+  const [keepMounted, setKeepMounted] = useState(false);
 
   useEffect(() => {
     setPane('chat');
-  }, [sideBarBookKey, isAssistantPanelVisible]);
+    setKeepMounted(false);
+  }, [sideBarBookKey]);
+
+  useEffect(() => {
+    if (isAssistantPanelVisible) setKeepMounted(true);
+  }, [isAssistantPanelVisible]);
+
+  useEffect(() => {
+    if (isAssistantPanelVisible) setPane('chat');
+  }, [isAssistantPanelVisible]);
 
   const {
     panelRef: assistantPanelRef,
@@ -158,9 +170,11 @@ const AssistantPanel: React.FC = ({}) => {
   const { bookDoc } = bookData;
   const languageDir = getBookDirFromLanguage(bookDoc.metadata.language);
 
-  return isAssistantPanelVisible ? (
+  if (!keepMounted && !isAssistantPanelVisible) return null;
+
+  return (
     <>
-      {!isAssistantPanelPinned && (
+      {isAssistantPanelVisible && !isAssistantPanelPinned && (
         <Overlay
           className={clsx('z-[45]', viewSettings?.isEink ? '' : 'bg-black/50 sm:bg-black/20')}
           onDismiss={handleClickOverlay}
@@ -176,9 +190,12 @@ const AssistantPanel: React.FC = ({}) => {
           appService?.hasRoundedWindow && 'rounded-window-top-right rounded-window-bottom-right',
           isAssistantPanelPinned ? 'z-20' : 'z-[45] shadow-2xl',
           !isAssistantPanelPinned && viewSettings?.isEink && 'border-base-content border-s',
+          !isAssistantPanelVisible && 'hidden',
         )}
         role='group'
         aria-label={_('Reading Assistant')}
+        aria-hidden={!isAssistantPanelVisible}
+        inert={!isAssistantPanelVisible ? true : undefined}
         dir={viewSettings?.rtl && languageDir === 'rtl' ? 'rtl' : 'ltr'}
         style={{
           width: isMobile ? '100%' : `${assistantPanelWidth}`,
@@ -272,7 +289,7 @@ const AssistantPanel: React.FC = ({}) => {
         />
       </div>
     </>
-  ) : null;
+  );
 };
 
 export default AssistantPanel;

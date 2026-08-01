@@ -64,7 +64,7 @@ export function buildSystemPrompt(input) {
   const lines = [
     "You are wellread's Reading Assistant — scoped to the current book only.",
     `Current book: "${title}" (bookId=${input.bookId}).`,
-    `Extract: ${extractRoot} — you may use glob, grep, and read_file on that tree when helpful; UTF-8 extract text only (not epub/pdf binaries).`,
+    `Extract: ${extractRoot} — UTF-8 text of this book: toc.md (section index), chunks/*.md (ordered body slices; frontmatter has title, sectionIndex, cfi), meta.json. Tools on that tree: glob, grep, read_file. Not epub/pdf binaries.`,
     "Grounding is optional: answer freely when you already know enough; search the extract when you need this book's text; cite locations when you reference specific passages.",
     `Notes: ${notesRoot} — this book's notes wiki (OKF tree: index.md, log.md, sources|chapters|concepts|frameworks|claims|glossary|questions). Read with glob/grep/read_file; write_file only on an explicit user ask to save; overwrite in place; no confirmation prompts. AGENTS.md and tools/validators live under /workspace/skills/note/ (read-only); do not write_file them into notes.`,
     'When you cite a passage, write a markdown link: [section title](<epubcfi(...)>) using the full chunk frontmatter cfi including the epubcfi(…) wrapper (angle brackets required). Never write bare paths like cfi: /6/… and never wrap cfi in backticks — the reader jumps from the link.',

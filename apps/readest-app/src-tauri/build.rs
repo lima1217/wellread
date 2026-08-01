@@ -36,6 +36,7 @@ fn main() {
             "verify_update_signature",
             "install_nightly_update",
             "get_eve_sidecar_info",
+            "ensure_eve_sidecar",
             "reload_eve_sidecar",
         ]),
     ))

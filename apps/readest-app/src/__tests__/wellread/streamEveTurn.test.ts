@@ -48,12 +48,14 @@ describe('responseToUIMessageChunkStream', () => {
 });
 
 describe('streamEveTurn', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules();
     eveFetch.mockReset();
-    const w = window as Window & { EVE_BASE_URL?: string; EVE_LOOPBACK_TOKEN?: string };
-    w.EVE_BASE_URL = 'http://127.0.0.1:43111';
-    w.EVE_LOOPBACK_TOKEN = 'tok';
+    const { useEveConnectionStore } = await import('@/services/wellread/eveConnectionStore');
+    useEveConnectionStore.setState({
+      info: { baseUrl: 'http://127.0.0.1:43111', token: 'tok' },
+      ready: true,
+    });
   });
 
   it('surfaces side-channel error events from the SSE stream', async () => {
