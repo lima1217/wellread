@@ -1,5 +1,15 @@
 {
   "releases": {
+    "1.2.0": {
+      "date": "2026-08-01",
+      "notes": [
+        "Assistant: Streams replies as AI SDK UIMessage parts with a rebuilt chat UI",
+        "Assistant: Shared extract contract with focus chunks and section resolution",
+        "Assistant: Consecutive tool steps collapse into a summary group",
+        "Assistant: Fixes for follow-up reply cloning, reasoning stream crashes, and multi-window sidecar ensure",
+        "Assistant: Responses API history replay with host-aware DeepSeek adapters"
+      ]
+    },
     "1.1.2": {
       "date": "2026-07-29",
       "notes": [
