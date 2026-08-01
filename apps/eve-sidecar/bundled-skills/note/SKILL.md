@@ -27,7 +27,7 @@ description: "note — 当前书的 OKF notes 包。记章、划词沉淀、会�
 | **quote** | 划词要记 | 所在章或 concept/claim |
 | **chat** | 沉淀会话 | 按 PACKAGE「选页」归入；蒸馏成可独立阅读的页 |
 
-材料：本会话 → Pending Quote → slash 参数 → Extract → 已有包（`notes_index`、根 `index.md`）。
+材料：本会话 → Pending Quote → slash 参数 → Extract（`focus_chunks` / `section_chunks` / `resolve_section`；`extract_status: missing` 时勿空转）→ 已有包（`notes_index`、根 `index.md`）。
 
 `write_file` 仅在用户明确要求保存 / ingest / 沉淀 / bootstrap / lint-并-修时；否则先列将写页与要点再等确认（「直接写入」跳过确认）。可写路径见 AGENTS。
 

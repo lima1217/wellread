@@ -74,6 +74,7 @@ Unsigned builds may be blocked by Gatekeeper on first open: right-click the app 
 | Doc | Purpose |
 | --- | --- |
 | [`apps/readest-app/docs/architecture.md`](./apps/readest-app/docs/architecture.md) | Process boundaries, eve sidecar, local-first constraints |
+| [`apps/readest-app/docs/reading-assistant-contract.md`](./apps/readest-app/docs/reading-assistant-contract.md) | Extract / tools / reading_context / skill contract |
 | [`apps/readest-app/docs/code-layout.md`](./apps/readest-app/docs/code-layout.md) | Directory map |
 | [`apps/readest-app/AGENTS.md`](./apps/readest-app/AGENTS.md) | Dev commands and agent rules |
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Build prerequisites and contribution flow |

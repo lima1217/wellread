@@ -94,6 +94,10 @@ export function build() {
   cpSync(join(root, 'bundled-skills'), join(outRoot, 'bundled-skills'), { recursive: true });
   installProdNodeModules();
   vendorWorkspacePackage('@wellread/eve-message', join(root, '../../packages/eve-message'));
+  vendorWorkspacePackage(
+    '@wellread/extract-contract',
+    join(root, '../../packages/extract-contract'),
+  );
 
   console.log('eve-sidecar build ok:', outServer);
 }

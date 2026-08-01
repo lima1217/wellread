@@ -3,10 +3,12 @@ import type { ChunkOptions } from './CfiChunker';
 import { chunkSection } from './CfiChunker';
 import {
   EXTRACT_SCHEMA_VERSION,
+  buildSectionIndexFile,
   chunkFileName,
   chunkRowToExtractInput,
   extractDir,
   formatChunkMarkdown,
+  formatSectionIndexJson,
   formatTocMarkdown,
   isMetaStale,
   parseExtractMeta,
@@ -75,15 +77,35 @@ async function writeExtractTree(
   }
 
   const tocEntries: Array<{ chunkIndex: number; title: string | null; fileName: string }> = [];
+  const indexEntries: Array<{
+    fileName: string;
+    chunkIndex: number;
+    sectionIndex: number;
+    title: string | null;
+    cfi: string;
+    endCfi: string;
+  }> = [];
   for (let i = 0; i < chunks.length; i++) {
     const row = chunks[i]!;
     const extractChunk = chunkRowToExtractInput(row, i);
     const fileName = chunkFileName(i, extractChunk.title);
     tocEntries.push({ chunkIndex: i, title: extractChunk.title, fileName });
+    indexEntries.push({
+      fileName,
+      chunkIndex: i,
+      sectionIndex: extractChunk.sectionIndex,
+      title: extractChunk.title,
+      cfi: extractChunk.cfi,
+      endCfi: extractChunk.endCfi,
+    });
     await input.fs.writeText(`${chunksDir}/${fileName}`, formatChunkMarkdown(extractChunk));
   }
 
   await input.fs.writeText(`${root}/toc.md`, formatTocMarkdown(input.bookId, tocEntries));
+  await input.fs.writeText(
+    `${root}/section-index.json`,
+    formatSectionIndexJson(buildSectionIndexFile(indexEntries)),
+  );
 
   const meta: ExtractMeta = {
     bookId: input.bookId,
@@ -93,6 +115,7 @@ async function writeExtractTree(
     extractedAt: Date.now(),
     chunkCount: chunks.length,
     schemaVersion: EXTRACT_SCHEMA_VERSION,
+    status: 'ready',
   };
   await input.fs.writeText(`${root}/meta.json`, `${JSON.stringify(meta, null, 2)}\n`);
   return chunks.length;

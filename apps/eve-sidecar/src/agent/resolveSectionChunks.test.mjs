@@ -4,13 +4,34 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
+  FOCUS_CHUNKS_MAX,
   SECTION_CHUNKS_ASK_THRESHOLD,
   parseExtractChunkFrontmatter,
+  resolveFocusChunks,
   resolveSectionChunksByIndex,
   resolveSectionChunksByTitle,
   resolveSectionChunksForReader,
   resolveSectionQuery,
 } from './resolveSectionChunks.mjs';
+
+function writeSectionIndex(root, bookId, index) {
+  const dir = join(root, '.wellread', 'extract', bookId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'section-index.json'), JSON.stringify(index, null, 2));
+  writeFileSync(
+    join(dir, 'meta.json'),
+    JSON.stringify({
+      bookId,
+      sourceHash: 'h',
+      sourceMtimeMs: 1,
+      format: 'EPUB',
+      extractedAt: 1,
+      chunkCount: 1,
+      schemaVersion: 2,
+      status: 'ready',
+    }),
+  );
+}
 
 function writeChunk(dir, fileName, fields, body = 'body') {
   const lines = ['---'];
@@ -37,6 +58,7 @@ text
       sectionIndex: 4,
       chunkIndex: 12,
       title: 'On Digital Extremities',
+      cfi: 'epubcfi(/6/10!)',
     });
   });
 
@@ -264,5 +286,200 @@ describe('resolveSectionChunksForReader', () => {
 
   it('exposes ask threshold constant used by envelope', () => {
     assert.equal(SECTION_CHUNKS_ASK_THRESHOLD, 20);
+  });
+});
+
+describe('section-index resolve', () => {
+  it('drops path-traversing fileName entries from section-index.json', () => {
+    const root = mkdtempSync(join(tmpdir(), 'eve-sec-trav-'));
+    writeSectionIndex(root, 'bk1', {
+      schemaVersion: 2,
+      sections: {
+        '4': [
+          {
+            fileName: '../../../notes/victim/secret.md',
+            chunkIndex: 0,
+            sectionIndex: 4,
+            title: 'A',
+            cfi: 'epubcfi(/6/10!/4/2/1:0)',
+            endCfi: 'epubcfi(/6/10!/4/2/1:20)',
+          },
+          {
+            fileName: '00001-a.md',
+            chunkIndex: 1,
+            sectionIndex: 4,
+            title: 'A',
+            cfi: 'epubcfi(/6/10!/4/2/1:21)',
+            endCfi: 'epubcfi(/6/10!/4/2/1:40)',
+          },
+        ],
+      },
+      titles: { a: [4] },
+    });
+    const resolved = resolveSectionChunksByIndex(root, 'bk1', 4);
+    assert.equal(resolved.fromIndex, true);
+    assert.equal(resolved.count, 1);
+    assert.match(resolved.paths[0], /00001-a/);
+    assert.doesNotMatch(resolved.paths.join('\n'), /\.\./);
+  });
+
+  it('resolveSectionChunksByIndex uses section-index.json without scanning other sections', () => {
+    const root = mkdtempSync(join(tmpdir(), 'eve-sec-index-'));
+    const chunks = join(root, '.wellread', 'extract', 'bk1', 'chunks');
+    mkdirSync(chunks, { recursive: true });
+    writeChunk(chunks, '00001-a.md', {
+      sectionIndex: 4,
+      chunkIndex: 0,
+      title: '"A"',
+      cfi: '"epubcfi(/6/10!/4/2/1:0)"',
+      endCfi: '"epubcfi(/6/10!/4/2/1:20)"',
+    });
+    writeSectionIndex(root, 'bk1', {
+      schemaVersion: 2,
+      sections: {
+        '4': [
+          {
+            fileName: '00001-a.md',
+            chunkIndex: 0,
+            sectionIndex: 4,
+            title: 'A',
+            cfi: 'epubcfi(/6/10!/4/2/1:0)',
+            endCfi: 'epubcfi(/6/10!/4/2/1:20)',
+          },
+        ],
+      },
+      titles: { a: [4] },
+    });
+    const resolved = resolveSectionChunksByIndex(root, 'bk1', 4);
+    assert.equal(resolved.fromIndex, true);
+    assert.equal(resolved.count, 1);
+    assert.match(resolved.paths[0], /00001-a/);
+  });
+});
+
+describe('resolveFocusChunks', () => {
+  it('selects the covering CFI chunk and optional neighbor', () => {
+    const root = mkdtempSync(join(tmpdir(), 'eve-focus-'));
+    const chunks = join(root, '.wellread', 'extract', 'bk1', 'chunks');
+    mkdirSync(chunks, { recursive: true });
+    writeSectionIndex(root, 'bk1', {
+      schemaVersion: 2,
+      sections: {
+        '1': [
+          {
+            fileName: '00001-a.md',
+            chunkIndex: 0,
+            sectionIndex: 1,
+            title: 'A',
+            cfi: 'epubcfi(/6/4!/4/2/1:0)',
+            endCfi: 'epubcfi(/6/4!/4/2/1:10)',
+          },
+          {
+            fileName: '00002-b.md',
+            chunkIndex: 1,
+            sectionIndex: 1,
+            title: 'A',
+            cfi: 'epubcfi(/6/4!/4/2/1:11)',
+            endCfi: 'epubcfi(/6/4!/4/2/1:30)',
+          },
+          {
+            fileName: '00003-c.md',
+            chunkIndex: 2,
+            sectionIndex: 1,
+            title: 'A',
+            cfi: 'epubcfi(/6/4!/4/2/1:31)',
+            endCfi: 'epubcfi(/6/4!/4/2/1:50)',
+          },
+        ],
+      },
+      titles: { a: [1] },
+    });
+    const focus = resolveFocusChunks({
+      booksRoot: root,
+      bookId: 'bk1',
+      readerState: {
+        sectionIndex: 1,
+        cfi: 'epubcfi(/6/4!/4/2/1:15)',
+      },
+    });
+    assert.equal(focus?.via, 'cfi');
+    assert.ok((focus?.count ?? 0) <= FOCUS_CHUNKS_MAX);
+    assert.match(focus?.paths[0] ?? '', /00002-b/);
+  });
+
+  it('ignores oversized reader CFI instead of hanging', () => {
+    const root = mkdtempSync(join(tmpdir(), 'eve-focus-long-'));
+    writeSectionIndex(root, 'bk1', {
+      schemaVersion: 2,
+      sections: {
+        '0': [
+          {
+            fileName: '00001-a.md',
+            chunkIndex: 0,
+            sectionIndex: 0,
+            title: 'A',
+            cfi: 'epubcfi(/6/2!/4/2/1:0)',
+            endCfi: 'epubcfi(/6/2!/4/2/1:5)',
+          },
+        ],
+      },
+      titles: {},
+    });
+    const focus = resolveFocusChunks({
+      booksRoot: root,
+      bookId: 'bk1',
+      readerState: {
+        sectionIndex: 0,
+        cfi: `epubcfi(${'2!'.repeat(100_000)})`,
+      },
+    });
+    assert.equal(focus?.via, 'section_mid');
+    assert.ok((focus?.count ?? 0) >= 1);
+  });
+
+  it('falls back to section midpoint when CFI misses', () => {
+    const root = mkdtempSync(join(tmpdir(), 'eve-focus-mid-'));
+    writeSectionIndex(root, 'bk1', {
+      schemaVersion: 2,
+      sections: {
+        '0': [
+          {
+            fileName: '00001-a.md',
+            chunkIndex: 0,
+            sectionIndex: 0,
+            title: 'A',
+            cfi: 'epubcfi(/6/2!/4/2/1:0)',
+            endCfi: 'epubcfi(/6/2!/4/2/1:5)',
+          },
+          {
+            fileName: '00002-b.md',
+            chunkIndex: 1,
+            sectionIndex: 0,
+            title: 'A',
+            cfi: 'epubcfi(/6/2!/4/2/1:6)',
+            endCfi: 'epubcfi(/6/2!/4/2/1:10)',
+          },
+          {
+            fileName: '00003-c.md',
+            chunkIndex: 2,
+            sectionIndex: 0,
+            title: 'A',
+            cfi: 'epubcfi(/6/2!/4/2/1:11)',
+            endCfi: 'epubcfi(/6/2!/4/2/1:20)',
+          },
+        ],
+      },
+      titles: {},
+    });
+    const focus = resolveFocusChunks({
+      booksRoot: root,
+      bookId: 'bk1',
+      readerState: {
+        sectionIndex: 0,
+        cfi: 'epubcfi(/6/99!/4/2/1:0)',
+      },
+    });
+    assert.equal(focus?.via, 'section_mid');
+    assert.ok((focus?.count ?? 0) >= 1);
   });
 });

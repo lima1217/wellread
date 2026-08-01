@@ -139,7 +139,7 @@ describe('buildSpineChapterTitleLookup', () => {
 });
 
 describe('ensureBookExtract', () => {
-  it('builds toc.md, meta.json, and chunk files with cfi', async () => {
+  it('builds toc.md, meta.json, section-index.json, and chunk files with cfi', async () => {
     const fs = memoryFs();
     const result = await ensureBookExtract({
       bookId: 'bk1',
@@ -155,6 +155,13 @@ describe('ensureBookExtract', () => {
     expect(result.chunkCount).toBeGreaterThan(0);
     expect(fs.files.has('.wellread/extract/bk1/meta.json')).toBe(true);
     expect(fs.files.has('.wellread/extract/bk1/toc.md')).toBe(true);
+    expect(fs.files.has('.wellread/extract/bk1/section-index.json')).toBe(true);
+    const meta = JSON.parse(fs.files.get('.wellread/extract/bk1/meta.json')!);
+    expect(meta.status).toBe('ready');
+    expect(meta.schemaVersion).toBe(EXTRACT_SCHEMA_VERSION);
+    const index = JSON.parse(fs.files.get('.wellread/extract/bk1/section-index.json')!);
+    expect(index.sections['0']?.length).toBeGreaterThan(0);
+    expect(index.sections['0'][0].cfi).toMatch(/^epubcfi\(/);
     const chunkKeys = [...fs.files.keys()].filter((k) => k.includes('/chunks/'));
     expect(chunkKeys.length).toBe(result.chunkCount);
     const sample = fs.files.get(chunkKeys[0]!)!;

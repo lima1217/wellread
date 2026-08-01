@@ -132,6 +132,24 @@ describe('authorizeOkfNotesWrite', () => {
   });
 });
 
+function writeExtractMeta(booksRoot, bookId, chunkCount = 1) {
+  const dir = join(booksRoot, '.wellread', 'extract', bookId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'meta.json'),
+    JSON.stringify({
+      bookId,
+      sourceHash: 'h',
+      sourceMtimeMs: 1,
+      format: 'EPUB',
+      extractedAt: 1,
+      chunkCount,
+      schemaVersion: 2,
+      status: 'ready',
+    }),
+  );
+}
+
 describe('createReadingTools envelopes', () => {
   it('describes glob/grep by role without wide-path examples', () => {
     const tools = createReadingTools({ getBooksRoot: () => '/tmp', bookId: 'bk1' });
@@ -156,6 +174,7 @@ describe('createReadingTools envelopes', () => {
     try {
       const chunks = join(booksRoot, '.wellread', 'extract', bookId, 'chunks');
       mkdirSync(chunks, { recursive: true });
+      writeExtractMeta(booksRoot, bookId, 2);
       writeFileSync(
         join(chunks, '00002-b.md'),
         `---
@@ -281,6 +300,7 @@ a
     try {
       const rel = join('.wellread', 'extract', bookId);
       mkdirSync(join(booksRoot, rel), { recursive: true });
+      writeExtractMeta(booksRoot, bookId, 1);
       writeFileSync(join(booksRoot, rel, 'a.md'), 'hello\n');
       const tools = createReadingTools({ getBooksRoot: () => booksRoot, bookId });
 
@@ -298,6 +318,21 @@ a
       assert.equal(miss.ok, false);
       assert.equal(miss.error, 'not_found');
       assert.equal(miss.content, undefined);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('resolve_section soft-fails with extract_not_ready when meta is missing', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'eve-tools-noready-')));
+    try {
+      const tools = createReadingTools({ getBooksRoot: () => booksRoot, bookId: 'bk1' });
+      const hit = await tools.resolve_section.execute(
+        { sectionIndex: 0 },
+        { toolCallId: 'rs0', messages: [] },
+      );
+      assert.equal(hit.ok, false);
+      assert.equal(hit.error, 'extract_not_ready');
     } finally {
       rmSync(booksRoot, { recursive: true, force: true });
     }

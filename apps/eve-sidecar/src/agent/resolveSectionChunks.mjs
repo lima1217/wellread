@@ -5,13 +5,23 @@
 
 import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { CFI_COMPARE_MAX_LENGTH, cfiInRange } from './epubcfiCompare.mjs';
 import { isSafeBookIdSegment } from './notesOkf.mjs';
+import {
+  chunkWorkspacePath as indexChunkWorkspacePath,
+  loadSectionIndex,
+  pathsForSectionIndex,
+  pathsForTitleIndex,
+} from './sectionIndex.mjs';
 
 /** Above this count, envelope warns the model to confirm before reading all. */
 export const SECTION_CHUNKS_ASK_THRESHOLD = 20;
 
 /** Cap files visited while scanning one extract (DoS / huge books). */
 export const SECTION_CHUNKS_WALK_MAX = 2000;
+
+/** Max focus chunk paths listed in reading_context. */
+export const FOCUS_CHUNKS_MAX = 2;
 
 /**
  * @param {string} block frontmatter body (between --- fences)
@@ -24,8 +34,30 @@ function frontmatterValue(block, key) {
 }
 
 /**
+ * @param {string} rawJsonish
+ * @returns {string}
+ */
+function parseFrontmatterString(rawJsonish) {
+  let title = rawJsonish;
+  if (title.startsWith('"')) {
+    try {
+      title = JSON.parse(title);
+    } catch {
+      title = rawJsonish;
+    }
+  }
+  return typeof title === 'string' ? title.trim() : '';
+}
+
+/**
  * @param {string} raw
- * @returns {{ sectionIndex?: number, chunkIndex?: number, title?: string } | null}
+ * @returns {{
+ *   sectionIndex?: number,
+ *   chunkIndex?: number,
+ *   title?: string,
+ *   cfi?: string,
+ *   endCfi?: string,
+ * } | null}
  */
 export function parseExtractChunkFrontmatter(raw) {
   if (typeof raw !== 'string') return null;
@@ -35,7 +67,15 @@ export function parseExtractChunkFrontmatter(raw) {
   const sectionRaw = frontmatterValue(block, 'sectionIndex');
   const chunkRaw = frontmatterValue(block, 'chunkIndex');
   const titleRaw = frontmatterValue(block, 'title');
-  /** @type {{ sectionIndex?: number, chunkIndex?: number, title?: string }} */
+  const cfiRaw = frontmatterValue(block, 'cfi');
+  const endCfiRaw = frontmatterValue(block, 'endCfi');
+  /** @type {{
+   *   sectionIndex?: number,
+   *   chunkIndex?: number,
+   *   title?: string,
+   *   cfi?: string,
+   *   endCfi?: string,
+   * }} */
   const out = {};
   if (sectionRaw !== undefined) {
     const n = Number(sectionRaw);
@@ -46,20 +86,22 @@ export function parseExtractChunkFrontmatter(raw) {
     if (Number.isFinite(n) && n >= 0) out.chunkIndex = Math.floor(n);
   }
   if (titleRaw !== undefined) {
-    let title = titleRaw;
-    if (title.startsWith('"')) {
-      try {
-        title = JSON.parse(title);
-      } catch {
-        title = titleRaw;
-      }
-    }
-    if (typeof title === 'string' && title.trim()) out.title = title.trim();
+    const title = parseFrontmatterString(titleRaw);
+    if (title) out.title = title;
+  }
+  if (cfiRaw !== undefined) {
+    const cfi = parseFrontmatterString(cfiRaw);
+    if (cfi) out.cfi = cfi;
+  }
+  if (endCfiRaw !== undefined) {
+    const endCfi = parseFrontmatterString(endCfiRaw);
+    if (endCfi) out.endCfi = endCfi;
   }
   if (
     out.sectionIndex === undefined &&
     out.chunkIndex === undefined &&
-    out.title === undefined
+    out.title === undefined &&
+    out.cfi === undefined
   ) {
     return null;
   }
@@ -82,7 +124,7 @@ function chunksHostDir(booksRoot, bookId) {
  * @param {string} fileName
  */
 function chunkWorkspacePath(bookId, fileName) {
-  return `/workspace/.wellread/extract/${bookId}/chunks/${fileName}`;
+  return indexChunkWorkspacePath(bookId, fileName);
 }
 
 /**
@@ -154,15 +196,26 @@ export function resolveSectionChunksByIndex(booksRoot, bookId, sectionIndex) {
     !Number.isFinite(sectionIndex) ||
     sectionIndex < 0
   ) {
-    return { paths: [], count: 0, sectionIndex: -1 };
+    return { paths: [], count: 0, sectionIndex: -1, fromIndex: false };
   }
   const idx = Math.floor(sectionIndex);
+  const index = loadSectionIndex(booksRoot, bookId);
+  if (index) {
+    const hit = pathsForSectionIndex(index, bookId, idx);
+    return {
+      paths: hit.paths,
+      count: hit.count,
+      sectionIndex: idx,
+      fromIndex: true,
+      rows: hit.rows,
+    };
+  }
   const { paths, count } = collectMatchingChunks(
     booksRoot,
     bookId,
     (meta) => meta.sectionIndex === idx,
   );
-  return { paths, count, sectionIndex: idx };
+  return { paths, count, sectionIndex: idx, fromIndex: false };
 }
 
 /**
@@ -175,7 +228,21 @@ export function resolveSectionChunksByIndex(booksRoot, bookId, sectionIndex) {
  */
 export function resolveSectionChunksByTitle(booksRoot, bookId, title) {
   const needle = typeof title === 'string' ? title.trim() : '';
-  if (!needle) return { paths: [], count: 0, title: '' };
+  if (!needle) return { paths: [], count: 0, title: '', fromIndex: false };
+  const index = loadSectionIndex(booksRoot, bookId);
+  if (index) {
+    const hit = pathsForTitleIndex(index, bookId, needle);
+    if (hit) {
+      return {
+        paths: hit.paths,
+        count: hit.count,
+        title: needle,
+        fromIndex: true,
+        rows: hit.rows,
+      };
+    }
+    return { paths: [], count: 0, title: needle, fromIndex: true, rows: [] };
+  }
   let { paths, count } = collectMatchingChunks(
     booksRoot,
     bookId,
@@ -189,7 +256,7 @@ export function resolveSectionChunksByTitle(booksRoot, bookId, title) {
       (meta) => typeof meta.title === 'string' && meta.title.toLowerCase() === lower,
     ));
   }
-  return { paths, count, title: needle };
+  return { paths, count, title: needle, fromIndex: false };
 }
 
 /**
@@ -342,4 +409,109 @@ export function resolveSectionChunksForReader(input) {
   }
 
   return null;
+}
+
+/**
+ * Pick 1–2 chunk paths for the reader's current CFI (or section midpoint fallback).
+ * @param {{
+ *   booksRoot: string,
+ *   bookId: string,
+ *   readerState?: {
+ *     chapter?: string | null,
+ *     cfi?: string | null,
+ *     sectionIndex?: number | null,
+ *   } | null,
+ * }} input
+ * @returns {{
+ *   paths: string[],
+ *   count: number,
+ *   via: 'cfi' | 'section_mid' | 'none',
+ * } | null}
+ */
+export function resolveFocusChunks(input) {
+  const booksRoot = input.booksRoot;
+  const bookId = input.bookId;
+  if (typeof booksRoot !== 'string' || !booksRoot.trim()) return null;
+  if (!isSafeBookIdSegment(bookId)) return null;
+
+  const state = input.readerState;
+  if (!state || typeof state !== 'object') return null;
+
+  const sectionRaw = state.sectionIndex;
+  const hasSection =
+    typeof sectionRaw === 'number' && Number.isFinite(sectionRaw) && sectionRaw >= 0;
+  const cfiRaw = typeof state.cfi === 'string' ? state.cfi.trim() : '';
+  const cfi = cfiRaw.length <= CFI_COMPARE_MAX_LENGTH ? cfiRaw : '';
+
+  if (!hasSection && !cfi && !(typeof state.chapter === 'string' && state.chapter.trim())) {
+    return null;
+  }
+
+  /** @type {{ fileName: string, chunkIndex: number, cfi: string, endCfi: string, path: string }[]} */
+  let rows = [];
+  if (hasSection) {
+    const resolved = resolveSectionChunksByIndex(booksRoot, bookId, sectionRaw);
+    if (resolved.rows?.length) {
+      rows = resolved.rows.map((r) => ({
+        fileName: r.fileName,
+        chunkIndex: r.chunkIndex,
+        cfi: r.cfi,
+        endCfi: r.endCfi,
+        path: chunkWorkspacePath(bookId, r.fileName),
+      }));
+    } else if (resolved.paths.length) {
+      rows = resolved.paths.map((path, i) => ({
+        fileName: path.split('/').pop() ?? '',
+        chunkIndex: i,
+        cfi: '',
+        endCfi: '',
+        path,
+      }));
+    }
+  } else if (typeof state.chapter === 'string' && state.chapter.trim()) {
+    const resolved = resolveSectionChunksByTitle(booksRoot, bookId, state.chapter.trim());
+    if (resolved.rows?.length) {
+      rows = resolved.rows.map((r) => ({
+        fileName: r.fileName,
+        chunkIndex: r.chunkIndex,
+        cfi: r.cfi,
+        endCfi: r.endCfi,
+        path: chunkWorkspacePath(bookId, r.fileName),
+      }));
+    } else {
+      rows = resolved.paths.map((path, i) => ({
+        fileName: path.split('/').pop() ?? '',
+        chunkIndex: i,
+        cfi: '',
+        endCfi: '',
+        path,
+      }));
+    }
+  }
+
+  if (!rows.length) {
+    return { paths: [], count: 0, via: 'none' };
+  }
+
+  if (cfi) {
+    const hitIdx = rows.findIndex(
+      (r) => r.cfi && r.endCfi && cfiInRange(cfi, r.cfi, r.endCfi),
+    );
+    if (hitIdx >= 0) {
+      const paths = [rows[hitIdx].path];
+      const next = rows[hitIdx + 1];
+      if (next && paths.length < FOCUS_CHUNKS_MAX) paths.push(next.path);
+      return { paths, count: paths.length, via: 'cfi' };
+    }
+  }
+
+  // Mid-section fallback (plan: when CFI range match fails).
+  const mid = Math.floor((rows.length - 1) / 2);
+  const paths = [rows[mid].path];
+  if (rows[mid + 1] && paths.length < FOCUS_CHUNKS_MAX) {
+    paths.push(rows[mid + 1].path);
+  } else if (rows[mid - 1] && paths.length < FOCUS_CHUNKS_MAX) {
+    paths.unshift(rows[mid - 1].path);
+  }
+  return { paths, count: paths.length, via: 'section_mid' };
 }

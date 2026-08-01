@@ -73,6 +73,9 @@ importers:
       '@wellread/eve-message':
         specifier: workspace:*
         version: link:../../packages/eve-message
+      '@wellread/extract-contract':
+        specifier: workspace:*
+        version: link:../../packages/extract-contract
       ai:
         specifier: ^5.0.0
         version: 5.0.186(zod@3.25.76)
@@ -184,6 +187,9 @@ importers:
       '@wellread/eve-message':
         specifier: workspace:*
         version: link:../../packages/eve-message
+      '@wellread/extract-contract':
+        specifier: workspace:*
+        version: link:../../packages/extract-contract
       '@zip.js/zip.js':
         specifier: ^2.8.16
         version: 2.8.26
@@ -511,6 +517,8 @@ importers:
         version: 4.90.0
 
   packages/eve-message: {}
+
+  packages/extract-contract: {}
 
   packages/foliate-js:
     dependencies:

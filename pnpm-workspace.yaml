@@ -3,6 +3,7 @@ packages:
   - apps/readest-app/extensions/*
   - packages/foliate-js
   - packages/eve-message
+  - packages/extract-contract
 
 allowBuilds:
   core-js: true

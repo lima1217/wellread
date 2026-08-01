@@ -12,14 +12,18 @@ description: "将选区、引用或当前章节译为简体中文。用户 /skil
 按优先级选源，不要扩大范围：
 
 1. **Pending Quote / 参数选区**（本 skill 上方的 `>` 引用块，和/或 `/skill:translate` 后的参数）：只译这段。
-2. **无选区，用户要「这一页 / 这段 / 当前位置」**：只读 `reading_context` 里当前 `cfi` 所在的 1–2 个 extract chunk（`sectionIndex` 匹配且 `cfi`/`endCfi` 覆盖当前位置），不要整节。
+2. **无选区，用户要「这一页 / 这段 / 当前位置」**：只 `read_file` `<reading_context>` 的 `focus_chunks`（最多 2 条）；不要读满 `section_chunks`。
 3. **无选区，用户要「本章 / 这一节 / 翻译 Unbelievable scenes」**：
    - 若 `<reading_context>` 已有 `section_chunks` 且就是目标节：按序 `read_file` 那些路径。
    - 否则用 `resolve_section`（`sectionIndex` 和/或章名 `title`），再按返回的 `paths` 升序读齐；不要 `glob` extract `chunks/*`。
    - **默认「本章」= 当前 spine 整节**（同一 `sectionIndex` 的全部 chunk）。TOC 与 spine 可能不完全对齐；不要猜邻节。
-   - 若 `count` **多于 20**（或 `askBeforeReadingAll`）：先报章名、`sectionIndex`、chunk 数，问是否继续或只要当前位置附近；不要默默翻超长节。
+   - 若 `count` **多于 20**（或 `askBeforeReadingAll` / `section_chunks_note`）：先报章名、`sectionIndex`、chunk 数，问是否继续或只要当前位置附近；不要默默翻超长节。
 
-定位不到范围时，简短说明缺什么（例如没有 `sectionIndex`、extract 未就绪、章名搜不到），请用户划选或给一句定位原文。不要编造正文。
+若 `extract_status` 为 `missing`：说明 extract 不可用，请用户打开该书等待 extract 完成；不要空转 glob/grep。定位不到范围时，简短说明缺什么，请用户划选或给一句定位原文。不要编造正文。
+
+## Done when
+
+源文范围已锁定且译文覆盖该范围每一句；章级超长节已询问或已按用户选择缩小范围。
 
 ## 准则
 

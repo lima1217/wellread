@@ -25,7 +25,11 @@ import {
   collectSourcesFromTools,
   listNotesIndex,
 } from './prompt.mjs';
-import { resolveSectionChunksForReader } from './resolveSectionChunks.mjs';
+import { readExtractStatus } from './extractMeta.mjs';
+import {
+  resolveFocusChunks,
+  resolveSectionChunksForReader,
+} from './resolveSectionChunks.mjs';
 import { maybeApplyFirstTurnTitle } from './sessionStore.mjs';
 import { discoverSkills } from './skills/discover.mjs';
 import { createReadingTools } from './tools.mjs';
@@ -37,6 +41,8 @@ import {
   toolsFromUIMessage,
   uiMessageToSession,
 } from './uiMessage.mjs';
+import { parseSlashInvocation } from './skills/invoke.mjs';
+import { logTurnContract } from './turnLog.mjs';
 import { prepareUserTurn } from './userTurn.mjs';
 
 /** Fallback when caller omits contextWindowTokens (matches createModel default). */
@@ -109,6 +115,16 @@ export function runTurn(input) {
         readerState: input.readerState,
       })
     : null;
+  const focusChunks = booksRoot
+    ? resolveFocusChunks({
+        booksRoot,
+        bookId: session.bookId,
+        readerState: input.readerState,
+      })
+    : null;
+  const extractStatus = booksRoot
+    ? readExtractStatus(booksRoot, session.bookId)
+    : { status: 'missing', chunkCount: 0, schemaVersion: null };
   const envelope = buildReadingContextEnvelope({
     bookId: session.bookId,
     bookTitle: session.bookTitle,
@@ -116,6 +132,8 @@ export function runTurn(input) {
     quotes: turnQuotes,
     priorSources,
     notesIndex,
+    extractStatus,
+    focusChunks,
     sectionChunks,
   });
   const instructions = buildSystemPrompt({
@@ -124,6 +142,18 @@ export function runTurn(input) {
     skills,
   });
   const system = appendReadingContext(instructions, envelope);
+
+  logTurnContract({
+    sessionId: session.id,
+    bookId: session.bookId,
+    extractStatus: extractStatus.status,
+    focusVia: focusChunks?.via ?? null,
+    focusCount: focusChunks?.count ?? 0,
+    sectionVia: sectionChunks?.via ?? null,
+    sectionCount: sectionChunks?.count ?? 0,
+    skillId: parseSlashInvocation(input.userMessage)?.skillId ?? null,
+    quoteCount: Array.isArray(turnQuotes) ? turnQuotes.length : 0,
+  });
 
   const contextWindowTokens =
     Number(input.contextWindowTokens) > 0

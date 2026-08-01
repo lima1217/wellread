@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import {
+  CHUNK_FILE_NAME_PATTERN,
+  EXTRACT_META_JSON_SCHEMA,
+  EXTRACT_SCHEMA_VERSION,
+  SECTION_INDEX_JSON_SCHEMA,
+  isCurrentExtractSchema,
+  isSafeChunkFileName,
+} from './index.mjs';
+
+const contractDoc = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../apps/readest-app/docs/reading-assistant-contract.md',
+);
+
+describe('extract-contract SSOT', () => {
+  it('pins schema version and embeds it in JSON Schemas', () => {
+    assert.equal(EXTRACT_SCHEMA_VERSION, 2);
+    assert.equal(EXTRACT_META_JSON_SCHEMA.properties.schemaVersion.const, EXTRACT_SCHEMA_VERSION);
+    assert.equal(SECTION_INDEX_JSON_SCHEMA.properties.schemaVersion.const, EXTRACT_SCHEMA_VERSION);
+  });
+
+  it('keeps reading-assistant-contract.md appendix version in sync', () => {
+    const md = readFileSync(contractDoc, 'utf8');
+    assert.match(
+      md,
+      new RegExp(`Current \`EXTRACT_SCHEMA_VERSION\` is \\*\\*${EXTRACT_SCHEMA_VERSION}\\*\\*`),
+    );
+    assert.match(md, new RegExp(`"schemaVersion": \\{ "type": "number", "const": ${EXTRACT_SCHEMA_VERSION} \\}`));
+  });
+
+  it('accepts host chunk file names and rejects traversal', () => {
+    assert.equal(isSafeChunkFileName('00001-loomings.md'), true);
+    assert.equal(CHUNK_FILE_NAME_PATTERN.test('00001-loomings.md'), true);
+    assert.equal(isSafeChunkFileName('../../../notes/x.md'), false);
+    assert.equal(isSafeChunkFileName('00001-A.md'), false);
+    assert.equal(isSafeChunkFileName(''), false);
+  });
+
+  it('isCurrentExtractSchema gates ready trees', () => {
+    assert.equal(isCurrentExtractSchema(EXTRACT_SCHEMA_VERSION), true);
+    assert.equal(isCurrentExtractSchema(EXTRACT_SCHEMA_VERSION + 1), true);
+    assert.equal(isCurrentExtractSchema(1), false);
+    assert.equal(isCurrentExtractSchema(null), false);
+  });
+});

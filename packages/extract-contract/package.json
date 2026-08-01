@@ -1,0 +1,19 @@
+{
+  "name": "@wellread/extract-contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "On-disk extract schema SSOT for Reading Assistant (host writer + eve sidecar).",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.mjs"
+    }
+  },
+  "scripts": {
+    "test": "node --test src/**/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

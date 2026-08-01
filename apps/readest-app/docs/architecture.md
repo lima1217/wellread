@@ -210,6 +210,8 @@ product.
 - Runtime: eve sidecar agent loop, tool rounds, scoped Books search
 - Shared message conversion: `packages/eve-message` (`@wellread/eve-message`) —
   SessionMessage ↔ AI SDK UIMessage; sessions persist ordered `parts`
+- Contract SSOT: [`reading-assistant-contract.md`](./reading-assistant-contract.md)
+  (extract tree, tools, `<reading_context>`, skills)
 
 **Protocol (breaking):** `POST /eve/v1/sessions/:id/turns` streams AI SDK
 **UIMessage SSE** (`text/event-stream` via `pipeUIMessageStreamToResponse`),

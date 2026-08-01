@@ -1,16 +1,18 @@
+import {
+  EXTRACT_SCHEMA_VERSION,
+  type ExtractMeta,
+  type ExtractReadyStatus,
+  type SectionIndexChunk,
+  type SectionIndexFile,
+} from '@wellread/extract-contract';
 import type { ChunkRow } from './CfiChunker';
 
-/** Bump when extract on-disk shape/semantics change (forces rebuild). */
-export const EXTRACT_SCHEMA_VERSION = 1;
-
-export type ExtractMeta = {
-  bookId: string;
-  sourceHash: string;
-  sourceMtimeMs: number | null;
-  format: string;
-  extractedAt: number;
-  chunkCount: number;
-  schemaVersion: number;
+export {
+  EXTRACT_SCHEMA_VERSION,
+  type ExtractMeta,
+  type ExtractReadyStatus,
+  type SectionIndexChunk,
+  type SectionIndexFile,
 };
 
 export type ExtractChunkInput = {
@@ -79,6 +81,50 @@ export function chunkRowToExtractInput(row: ChunkRow, chunkIndex: number): Extra
   };
 }
 
+/**
+ * Build `section-index.json` payload for sidecar O(1) section/title resolve.
+ */
+export function buildSectionIndexFile(
+  entries: Array<{
+    fileName: string;
+    chunkIndex: number;
+    sectionIndex: number;
+    title: string | null;
+    cfi: string;
+    endCfi: string;
+  }>,
+): SectionIndexFile {
+  const sections: Record<string, SectionIndexChunk[]> = {};
+  const titles: Record<string, number[]> = {};
+  for (const e of entries) {
+    const key = String(e.sectionIndex);
+    const row: SectionIndexChunk = {
+      fileName: e.fileName,
+      chunkIndex: e.chunkIndex,
+      sectionIndex: e.sectionIndex,
+      title: e.title,
+      cfi: e.cfi,
+      endCfi: e.endCfi,
+    };
+    (sections[key] ??= []).push(row);
+    const label = (e.title ?? '').trim().toLowerCase();
+    if (label) {
+      const list = (titles[label] ??= []);
+      if (!list.includes(e.sectionIndex)) list.push(e.sectionIndex);
+    }
+  }
+  for (const key of Object.keys(sections)) {
+    sections[key]!.sort(
+      (a, b) => a.chunkIndex - b.chunkIndex || a.fileName.localeCompare(b.fileName),
+    );
+  }
+  return { schemaVersion: EXTRACT_SCHEMA_VERSION, sections, titles };
+}
+
+export function formatSectionIndexJson(index: SectionIndexFile): string {
+  return `${JSON.stringify(index, null, 2)}\n`;
+}
+
 export function extractDir(bookId: string): string {
   return `.wellread/extract/${bookId}`;
 }
@@ -106,6 +152,7 @@ export function parseExtractMeta(json: string): ExtractMeta | null {
       extractedAt: typeof v.extractedAt === 'number' ? v.extractedAt : 0,
       chunkCount: typeof v.chunkCount === 'number' ? v.chunkCount : 0,
       schemaVersion: typeof v.schemaVersion === 'number' ? v.schemaVersion : 0,
+      status: 'ready',
     };
   } catch {
     return null;

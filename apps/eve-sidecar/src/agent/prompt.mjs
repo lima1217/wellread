@@ -5,8 +5,12 @@
 
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
+import { CFI_COMPARE_MAX_LENGTH } from './epubcfiCompare.mjs';
 import { isSafeBookIdSegment } from './notesOkf.mjs';
-import { SECTION_CHUNKS_ASK_THRESHOLD } from './resolveSectionChunks.mjs';
+import {
+  FOCUS_CHUNKS_MAX,
+  SECTION_CHUNKS_ASK_THRESHOLD,
+} from './resolveSectionChunks.mjs';
 
 /** Max prior CFI sources replayed into the reading-context envelope. */
 export const PRIOR_SOURCES_MAX = 12;
@@ -32,10 +36,11 @@ export function normalizeReaderState(raw) {
     typeof /** @type {{ chapter?: unknown }} */ (raw).chapter === 'string'
       ? /** @type {{ chapter: string }} */ (raw).chapter.trim()
       : '';
-  const cfi =
+  const cfiRaw =
     typeof /** @type {{ cfi?: unknown }} */ (raw).cfi === 'string'
       ? /** @type {{ cfi: string }} */ (raw).cfi.trim()
       : '';
+  const cfi = cfiRaw.length <= CFI_COMPARE_MAX_LENGTH ? cfiRaw : '';
   const sectionRaw = /** @type {{ sectionIndex?: unknown }} */ (raw).sectionIndex;
   const sectionIndex =
     typeof sectionRaw === 'number' &&
@@ -65,9 +70,16 @@ export function buildSystemPrompt(input) {
   const lines = [
     "You are wellread's Reading Assistant — scoped to the current book only.",
     `Current book: "${title}" (bookId=${input.bookId}).`,
-    `Extract: ${extractRoot} — UTF-8 text of this book: toc.md (chunk list by title), chunks/*.md (ordered body slices; frontmatter has title, sectionIndex, chunkIndex, cfi), meta.json. Tools on that tree: resolve_section, read_file, grep, glob. Not epub/pdf binaries.`,
+    `Extract: ${extractRoot} — UTF-8 text of this book: toc.md, section-index.json, chunks/*.md (frontmatter: title, sectionIndex, chunkIndex, cfi, endCfi), meta.json. Tools: resolve_section, read_file, grep, glob. Not epub/pdf binaries.`,
     "Grounding is optional: answer freely when you already know enough; search the extract when you need this book's text; cite locations when you reference specific passages.",
-    'Locate extract text without listing the whole tree: when <reading_context> lists section_chunks for the passage you need, read_file those paths in order. For any other section/chapter (or when section_chunks is missing/empty), call resolve_section with sectionIndex and/or title, then read_file the returned paths — never glob extract/**/chunks/*.md to discover a section. If count exceeds 20 (or askBeforeReadingAll is true), report the count and ask whether to continue or only nearby chunks before reading all. Use grep for phrase search inside the book; use glob for notes paths, not section discovery.',
+    'Locate extract text without listing the whole tree:',
+    '- Quotes in <reading_context> are the primary target when present.',
+    '- For "this page / current position / this passage": read_file focus_chunks only (do not read all section_chunks).',
+    '- For "this chapter / whole section" or when focus_chunks is empty: use section_chunks paths in order, or resolve_section(sectionIndex and/or title) then read_file — never glob extract/**/chunks/*.md to discover a section.',
+    `- If section_chunk_count > ${SECTION_CHUNKS_ASK_THRESHOLD} (or section_chunks_note asks), report the count and ask before reading all.`,
+    '- If extract_status is missing: say extract is unavailable; do not empty-loop with glob/grep.',
+    '- If extract_status is stale: tools still work (index may be missing — prefer resolve_section / scan paths); do not claim extract is broken.',
+    '- Use grep for phrase search; use glob for notes paths, not section discovery.',
     `Notes: ${notesRoot} — this book's notes wiki (OKF tree: index.md, log.md, sources|chapters|concepts|frameworks|claims|glossary|questions). Read with glob/grep/read_file; write_file only on an explicit user ask to save; overwrite in place; no confirmation prompts. AGENTS.md and tools/validators live under /workspace/skills/note/ (read-only); do not write_file them into notes.`,
     'When you cite a passage, write a markdown link: [section title](<epubcfi(...)>) using the full chunk frontmatter cfi including the epubcfi(…) wrapper (angle brackets required). Never write bare paths like cfi: /6/… and never wrap cfi in backticks — the reader jumps from the link.',
     "Reply in the user's language. Plain prose only — no emoji.",
@@ -297,6 +309,12 @@ function walkNotes(dir, root, spine, rest, state) {
  *   quotes?: Array<{ text: string, chapterTitle?: string | null }> | null,
  *   priorSources?: Array<{ cfi: string, title?: string, path?: string }> | null,
  *   notesIndex?: string[] | null,
+ *   extractStatus?: { status: string, chunkCount?: number } | null,
+ *   focusChunks?: {
+ *     paths: string[],
+ *     count: number,
+ *     via: 'cfi' | 'section_mid' | 'none' | null,
+ *   } | null,
  *   sectionChunks?: {
  *     paths: string[],
  *     count: number,
@@ -315,6 +333,17 @@ export function buildReadingContextEnvelope(input) {
     `bookId: ${JSON.stringify(input.bookId)}`,
   ];
 
+  const extractStatus = input.extractStatus;
+  if (extractStatus && typeof extractStatus.status === 'string' && extractStatus.status) {
+    body.push(`extract_status: ${extractStatus.status}`);
+    if (
+      typeof extractStatus.chunkCount === 'number' &&
+      Number.isFinite(extractStatus.chunkCount)
+    ) {
+      body.push(`extract_chunk_count: ${Math.max(0, Math.floor(extractStatus.chunkCount))}`);
+    }
+  }
+
   const position = normalizeReaderState(input.readerState);
   if (position) {
     body.push('position: (client-reported, may be stale)');
@@ -324,6 +353,26 @@ export function buildReadingContextEnvelope(input) {
     if (position.cfi) body.push(`  cfi: ${JSON.stringify(position.cfi)}`);
     if (position.sectionIndex !== undefined) {
       body.push(`  sectionIndex: ${position.sectionIndex}`);
+    }
+  }
+
+  const focusChunks = input.focusChunks;
+  const focusPaths =
+    focusChunks && Array.isArray(focusChunks.paths)
+      ? focusChunks.paths
+          .filter((p) => typeof p === 'string' && p.trim())
+          .slice(0, FOCUS_CHUNKS_MAX)
+      : [];
+  if (focusChunks && focusChunks.via && focusChunks.via !== 'none') {
+    body.push(`focus_chunks_via: ${focusChunks.via}`);
+    body.push(`focus_chunk_count: ${focusPaths.length}`);
+    if (focusPaths.length) {
+      body.push('focus_chunks:');
+      for (const p of focusPaths) {
+        body.push(`  - ${JSON.stringify(p.trim())}`);
+      }
+    } else {
+      body.push('focus_chunks: (none matched)');
     }
   }
 
@@ -406,6 +455,8 @@ export function buildReadingContextEnvelope(input) {
   // book/bookId alone are already in the base system prompt — skip empty envelope.
   const hasExtra =
     Boolean(position) ||
+    Boolean(extractStatus?.status) ||
+    Boolean(focusChunks?.via && focusChunks.via !== 'none') ||
     Boolean(sectionChunks?.via) ||
     quoteLines.length > 0 ||
     priors.length > 0 ||

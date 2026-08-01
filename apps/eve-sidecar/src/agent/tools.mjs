@@ -11,6 +11,10 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { createBooksFsSession, globWellread, grepWellread, normalizeAbsolute } from '../books/index.mjs';
 import {
+  extractUnavailableEnvelope,
+  readExtractStatus,
+} from './extractMeta.mjs';
+import {
   OKF_NOTES_DIRS,
   OKF_NOTES_ROOT_FILES,
   isSafeBookIdSegment,
@@ -19,6 +23,31 @@ import {
 import { resolveSectionQuery } from './resolveSectionChunks.mjs';
 
 export { OKF_NOTES_DIRS, OKF_NOTES_ROOT_FILES } from './notesOkf.mjs';
+
+function isExtractWorkspacePath(path) {
+  return (
+    typeof path === 'string' &&
+    path.startsWith('/workspace/.wellread/extract/')
+  );
+}
+
+/**
+ * @param {() => string} getBooksRoot
+ * @param {string} bookId
+ */
+function booksExtractGate(getBooksRoot, bookId) {
+  try {
+    const booksRoot = getBooksRoot();
+    const status = readExtractStatus(booksRoot, bookId);
+    return extractUnavailableEnvelope(status.status);
+  } catch (err) {
+    return {
+      ok: false,
+      error: 'unavailable',
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
 
 /** Cap model-facing grep hits (search may return more internally). */
 export const GREP_MODEL_HIT_MAX = 40;
@@ -204,6 +233,10 @@ export function createReadingTools(options) {
         path: z.string().describe('Absolute workspace path starting with /workspace'),
       }),
       execute: async ({ path }) => {
+        if (isExtractWorkspacePath(path)) {
+          const gate = booksExtractGate(options.getBooksRoot, bookId);
+          if (gate) return { ...gate, path };
+        }
         try {
           const bytes = await session.readFile({ path });
           if (bytes === null) {
@@ -294,6 +327,10 @@ export function createReadingTools(options) {
             paths: [],
           };
         }
+        const gate = extractUnavailableEnvelope(
+          readExtractStatus(booksRoot, bookId).status,
+        );
+        if (gate) return { ...gate, count: 0, paths: [] };
         return resolveSectionQuery({
           booksRoot,
           bookId,
@@ -339,6 +376,10 @@ export function createReadingTools(options) {
           .describe('Treat pattern as regex (default true); set false for literal match'),
       }),
       execute: async ({ pattern, path, regex }) => {
+        if (typeof path === 'string' && isExtractWorkspacePath(path.trim())) {
+          const gate = booksExtractGate(options.getBooksRoot, bookId);
+          if (gate) return { ...gate, hits: [] };
+        }
         try {
           const hits = grepWellread(options.getBooksRoot(), pattern, {
             path,
@@ -347,10 +388,19 @@ export function createReadingTools(options) {
           });
           return { ok: true, hits: hits.map(projectGrepHitForModel) };
         } catch (err) {
+          const msg = errorMessage(err);
+          if (msg.startsWith('invalid_grep_pattern:')) {
+            return {
+              ok: false,
+              error: 'invalid_grep_pattern',
+              message: msg,
+              hits: [],
+            };
+          }
           return {
             ok: false,
             error: 'denied',
-            message: errorMessage(err),
+            message: msg,
             hits: [],
           };
         }

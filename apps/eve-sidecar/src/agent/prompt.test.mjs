@@ -210,6 +210,28 @@ describe('buildReadingContextEnvelope', () => {
     assert.doesNotMatch(env, /cfi:/);
   });
 
+  it('lists extract_status and focus_chunks for current position', () => {
+    const env = buildReadingContextEnvelope({
+      bookId: 'bk1',
+      bookTitle: 'Book',
+      extractStatus: { status: 'ready', chunkCount: 12 },
+      readerState: { sectionIndex: 1, cfi: 'epubcfi(/6/4!)' },
+      focusChunks: {
+        paths: [
+          '/workspace/.wellread/extract/bk1/chunks/00002-b.md',
+          '/workspace/.wellread/extract/bk1/chunks/00003-c.md',
+        ],
+        count: 2,
+        via: 'cfi',
+      },
+    });
+    assert.match(env, /extract_status: ready/);
+    assert.match(env, /extract_chunk_count: 12/);
+    assert.match(env, /focus_chunks_via: cfi/);
+    assert.match(env, /focus_chunks:/);
+    assert.match(env, /00002-b\.md/);
+  });
+
   it('lists resolved section_chunks paths and long-section note', () => {
     const paths = Array.from(
       { length: 21 },
