@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 
 import { useTranslation } from '@/hooks/useTranslation';
-import { summarizeToolTrace, type AssistantToolTrace } from '@/services/wellread/assistant/helpers';
+import type { SessionToolTrace } from '@wellread/eve-message';
+import { summarizeToolTrace } from '@/services/wellread/assistant/displayParts';
 import { focusRing } from './AssistantMarkdown';
 
-export function ToolStep({ tool }: { tool: AssistantToolTrace }) {
+export function ToolStep({ tool }: { tool: SessionToolTrace }) {
   const _ = useTranslation();
   const [open, setOpen] = useState(false);
   const pending = tool.result === undefined;
@@ -84,7 +85,7 @@ export function ToolsBlock({
   tools,
   forceCollapsed,
 }: {
-  tools: AssistantToolTrace[];
+  tools: SessionToolTrace[];
   forceCollapsed?: boolean;
 }) {
   const _ = useTranslation();

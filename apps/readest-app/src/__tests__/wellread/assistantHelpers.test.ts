@@ -1,21 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatEveSourceLabel,
-  formatWorkDuration,
-  hydrateEveMessagesForDisplay,
   isAssistantSourceHref,
   isExternalHttpHref,
-  isReadingAssistantAvailable,
   linkifyBareEpubCfi,
   normalizeEpubCfi,
   resolveEveSource,
-  shouldPushAgentSessionToStore,
-  shouldShowPendingReply,
   stripAssistantCfiCitations,
-  summarizeToolTrace,
+} from '@/services/wellread/assistant/cfiLinks';
+import {
   assistantPartInputsFromMessage,
   coalesceAssistantParts,
-} from '@/services/wellread/assistant/helpers';
+  summarizeToolTrace,
+} from '@/services/wellread/assistant/displayParts';
+import { isReadingAssistantAvailable } from '@/services/wellread/assistant/gate';
+import { hydrateEveMessagesForDisplay } from '@/services/wellread/assistant/quoteWire';
+import {
+  formatWorkDuration,
+  shouldPushAgentSessionToStore,
+  shouldShowPendingReply,
+} from '@/services/wellread/assistant/sessionUi';
 
 describe('isReadingAssistantAvailable', () => {
   it('requires enabled, sidecar ready, valid active profile, and non-empty apiKey', () => {

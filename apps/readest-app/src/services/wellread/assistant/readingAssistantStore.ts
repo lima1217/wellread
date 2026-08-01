@@ -4,18 +4,13 @@
  */
 
 import { create } from 'zustand';
+import type { PendingQuoteForTurn } from '@wellread/quote-wire';
 import { uniqueId } from '@/utils/misc';
 
-export type PendingQuote = {
-  id: string;
-  text: string;
-  chapterTitle: string | null;
-};
+/** Live bar quote: wire shape plus store id (chapterTitle normalized to null). */
+export type PendingQuote = PendingQuoteForTurn & { id: string; chapterTitle: string | null };
 
-export type PendingQuoteInput = {
-  text: string;
-  chapterTitle?: string | null;
-};
+export type PendingQuoteInput = PendingQuoteForTurn;
 
 type ReadingAssistantState = {
   activeSessionId: string | null;

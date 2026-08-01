@@ -36,11 +36,12 @@ import { createReadingTools } from './tools.mjs';
 import { createReasoningEmitter } from './reasoningEmitter.mjs';
 import { prepareToolExhaustionStep, resolveMaxToolRounds } from './toolRounds.mjs';
 import {
+  encodeEveSideChunk,
   sessionToUIMessage,
   textFromUIMessage,
   toolsFromUIMessage,
   uiMessageToSession,
-} from './uiMessage.mjs';
+} from '@wellread/eve-message';
 import { parseSlashInvocation } from './skills/invoke.mjs';
 import { logTurnContract } from './turnLog.mjs';
 import { prepareUserTurn } from './userTurn.mjs';
@@ -247,23 +248,8 @@ export function runTurn(input) {
           systemPrompt: system,
           contextWindowTokens,
           onEvent: (event) => {
-            if (event.type === 'context.compressed') {
-              writer.write({
-                type: 'data-eve-context-compressed',
-                data: {
-                  beforeTokens: event.beforeTokens,
-                  afterTokens: event.afterTokens,
-                  targetTokens: event.targetTokens,
-                  removedIds: event.removedIds,
-                  summary: event.summary,
-                },
-              });
-            } else if (event.type === 'context.compress_failed') {
-              writer.write({
-                type: 'data-eve-context-compress-failed',
-                data: { message: event.message },
-              });
-            }
+            const chunk = encodeEveSideChunk(event);
+            if (chunk) writer.write(chunk);
           },
           abortSignal,
           generateTextFn: input.generateTextFn,

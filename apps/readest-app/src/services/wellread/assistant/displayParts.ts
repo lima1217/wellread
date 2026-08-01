@@ -2,7 +2,7 @@
  * Assistant stream-part coalescing for chat display.
  */
 
-import { toolsFromUIMessage } from '@wellread/eve-message';
+import { toolsFromUIMessage, type SessionToolTrace } from '@wellread/eve-message';
 
 export type ToolTraceEntry = { name: string };
 
@@ -25,21 +25,14 @@ export function summarizeToolTrace(tools: ToolTraceEntry[]): ToolTraceSummary | 
   };
 }
 
-export type AssistantToolTrace = {
-  id: string;
-  name: string;
-  args?: unknown;
-  result?: unknown;
-};
-
 export type AssistantPartInput =
   | { kind: 'reasoning'; text: string }
-  | { kind: 'tool'; tool: AssistantToolTrace }
+  | { kind: 'tool'; tool: SessionToolTrace }
   | { kind: 'text'; text: string };
 
 export type AssistantDisplaySegment =
   | { kind: 'reasoning'; text: string }
-  | { kind: 'tools'; tools: AssistantToolTrace[] }
+  | { kind: 'tools'; tools: SessionToolTrace[] }
   | { kind: 'text'; text: string };
 
 /**
@@ -49,7 +42,7 @@ export type AssistantDisplaySegment =
 export function coalesceAssistantParts(parts: AssistantPartInput[]): AssistantDisplaySegment[] {
   const out: AssistantDisplaySegment[] = [];
   let reasoning = '';
-  let tools: AssistantToolTrace[] = [];
+  let tools: SessionToolTrace[] = [];
 
   const flushReasoning = () => {
     if (!reasoning.trim()) {
@@ -95,7 +88,7 @@ type PartLike = { type?: string; text?: string; [key: string]: unknown };
 export function assistantPartInputsFromMessage(msg: {
   content: string;
   reasoning?: string;
-  tools?: AssistantToolTrace[];
+  tools?: SessionToolTrace[];
   parts?: PartLike[] | unknown[];
 }): AssistantPartInput[] {
   const parts = msg.parts as PartLike[] | undefined;

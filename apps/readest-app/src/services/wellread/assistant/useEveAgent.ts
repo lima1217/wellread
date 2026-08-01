@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { eventDispatcher } from '@/utils/event';
 import { stubTranslation as _ } from '@/utils/misc';
+import type { SessionToolTrace } from '@wellread/eve-message';
+import type { ReaderState } from '@wellread/reading-context';
+import { formatPendingQuotesForTurn } from '@wellread/quote-wire';
 import {
   createEveSession,
   getEveSession,
@@ -10,12 +13,9 @@ import {
   streamEveTurn,
   uiMessageToEveMessage,
   type EveMessage,
-  type EveReaderState,
   type EveStreamEvent,
-  type EveToolTrace,
   type ThinkingMode,
 } from './eveClient';
-import { formatPendingQuotesForTurn } from '@wellread/quote-wire';
 import { hydrateEveMessagesForDisplay } from './quoteWire';
 import type { PendingQuote } from './readingAssistantStore';
 import {
@@ -24,7 +24,7 @@ import {
   TURN_IN_FLIGHT_RETRY_MS,
 } from './turnLifecycle';
 
-function toolsInFlightFromMessage(msg: EveMessage): EveToolTrace[] {
+function toolsInFlightFromMessage(msg: EveMessage): SessionToolTrace[] {
   const tools = msg.tools ?? [];
   return tools.filter((t) => t.result === undefined);
 }
@@ -39,7 +39,7 @@ async function* streamEveTurnRetrying(
   signal: AbortSignal,
   options: {
     thinkingMode: ThinkingMode;
-    readerState?: EveReaderState | null;
+    readerState?: ReaderState | null;
   },
 ): AsyncGenerator<EveStreamEvent> {
   let lastError: unknown;
@@ -72,7 +72,7 @@ export type UseEveAgentOptions = {
   /** Composer Thinking Mode for the next turn (default fast). */
   thinkingMode?: ThinkingMode;
   /** Optional snapshot of the reader's current chapter/CFI for this turn. */
-  getReaderState?: () => EveReaderState | null | undefined;
+  getReaderState?: () => ReaderState | null | undefined;
 };
 
 export type SendTurnInput = {
@@ -94,7 +94,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
   const [status, setStatus] = useState<UseEveAgentStatus>('ready');
   const [error, setError] = useState<Error | null>(null);
   const [composer, setComposer] = useState('');
-  const [inFlightTools, setInFlightTools] = useState<EveToolTrace[]>([]);
+  const [inFlightTools, setInFlightTools] = useState<SessionToolTrace[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   /** In-flight send promise — Stop → resend awaits teardown before the next POST. */
   const turnPromiseRef = useRef<Promise<void> | null>(null);

@@ -6,15 +6,14 @@ import clsx from 'clsx';
 
 import { useTranslation } from '@/hooks/useTranslation';
 import { writeTextToClipboard } from '@/utils/clipboard';
-import {
-  formatWorkDuration,
-  stripAssistantCfiCitations,
-} from '@/services/wellread/assistant/helpers';
-import type { EveMessage, EveMessageQuote } from '@/services/wellread/assistant/eveClient';
+import type { PendingQuoteForTurn } from '@wellread/quote-wire';
+import { stripAssistantCfiCitations } from '@/services/wellread/assistant/cfiLinks';
+import type { EveMessage } from '@/services/wellread/assistant/eveClient';
 import type { PendingQuote } from '@/services/wellread/assistant/readingAssistantStore';
+import { formatWorkDuration } from '@/services/wellread/assistant/sessionUi';
 import { focusRing, messageTypeClass } from './AssistantMarkdown';
 
-export function QuoteStack({ quotes }: { quotes: EveMessageQuote[] }) {
+export function QuoteStack({ quotes }: { quotes: PendingQuoteForTurn[] }) {
   if (!quotes.length) return null;
   return (
     <div className='mb-1.5 flex flex-col gap-1 pb-0.5'>

@@ -4,13 +4,16 @@
  */
 
 import {
+  decodeEveSideChunk,
   sessionToUIMessage,
   uiMessageToSession,
+  type EveSideEvent,
   type SessionMessage,
   type SessionSource,
   type SessionToolTrace,
 } from '@wellread/eve-message';
 import { normalizeReaderState, type ReaderState } from '@wellread/reading-context';
+import type { PendingQuoteForTurn } from '@wellread/quote-wire';
 import {
   parseJsonEventStream,
   readUIMessageStream,
@@ -23,28 +26,14 @@ import { eveFetch } from './eveFetch';
 
 type EveUIMessagePart = UIMessage['parts'][number];
 
-export type EveSource = SessionSource;
-
-/** Client-reported reading position for the sidecar reading-context envelope. */
-export type EveReaderState = ReaderState;
-
-export type EveToolTrace = SessionToolTrace;
-
-export type EveMessageQuote = {
-  text: string;
-  chapterTitle?: string | null;
-};
-
 /**
  * Host view of a session message. `parts` is authoritative for assistant turns
  * when present; flat fields are denormalized / legacy. `quotes` is FE-only
  * (disk stores quote wire inside user `content`).
  */
-export type EveMessage = Omit<SessionMessage, 'parts' | 'sources' | 'tools'> & {
+export type EveMessage = Omit<SessionMessage, 'parts'> & {
   parts?: EveUIMessagePart[];
-  sources?: EveSource[];
-  tools?: EveToolTrace[];
-  quotes?: EveMessageQuote[];
+  quotes?: PendingQuoteForTurn[];
 };
 
 export type EveSessionMeta = {
@@ -60,25 +49,9 @@ export type EveSession = EveSessionMeta & { messages: EveMessage[] };
 
 export type ThinkingMode = 'think' | 'fast';
 
-export type EveStreamEvent =
-  | { type: 'ui-message'; message: UIMessage }
-  | {
-      type: 'context.compressed';
-      beforeTokens: number;
-      afterTokens: number;
-      targetTokens: number;
-      removedIds: string[];
-      summary: {
-        id: string;
-        role: 'assistant' | 'user' | 'system';
-        content: string;
-        createdAt: number;
-        compacted?: boolean;
-      };
-    }
-  | { type: 'context.compress_failed'; message: string }
-  | { type: 'error'; message: string }
-  | { type: 'abort'; reason?: string };
+export type EveStreamEvent = { type: 'ui-message'; message: UIMessage } | EveSideEvent;
+
+export type { SessionSource, SessionToolTrace, ReaderState, PendingQuoteForTurn };
 
 function authHeaders(token: string | undefined): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -191,7 +164,7 @@ export async function* streamEveTurn(
   signal?: AbortSignal,
   options?: {
     thinkingMode?: ThinkingMode;
-    readerState?: EveReaderState | null;
+    readerState?: ReaderState | null;
   },
 ): AsyncGenerator<EveStreamEvent> {
   const { baseUrl, token } = base();
@@ -225,7 +198,7 @@ export async function* streamEveTurn(
       while (true) {
         const { done, value } = await sideReader.read();
         if (done) break;
-        const side = uiChunkToSideEvent(value);
+        const side = decodeEveSideChunk(value);
         if (side) sideQueue.push(side);
       }
     } catch (err) {
@@ -261,40 +234,10 @@ export async function* streamEveTurn(
   }
 }
 
-function uiChunkToSideEvent(chunk: UIMessageChunk): EveStreamEvent | null {
-  if (chunk.type === 'error') {
-    return { type: 'error', message: chunk.errorText };
-  }
-  if (chunk.type === 'abort') {
-    return { type: 'abort', reason: 'reason' in chunk ? String(chunk.reason ?? '') : undefined };
-  }
-  if (chunk.type === 'data-eve-context-compressed') {
-    const data = chunk.data as {
-      beforeTokens: number;
-      afterTokens: number;
-      targetTokens: number;
-      removedIds: string[];
-      summary: {
-        id: string;
-        role: 'assistant' | 'user' | 'system';
-        content: string;
-        createdAt: number;
-        compacted?: boolean;
-      };
-    };
-    return { type: 'context.compressed', ...data };
-  }
-  if (chunk.type === 'data-eve-context-compress-failed') {
-    const data = chunk.data as { message: string };
-    return { type: 'context.compress_failed', message: data.message };
-  }
-  return null;
-}
-
 /** Flatten UIMessage → EveMessage for store/render helpers (shared converter). */
 export function uiMessageToEveMessage(
   message: UIMessage,
-  extras?: { quotes?: EveMessageQuote[]; createdAt?: number },
+  extras?: { quotes?: PendingQuoteForTurn[]; createdAt?: number },
 ): EveMessage {
   const session = uiMessageToSession(message, { createdAt: extras?.createdAt });
   return {

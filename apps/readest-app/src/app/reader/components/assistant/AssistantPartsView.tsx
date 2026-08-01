@@ -4,11 +4,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { useTranslation } from '@/hooks/useTranslation';
+import { linkifyBareEpubCfi } from '@/services/wellread/assistant/cfiLinks';
 import {
   assistantPartInputsFromMessage,
   coalesceAssistantParts,
-  linkifyBareEpubCfi,
-} from '@/services/wellread/assistant/helpers';
+} from '@/services/wellread/assistant/displayParts';
 import type { EveMessage } from '@/services/wellread/assistant/eveClient';
 import { ReasoningBlock, ToolsBlock } from './AssistantTools';
 import { createAssistantMarkdownComponents } from './AssistantMarkdown';

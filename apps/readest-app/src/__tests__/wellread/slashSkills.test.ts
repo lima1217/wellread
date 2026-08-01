@@ -4,7 +4,7 @@ import {
   applySlashSkillSelection,
   filterSkillsForSlash,
   getComposerSlashQuery,
-} from '@/services/wellread/assistant/helpers';
+} from '@/services/wellread/assistant/slashSkills';
 
 const skills: EveSkillSummary[] = [
   {

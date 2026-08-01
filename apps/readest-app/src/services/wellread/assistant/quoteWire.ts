@@ -2,14 +2,14 @@
  * FE hydrate for Pending Quote wire (protocol in @wellread/quote-wire).
  */
 
-import { parsePendingQuotesFromWire } from '@wellread/quote-wire';
+import { parsePendingQuotesFromWire, type PendingQuoteForTurn } from '@wellread/quote-wire';
 
 export type HydrateableEveMessage = {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt: number;
-  quotes?: Array<{ text: string; chapterTitle?: string | null }>;
+  quotes?: PendingQuoteForTurn[];
   [key: string]: unknown;
 };
 

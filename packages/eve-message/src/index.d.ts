@@ -17,6 +17,44 @@ export type SessionToolTrace = {
   result?: unknown;
 };
 
+export type EveContextCompressedEvent = {
+  type: 'context.compressed';
+  beforeTokens: number;
+  afterTokens: number;
+  targetTokens: number;
+  removedIds: string[];
+  summary: {
+    id: string;
+    role: 'assistant' | 'user' | 'system';
+    content: string;
+    createdAt: number;
+    compacted?: boolean;
+  };
+};
+
+export type EveContextCompressFailedEvent = {
+  type: 'context.compress_failed';
+  message: string;
+};
+
+export type EveContextSideEvent = EveContextCompressedEvent | EveContextCompressFailedEvent;
+
+export type EveSideEvent =
+  | { type: 'error'; message: string }
+  | { type: 'abort'; reason?: string }
+  | EveContextSideEvent;
+
+export declare const EVE_CONTEXT_COMPRESSED_CHUNK: 'data-eve-context-compressed';
+export declare const EVE_CONTEXT_COMPRESS_FAILED_CHUNK: 'data-eve-context-compress-failed';
+
+export declare function encodeEveSideChunk(
+  event: EveContextSideEvent,
+): { type: string; data?: unknown } | null;
+
+export declare function decodeEveSideChunk(
+  chunk: { type: string; data?: unknown; errorText?: string; reason?: unknown } | null | undefined,
+): EveSideEvent | null;
+
 export type PersistableUIPart =
   | { type: 'text'; text: string; state?: string }
   | { type: 'reasoning'; text: string; state?: string }

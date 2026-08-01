@@ -3,6 +3,13 @@
  * Shared by eve-sidecar (persist/stream) and readest-app (hydrate/render).
  */
 
+export {
+  decodeEveSideChunk,
+  encodeEveSideChunk,
+  EVE_CONTEXT_COMPRESSED_CHUNK,
+  EVE_CONTEXT_COMPRESS_FAILED_CHUNK,
+} from './sideEvents.mjs';
+
 /**
  * @typedef {{
  *   id: string,

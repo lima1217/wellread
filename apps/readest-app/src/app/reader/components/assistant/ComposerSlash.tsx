@@ -6,13 +6,13 @@ import { CheckIcon, Loader2Icon } from 'lucide-react';
 import clsx from 'clsx';
 
 import { useTranslation } from '@/hooks/useTranslation';
+import { listEveSkills, type EveSkillSummary } from '@/services/wellread/assistant/eveClient';
 import {
   applySlashSkillSelection,
   filterSkillsForSlash,
   getComposerSlashQuery,
   SKILL_SLASH_PREFIX,
-} from '@/services/wellread/assistant/helpers';
-import { listEveSkills, type EveSkillSummary } from '@/services/wellread/assistant/eveClient';
+} from '@/services/wellread/assistant/slashSkills';
 import { focusRing } from './AssistantMarkdown';
 
 /** Composer toolbar selects: flat ghost, not filled pills. */

@@ -6,12 +6,12 @@ import type { Components } from 'react-markdown';
 
 import { useReaderStore } from '@/store/readerStore';
 import { eventDispatcher } from '@/utils/event';
+import type { SessionSource } from '@wellread/eve-message';
 import {
   isExternalHttpHref,
   normalizeEpubCfi,
   resolveEveSource,
-} from '@/services/wellread/assistant/helpers';
-import type { EveSource } from '@/services/wellread/assistant/eveClient';
+} from '@/services/wellread/assistant/cfiLinks';
 import { openExternalUrl } from '@/utils/open';
 
 export const focusRing =
@@ -102,7 +102,7 @@ function jumpToCfi(bookKey: string, cfi: string) {
 
 export function createAssistantMarkdownComponents(opts: {
   bookKey: string;
-  sources?: EveSource[];
+  sources?: SessionSource[];
   passageLabel: string;
 }): Components {
   const jumpButton = (cfi: string, display?: ReactNode) => {

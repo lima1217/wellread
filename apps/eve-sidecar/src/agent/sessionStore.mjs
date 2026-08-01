@@ -18,19 +18,7 @@ import { stripLeadingQuoteBlocks } from '@wellread/quote-wire';
  *   updatedAt: number,
  * }} SessionMeta
  *
- * @typedef {{
- *   id: string,
- *   role: 'user' | 'assistant' | 'system',
- *   content: string,
- *   createdAt: number,
- *   modelContent?: string,
- *   reasoning?: string,
- *   sources?: Array<{ cfi: string, endCfi?: string, title?: string, path?: string }>,
- *   tools?: Array<{ id: string, name: string, args?: unknown, result?: unknown }>,
- *   modelMessages?: unknown[],
- *   compacted?: boolean,
- *   parts?: unknown[],
- * }} SessionMessage
+ * @typedef {import('@wellread/eve-message').SessionMessage} SessionMessage
  *
  * @typedef {SessionMeta & { messages: SessionMessage[] }} Session
  */

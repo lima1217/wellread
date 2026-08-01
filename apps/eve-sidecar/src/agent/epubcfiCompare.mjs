@@ -3,8 +3,10 @@
  * Used only for focus-chunk selection against extract frontmatter CFIs.
  */
 
+import { READER_STATE_CFI_MAX_LENGTH } from '@wellread/reading-context';
+
 /** Reject pathological client CFIs before tokenizer (algo-complexity DoS). */
-export const CFI_COMPARE_MAX_LENGTH = 4096;
+export const CFI_COMPARE_MAX_LENGTH = READER_STATE_CFI_MAX_LENGTH;
 
 const isNumber = /\d/;
 const isCFI = /^epubcfi\((.*)\)$/;

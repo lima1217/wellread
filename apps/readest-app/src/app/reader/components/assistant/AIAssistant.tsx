@@ -11,7 +11,7 @@ import { useEnv } from '@/context/EnvContext';
 import { getModelApiKey } from '@/services/wellread/modelApiKey';
 import { getActiveProfile, mergeModelConfig } from '@/services/wellread/modelConfig';
 import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
-import { isReadingAssistantAvailable } from '@/services/wellread/assistant/helpers';
+import { isReadingAssistantAvailable } from '@/services/wellread/assistant/gate';
 import { assistantChatRemountKey } from '@/services/wellread/assistant/turnLifecycle';
 import { focusRing } from './AssistantMarkdown';
 import { ReadingAssistantChat } from './ReadingAssistantChat';

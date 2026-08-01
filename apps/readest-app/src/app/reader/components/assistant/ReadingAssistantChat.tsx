@@ -18,7 +18,7 @@ import { reloadEveIfNeeded } from '@/services/wellread/assistant/reloadEveIfNeed
 import {
   shouldPushAgentSessionToStore,
   shouldShowPendingReply,
-} from '@/services/wellread/assistant/helpers';
+} from '@/services/wellread/assistant/sessionUi';
 import { useEveAgent } from '@/services/wellread/assistant/useEveAgent';
 import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
 import { AssistantPartsView } from './AssistantPartsView';
