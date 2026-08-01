@@ -29,10 +29,24 @@ describe('eve-sidecar build (.output packaging)', () => {
   });
 
   it('copies a server entry that does not import repo src/', () => {
-    const entry = join(root, '.output', 'server', 'index.mjs');
+    const serverDir = join(root, '.output', 'server');
+    const entry = join(serverDir, 'index.mjs');
+    const srcCreateModel = readdirSync(join(root, 'src')).filter(
+      (name) =>
+        name.startsWith('createModel') &&
+        name.endsWith('.mjs') &&
+        !name.endsWith('.test.mjs'),
+    );
+    assert.ok(srcCreateModel.length > 0, 'expected createModel*.mjs under src/');
+    for (const name of srcCreateModel) {
+      assert.ok(
+        existsSync(join(serverDir, name)),
+        `expected ${name} in .output/server`,
+      );
+    }
     const raw = readFileSync(entry, 'utf8');
     assert.doesNotMatch(raw, /\.\.\/\.\.\/src\//);
-    for (const file of listMjs(join(root, '.output', 'server'))) {
+    for (const file of listMjs(serverDir)) {
       const text = readFileSync(file, 'utf8');
       assert.doesNotMatch(
         text,

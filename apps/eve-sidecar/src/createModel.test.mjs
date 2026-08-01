@@ -1,22 +1,26 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  adaptResponsesInputItem,
-  adaptResponsesOutputItem,
+  bindTurnFetchPatch,
   createLanguageModel,
-  isResponsesRequest,
-  normalizeApiMode,
   normalizeModelEnv,
   normalizeThinkingMode,
+  resolveTurnModelPresentation,
+  turnFetchContext,
+} from './createModel.mjs';
+import {
+  adaptResponsesInputItem,
+  adaptResponsesOutputItem,
+  isResponsesRequest,
+  normalizeApiMode,
   patchChatCompletionBody,
   patchResponsesBody,
   THINK_MODE_REASONING_EFFORT,
   supportsThinkingExtension,
   transformCompletionPayload,
   transformResponsesPayload,
-  turnFetchContext,
   withModelFetchPatch,
-} from './createModel.mjs';
+} from './createModel.adapters.mjs';
 
 describe('normalizeModelEnv', () => {
   it('defaults to DeepSeek chat completions', () => {
@@ -314,10 +318,17 @@ describe('transformCompletionPayload', () => {
 });
 
 describe('withModelFetchPatch', () => {
+  it('requires deps.getStore', () => {
+    assert.throws(
+      () => withModelFetchPatch(async () => new Response('{}')),
+      /requires deps\.getStore/,
+    );
+  });
+
   it('injects thinking disabled when turn context mode is fast', async () => {
     /** @type {string | undefined} */
     let sentBody;
-    const wrapped = withModelFetchPatch(async (_url, init) => {
+    const wrapped = bindTurnFetchPatch(async (_url, init) => {
       sentBody = typeof init?.body === 'string' ? init.body : undefined;
       return new Response('{}', { status: 200 });
     });
@@ -336,7 +347,7 @@ describe('withModelFetchPatch', () => {
   it('injects thinking enabled when turn context mode is think', async () => {
     /** @type {string | undefined} */
     let sentBody;
-    const wrapped = withModelFetchPatch(async (_url, init) => {
+    const wrapped = bindTurnFetchPatch(async (_url, init) => {
       sentBody = typeof init?.body === 'string' ? init.body : undefined;
       return new Response('{}', { status: 200 });
     });
@@ -356,7 +367,7 @@ describe('withModelFetchPatch', () => {
   it('does not inject thinking when injectThinking is false', async () => {
     /** @type {string | undefined} */
     let sentBody;
-    const wrapped = withModelFetchPatch(
+    const wrapped = bindTurnFetchPatch(
       async (_url, init) => {
         sentBody = typeof init?.body === 'string' ? init.body : undefined;
         return new Response('{}', { status: 200 });
@@ -382,7 +393,7 @@ describe('withModelFetchPatch', () => {
   it('keeps each concurrent turn thinkingMode isolated', async () => {
     /** @type {string[]} */
     const thinkingTypes = [];
-    const wrapped = withModelFetchPatch(async (_url, init) => {
+    const wrapped = bindTurnFetchPatch(async (_url, init) => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
       thinkingTypes.push(body.thinking?.type);
@@ -554,5 +565,40 @@ describe('createLanguageModel', () => {
     const parsed = JSON.parse(/** @type {string} */ (sentBody));
     assert.equal(parsed.store, false);
     assert.deepEqual(parsed.reasoning, { effort: 'high' });
+  });
+});
+
+describe('resolveTurnModelPresentation', () => {
+  it('keeps chat mode on a single system prompt', () => {
+    const out = resolveTurnModelPresentation({
+      apiMode: 'chat',
+      thinkingMode: 'think',
+      system: 'full-system',
+      envelope: '<reading_context/>',
+      instructions: 'base',
+    });
+    assert.equal(out.toolSystem, 'full-system');
+    assert.deepEqual(out.streamTextOptions, { system: 'full-system' });
+  });
+
+  it('maps responses mode to envelope + instructions + reasoningEffort', () => {
+    const out = resolveTurnModelPresentation({
+      apiMode: 'responses',
+      thinkingMode: 'think',
+      system: 'full-system',
+      envelope: '<reading_context/>',
+      instructions: 'base',
+    });
+    assert.equal(out.toolSystem, '<reading_context/>');
+    assert.deepEqual(out.streamTextOptions, {
+      system: '<reading_context/>',
+      providerOptions: {
+        openai: {
+          store: false,
+          instructions: 'base',
+          reasoningEffort: 'high',
+        },
+      },
+    });
   });
 });

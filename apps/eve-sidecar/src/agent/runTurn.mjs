@@ -6,9 +6,8 @@
 import { createUIMessageStream, streamText, stepCountIs } from 'ai';
 import { randomBytes } from 'node:crypto';
 import {
-  normalizeApiMode,
   normalizeThinkingMode,
-  THINK_MODE_REASONING_EFFORT,
+  resolveTurnModelPresentation,
   turnFetchContext,
 } from '../createModel.mjs';
 import { maybeCompressSession } from './contextCompress.mjs';
@@ -71,7 +70,6 @@ export function runTurn(input) {
   const { model, session, userMessage, getBooksRoot, abortSignal } = input;
   const persistSession = input.persistSession;
   const thinkingMode = normalizeThinkingMode(input.thinkingMode);
-  const apiMode = normalizeApiMode(input.apiMode);
   const prepared = prepareUserTurn(userMessage, getBooksRoot);
   const modelUserMessage = prepared.modelContent;
   const turnQuotes = prepared.quotes;
@@ -143,6 +141,13 @@ export function runTurn(input) {
     skills,
   });
   const system = appendReadingContext(instructions, envelope);
+  const { toolSystem, streamTextOptions } = resolveTurnModelPresentation({
+    apiMode: input.apiMode,
+    thinkingMode,
+    system,
+    envelope,
+    instructions,
+  });
 
   logTurnContract({
     sessionId: session.id,
@@ -314,28 +319,14 @@ export function runTurn(input) {
                   const prep = prepareToolExhaustionStep({
                     stepNumber,
                     maxToolRounds,
-                    system: apiMode === 'responses' ? envelope || '' : system,
+                    system: toolSystem,
                   });
                   return prep;
                 },
                 onStepFinish: () => {
                   reasoning.beginNewSegment();
                 },
-                ...(apiMode === 'responses'
-                  ? {
-                      system: envelope || undefined,
-                      providerOptions: {
-                        openai: {
-                          store: false,
-                          instructions,
-                          reasoningEffort:
-                            thinkingMode === 'think'
-                              ? THINK_MODE_REASONING_EFFORT
-                              : 'none',
-                        },
-                      },
-                    }
-                  : { system }),
+                ...streamTextOptions,
               }),
             );
             streamResult = result;

@@ -38,6 +38,16 @@ function copyRuntimeTree(fromDir, toDir) {
   }
 }
 
+/** Facade + host adapters: any `src/createModel*.mjs` (except tests) ships flat. */
+function copyCreateModelModules() {
+  const srcDir = join(root, 'src');
+  for (const name of readdirSync(srcDir)) {
+    if (!name.startsWith('createModel') || !name.endsWith('.mjs')) continue;
+    if (name.endsWith('.test.mjs')) continue;
+    cpSync(join(srcDir, name), join(outServer, name));
+  }
+}
+
 /** Rewrite `../x` imports in the server entry to `./x` for the flat server layout. */
 function rewriteServerEntry(srcPath, destPath) {
   const raw = readFileSync(srcPath, 'utf8');
@@ -84,7 +94,7 @@ export function build() {
   rmSync(outRoot, { recursive: true, force: true });
   mkdirSync(outServer, { recursive: true });
 
-  cpSync(join(root, 'src', 'createModel.mjs'), join(outServer, 'createModel.mjs'));
+  copyCreateModelModules();
   copyRuntimeTree(join(root, 'src', 'agent'), join(outServer, 'agent'));
   copyRuntimeTree(join(root, 'src', 'books'), join(outServer, 'books'));
   // Sibling modules under server/ (readJson, turnInFlight, …) must ship with the entry.
