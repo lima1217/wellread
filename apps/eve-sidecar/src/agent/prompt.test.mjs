@@ -4,6 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
+  parsePendingQuotesFromWire,
+  stripLeadingQuoteBlocks,
+} from '@wellread/quote-wire';
+import {
   PRIOR_SOURCES_MAX,
   SKILL_CATALOG_DESC_MAX,
   appendReadingContext,
@@ -13,9 +17,7 @@ import {
   formatSkillsCatalog,
   listNotesIndex,
   normalizeReaderState,
-  parsePendingQuotesFromWire,
   sanitizeSkillCatalogDescription,
-  stripLeadingQuoteBlocks,
 } from './prompt.mjs';
 
 describe('buildSystemPrompt', () => {

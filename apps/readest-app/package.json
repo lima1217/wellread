@@ -105,6 +105,8 @@
     "ai": "5.0.186",
     "@wellread/eve-message": "workspace:*",
     "@wellread/extract-contract": "workspace:*",
+    "@wellread/quote-wire": "workspace:*",
+    "@wellread/reading-context": "workspace:*",
     "aws4fetch": "^1.0.20",
     "buffer": "^6.0.3",
     "clsx": "^2.1.1",

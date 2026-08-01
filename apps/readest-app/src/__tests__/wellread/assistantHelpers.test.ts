@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatEveSourceLabel,
-  formatPendingQuotesForTurn,
   formatWorkDuration,
   hydrateEveMessagesForDisplay,
   isAssistantSourceHref,
@@ -9,12 +8,12 @@ import {
   isReadingAssistantAvailable,
   linkifyBareEpubCfi,
   normalizeEpubCfi,
-  parsePendingQuotesFromWire,
   resolveEveSource,
   shouldPushAgentSessionToStore,
   shouldShowPendingReply,
   stripAssistantCfiCitations,
   summarizeToolTrace,
+  assistantPartInputsFromMessage,
   coalesceAssistantParts,
 } from '@/services/wellread/assistant/helpers';
 
@@ -63,50 +62,6 @@ describe('isReadingAssistantAvailable', () => {
   });
 });
 
-describe('formatPendingQuotesForTurn', () => {
-  it('joins quote blockquotes with the user question for the model wire', () => {
-    const wire = formatPendingQuotesForTurn(
-      [{ text: ' selected line ', chapterTitle: 'Chapter 1' }, { text: 'second' }],
-      ' What does this mean? ',
-    );
-    expect(wire).toBe(
-      ['> selected line', '> — 《Chapter 1》', '', '> second', '', 'What does this mean?'].join(
-        '\n',
-      ),
-    );
-  });
-
-  it('omits chapter line and empty quotes', () => {
-    expect(formatPendingQuotesForTurn([{ text: 'hello' }, { text: '  ' }], 'ask')).toBe(
-      ['> hello', '', 'ask'].join('\n'),
-    );
-  });
-});
-
-describe('parsePendingQuotesFromWire', () => {
-  it('round-trips formatPendingQuotesForTurn into QuoteStack fields', () => {
-    const quotes = [
-      { text: 'selected line', chapterTitle: 'Chapter 1' },
-      { text: 'second', chapterTitle: null },
-    ];
-    const wire = formatPendingQuotesForTurn(quotes, 'What does this mean?');
-    expect(parsePendingQuotesFromWire(wire)).toEqual({
-      quotes: [
-        { text: 'selected line', chapterTitle: 'Chapter 1' },
-        { text: 'second', chapterTitle: null },
-      ],
-      content: 'What does this mean?',
-    });
-  });
-
-  it('leaves plain user text alone', () => {
-    expect(parsePendingQuotesFromWire('Just a question')).toEqual({
-      quotes: [],
-      content: 'Just a question',
-    });
-  });
-});
-
 describe('hydrateEveMessagesForDisplay', () => {
   it('splits persisted wire user content into quotes + question', () => {
     const hydrated = hydrateEveMessagesForDisplay([
@@ -147,6 +102,57 @@ describe('hydrateEveMessagesForDisplay', () => {
       quotes: [{ text: 'already', chapterTitle: null }],
     };
     expect(hydrateEveMessagesForDisplay([msg])[0]).toEqual(msg);
+  });
+});
+
+describe('assistantPartInputsFromMessage', () => {
+  it('maps tool-* and dynamic-tool via eve-message (parts authoritative)', () => {
+    expect(
+      assistantPartInputsFromMessage({
+        content: 'final',
+        parts: [
+          { type: 'reasoning', text: 'think' },
+          {
+            type: 'tool-grep',
+            toolCallId: 'c1',
+            input: { q: 'x' },
+            output: { hits: 1 },
+          },
+          {
+            type: 'dynamic-tool',
+            toolCallId: 'c2',
+            toolName: 'read_file',
+            input: { path: 'a.md' },
+          },
+          { type: 'text', text: 'final' },
+        ],
+      }),
+    ).toEqual([
+      { kind: 'reasoning', text: 'think' },
+      {
+        kind: 'tool',
+        tool: { id: 'c1', name: 'grep', args: { q: 'x' }, result: { hits: 1 } },
+      },
+      {
+        kind: 'tool',
+        tool: { id: 'c2', name: 'read_file', args: { path: 'a.md' }, result: undefined },
+      },
+      { kind: 'text', text: 'final' },
+    ]);
+  });
+
+  it('falls back to flat fields when parts are absent', () => {
+    expect(
+      assistantPartInputsFromMessage({
+        content: 'hi',
+        reasoning: 'r',
+        tools: [{ id: 't1', name: 'grep' }],
+      }),
+    ).toEqual([
+      { kind: 'reasoning', text: 'r' },
+      { kind: 'tool', tool: { id: 't1', name: 'grep' } },
+      { kind: 'text', text: 'hi' },
+    ]);
   });
 });
 

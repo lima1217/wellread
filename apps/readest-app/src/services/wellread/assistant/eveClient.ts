@@ -3,7 +3,14 @@
  * Turns stream AI SDK UIMessage chunks (SSE).
  */
 
-import { sessionToUIMessage, uiMessageToSession } from '@wellread/eve-message';
+import {
+  sessionToUIMessage,
+  uiMessageToSession,
+  type SessionMessage,
+  type SessionSource,
+  type SessionToolTrace,
+} from '@wellread/eve-message';
+import { normalizeReaderState, type ReaderState } from '@wellread/reading-context';
 import {
   parseJsonEventStream,
   readUIMessageStream,
@@ -16,48 +23,28 @@ import { eveFetch } from './eveFetch';
 
 type EveUIMessagePart = UIMessage['parts'][number];
 
-export type EveSource = {
-  cfi: string;
-  endCfi?: string;
-  title?: string;
-  path?: string;
-};
+export type EveSource = SessionSource;
 
 /** Client-reported reading position for the sidecar reading-context envelope. */
-export type EveReaderState = {
-  chapter?: string;
-  cfi?: string;
-  /** 0-based EPUB spine index from reader progress when available. */
-  sectionIndex?: number;
-};
+export type EveReaderState = ReaderState;
 
-export type EveToolTrace = {
-  id: string;
-  name: string;
-  args?: unknown;
-  result?: unknown;
-};
+export type EveToolTrace = SessionToolTrace;
 
 export type EveMessageQuote = {
   text: string;
   chapterTitle?: string | null;
 };
 
-export type EveMessage = {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  createdAt: number;
-  /** Ordered UI parts when available (preferred for rendering). */
+/**
+ * Host view of a session message. `parts` is authoritative for assistant turns
+ * when present; flat fields are denormalized / legacy. `quotes` is FE-only
+ * (disk stores quote wire inside user `content`).
+ */
+export type EveMessage = Omit<SessionMessage, 'parts' | 'sources' | 'tools'> & {
   parts?: EveUIMessagePart[];
-  /** Model chain-of-thought when Thinking Mode is Think (denormalized). */
-  reasoning?: string;
-  /** Client-side Pending Quotes attached to this user turn (not always persisted). */
-  quotes?: EveMessageQuote[];
   sources?: EveSource[];
   tools?: EveToolTrace[];
-  /** True when this message is an LLM compaction of earlier turns. */
-  compacted?: boolean;
+  quotes?: EveMessageQuote[];
 };
 
 export type EveSessionMeta = {
@@ -209,19 +196,10 @@ export async function* streamEveTurn(
 ): AsyncGenerator<EveStreamEvent> {
   const { baseUrl, token } = base();
   const thinkingMode = options?.thinkingMode === 'think' ? 'think' : 'fast';
-  const readerState = options?.readerState ?? undefined;
+  const readerState = normalizeReaderState(options?.readerState ?? null);
   const body: Record<string, unknown> = { message, thinkingMode };
-  if (
-    readerState &&
-    (readerState.chapter || readerState.cfi || typeof readerState.sectionIndex === 'number')
-  ) {
-    body['readerState'] = {
-      ...(readerState.chapter ? { chapter: readerState.chapter } : {}),
-      ...(readerState.cfi ? { cfi: readerState.cfi } : {}),
-      ...(typeof readerState.sectionIndex === 'number'
-        ? { sectionIndex: readerState.sectionIndex }
-        : {}),
-    };
+  if (readerState) {
+    body['readerState'] = readerState;
   }
   const res = await eveFetch(`${baseUrl}/eve/v1/sessions/${encodeURIComponent(sessionId)}/turns`, {
     method: 'POST',

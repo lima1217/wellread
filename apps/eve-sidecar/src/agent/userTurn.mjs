@@ -6,7 +6,7 @@
 import {
   parsePendingQuotesFromWire,
   stripLeadingQuoteBlocks,
-} from './prompt.mjs';
+} from '@wellread/quote-wire';
 import { expandSkillCommand } from './skills/invoke.mjs';
 
 /**

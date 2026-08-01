@@ -98,6 +98,11 @@ export function build() {
     '@wellread/extract-contract',
     join(root, '../../packages/extract-contract'),
   );
+  vendorWorkspacePackage('@wellread/quote-wire', join(root, '../../packages/quote-wire'));
+  vendorWorkspacePackage(
+    '@wellread/reading-context',
+    join(root, '../../packages/reading-context'),
+  );
 
   console.log('eve-sidecar build ok:', outServer);
 }

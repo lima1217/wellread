@@ -7,13 +7,9 @@ import { useEnv } from '@/context/EnvContext';
 import {
   getActiveProfile,
   mergeModelConfig,
-  shouldHotReloadEve,
-  toSidecarModelPayload,
   type ModelConfig,
 } from '@/services/wellread/modelConfig';
-import { getModelApiKey } from '@/services/wellread/modelApiKey';
-import { reloadEveSidecar } from '@/services/wellread/eveSidecar';
-import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
+import { reloadEveIfNeeded } from '@/services/wellread/assistant/reloadEveIfNeeded';
 import BoxedList from './primitives/BoxedList';
 import NavigationRow from './primitives/NavigationRow';
 import SettingsSwitchRow from './primitives/SettingsSwitchRow';
@@ -56,27 +52,10 @@ const AIPanel: React.FC = () => {
 
         const enabledChanged =
           options.previousEnabled !== undefined && options.previousEnabled !== next.enabled;
-        const needsReload =
-          enabledChanged ||
-          shouldHotReloadEve({
-            previousActiveId: options.previousActiveId,
-            nextActiveId: next.activeProfileId,
-            editedProfileId: null,
-          });
-
-        if (needsReload) {
-          const active = getActiveProfile(next);
-          if (active) {
-            const apiKey = await getModelApiKey(active.id);
-            const payload = toSidecarModelPayload(next);
-            if (payload) {
-              await reloadEveSidecar({ ...payload, apiKey });
-            }
-          } else {
-            await reloadEveSidecar({ enabled: next.enabled });
-          }
-        }
-        await useEveConnectionStore.getState().refresh();
+        await reloadEveIfNeeded(next, {
+          previousActiveId: options.previousActiveId,
+          force: enabledChanged,
+        });
       } finally {
         setSaving(false);
       }

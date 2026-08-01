@@ -15,8 +15,14 @@ import {
   type EveToolTrace,
   type ThinkingMode,
 } from './eveClient';
-import { formatPendingQuotesForTurn, hydrateEveMessagesForDisplay } from './helpers';
+import { formatPendingQuotesForTurn } from '@wellread/quote-wire';
+import { hydrateEveMessagesForDisplay } from './quoteWire';
 import type { PendingQuote } from './readingAssistantStore';
+import {
+  isTurnInFlightError,
+  TURN_IN_FLIGHT_RETRIES,
+  TURN_IN_FLIGHT_RETRY_MS,
+} from './turnLifecycle';
 
 function toolsInFlightFromMessage(msg: EveMessage): EveToolTrace[] {
   const tools = msg.tools ?? [];
@@ -26,18 +32,6 @@ function toolsInFlightFromMessage(msg: EveMessage): EveToolTrace[] {
 function hydrateMessages(messages: EveMessage[]): EveMessage[] {
   return hydrateEveMessagesForDisplay(messages).map(normalizeEveMessage);
 }
-
-/** Sidecar per-session mutex — brief race after Stop while the prior turn releases. */
-function isTurnInFlightError(err: unknown): boolean {
-  return (
-    err instanceof Error &&
-    /turn failed:\s*409\b/.test(err.message) &&
-    /turn_in_flight/.test(err.message)
-  );
-}
-
-const TURN_IN_FLIGHT_RETRIES = 3;
-const TURN_IN_FLIGHT_RETRY_MS = 100;
 
 async function* streamEveTurnRetrying(
   sessionId: string,

@@ -140,8 +140,7 @@ const AssistantPanel: React.FC = ({}) => {
     const data = getBookData(sideBarBookKey);
     const bookId = data?.book?.hash || sideBarBookKey.split('-')[0] || '';
     if (!bookId) return;
-    // Do not POST an empty session here — retries/double-clicks orphan identical
-    // "Chat about …" rows in History. First send creates lazily via useEveAgent.
+    // Lazy create on first send (see turnLifecycle.ts). Empty POST orphans History rows.
     clearPendingQuotes();
     setActiveSession(null, bookId);
     setPane('chat');

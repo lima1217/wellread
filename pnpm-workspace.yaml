@@ -4,6 +4,8 @@ packages:
   - packages/foliate-js
   - packages/eve-message
   - packages/extract-contract
+  - packages/quote-wire
+  - packages/reading-context
 
 allowBuilds:
   core-js: true

@@ -14,8 +14,6 @@ import {
   mergeModelConfig,
   removeProfile,
   setActiveProfile,
-  shouldHotReloadEve,
-  toSidecarModelPayload,
   updateProfile,
   type ModelApiMode,
   type ModelConfig,
@@ -23,8 +21,7 @@ import {
 } from '@/services/wellread/modelConfig';
 import { clearModelApiKey, getModelApiKey, setModelApiKey } from '@/services/wellread/modelApiKey';
 import { testModelConnection } from '@/services/wellread/testModelConnection';
-import { reloadEveSidecar } from '@/services/wellread/eveSidecar';
-import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
+import { reloadEveIfNeeded } from '@/services/wellread/assistant/reloadEveIfNeeded';
 import SubPageHeader from './SubPageHeader';
 import SectionTitle from './primitives/SectionTitle';
 import SettingLabel from './primitives/SettingLabel';
@@ -159,28 +156,11 @@ const ModelProvidersPanel: React.FC<ModelProvidersPanelProps> = ({ onBack }) => 
           await setModelApiKey(options.editedProfileId, options.editedApiKey);
         }
 
-        const needsReload = shouldHotReloadEve({
+        await reloadEveIfNeeded(next, {
           previousActiveId: options.previousActiveId,
-          nextActiveId: next.activeProfileId,
           editedProfileId: options.editedProfileId,
+          editedApiKey: options.editedApiKey,
         });
-
-        if (needsReload) {
-          const active = getActiveProfile(next);
-          if (active) {
-            const apiKey =
-              options.editedProfileId === active.id && options.editedApiKey !== undefined
-                ? options.editedApiKey
-                : await getModelApiKey(active.id);
-            const payload = toSidecarModelPayload(next);
-            if (payload) {
-              await reloadEveSidecar({ ...payload, apiKey });
-            }
-          } else {
-            await reloadEveSidecar({ enabled: next.enabled });
-          }
-        }
-        await useEveConnectionStore.getState().refresh();
       } finally {
         setSaving(false);
       }

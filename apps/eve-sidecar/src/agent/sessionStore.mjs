@@ -6,6 +6,7 @@
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { stripLeadingQuoteBlocks } from '@wellread/quote-wire';
 
 /**
  * @typedef {{
@@ -64,15 +65,9 @@ export function maybeApplyFirstTurnTitle(session, userMessage, maxLen = 40) {
  * @param {string} userMessage
  */
 function userQuestionForTitle(userMessage) {
-  const parts = userMessage.trim().split(/\n\n+/);
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const block = parts[i].trim();
-    if (!block) continue;
-    const lines = block.split('\n');
-    if (lines.every((line) => line.startsWith('>'))) continue;
-    return block;
-  }
-  return userMessage.trim();
+  // Drop composer-question protection (U+200B) used by quote-wire format.
+  const question = stripLeadingQuoteBlocks(userMessage).replace(/^\u200B/, '').trim();
+  return question || userMessage.trim();
 }
 
 /**

@@ -50,6 +50,21 @@ describe('eve-sidecar build (.output packaging)', () => {
         readdirSync(nm).some((n) => n.startsWith('ai')),
       'expected ai package under .output/node_modules',
     );
+    for (const pkg of [
+      'eve-message',
+      'extract-contract',
+      'quote-wire',
+      'reading-context',
+    ]) {
+      assert.ok(
+        existsSync(join(nm, '@wellread', pkg, 'package.json')),
+        `expected vendored @wellread/${pkg}`,
+      );
+      assert.ok(
+        existsSync(join(nm, '@wellread', pkg, 'src')),
+        `expected vendored @wellread/${pkg}/src`,
+      );
+    }
   });
 
   it('copies bundled-skills next to the server package root', () => {

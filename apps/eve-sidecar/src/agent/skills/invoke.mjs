@@ -5,7 +5,7 @@
 
 import { join } from 'node:path';
 import { WORKSPACE_ROOT } from '../../books/scopedFs.mjs';
-import { peelLeadingQuoteWire } from '../prompt.mjs';
+import { peelLeadingQuoteWire } from '@wellread/quote-wire';
 import {
   SKILLS_DIR,
   isRegularSkillDir,

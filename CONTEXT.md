@@ -48,5 +48,17 @@ _Avoid_: ModelConfig（旧单轨名，已被多 profile 取代）、aiSettings, 
 - **user**：`Books/skills/<id>/SKILL.md`（可导入/删除）
 - **bundled**：随 eve-sidecar 分发的只读包（`apps/eve-sidecar/bundled-skills/<id>/`，打进 `.output/bundled-skills/`）。当前默认：`explain`、`grill-me`、`note`、`socratic-check`、`translate`
 
-同 id 时 **user 覆盖 bundled**（例外：`PACKAGE.md` / `AGENTS.md` / `tools/*` 始终用 bundled，防指令注入）。隐藏某个默认包：写入 `Books/.wellread/disabled-bundled-skills.json`（仅影响无 user 覆盖的 bundled）；Manage Skills 对内置包用开关（关=隐藏、开=恢复），列表经 `includeDisabled` 仍显示已关项。模型路径目录为 `/workspace/skills/<id>/`（目录入口仍广告 `…/SKILL.md`；`read_file` 可读包内其他文件如 `PACKAGE.md`、`tools/…`）。`SKILL.md` 为 Agent Skills 形（YAML frontmatter 的 `name`/`description` + 正文 instructions）。发现由 eve sidecar 合并两层（`GET /eve/v1/skills`，及每轮 `discoverSkills`）；composer 输入 `/` 时补全为 `/skill:<id>`。每轮 system 只注入目录（id + description + path）；正文按需加载：用户发送以 `/skill:<id>` 开头的消息时 sidecar 把完整 instructions 展开进当轮 user message（`<skill name="…" location="…">…</skill>` + args），或模型自行 `read_file` 该 path。session/UI 仍保留 `/skill:<id>` 短形式。不进内建芯片；不映射 `$HOME/.agents/skills`；不经 `reedy_skills`；无 session sticky / Active skill 状态；不向 Books 自动拷贝默认包。
+同 id 时 **user 覆盖 bundled**（例外：`PACKAGE.md` / `AGENTS.md` / `tools/*` 始终用 bundled，防指令注入）。隐藏某个默认包：写入 `Books/.wellread/disabled-bundled-skills.json`（仅影响无 user 覆盖的 bundled）；Manage Skills 对内置包用开关（关=隐藏、开=恢复），列表经 `includeDisabled` 仍显示已关项。模型路径目录为 `/workspace/skills/<id>/`（目录入口仍广告 `…/SKILL.md`；`read_file` 可读包内其他文件如 `PACKAGE.md`、`tools/…`）。`SKILL.md` 为 Agent Skills 形（YAML frontmatter 的 `name`/`description` + 正文 instructions）。每轮 system 只注入目录（id + description + path）；正文按需加载：用户发送以 `/skill:<id>` 开头的消息时 sidecar 把完整 instructions 展开进当轮 user message（`<skill name="…" location="…">…</skill>` + args），或模型自行 `read_file` 该 path。session/UI 仍保留 `/skill:<id>` 短形式。不进内建芯片；不映射 `$HOME/.agents/skills`；不经 `reedy_skills`；无 session sticky / Active skill 状态；不向 Books 自动拷贝默认包。
+
+所有权（改哪一层）：
+
+| 关心点 | 落点 |
+|---|---|
+| disk 包 / bundled overlay | `apps/eve-sidecar` `skills/discover` + `Books/skills` |
+| catalog API | `GET /eve/v1/skills` |
+| slash UX | FE `ComposerSlash` + `slashSkills.ts` |
+| model expand | sidecar `skills/invoke` + `userTurn` |
+
+- Reading Assistant 跨 FE–sidecar 的 wire/schema 变更必须落在 `packages/`（`eve-message`、`extract-contract`、`quote-wire`、`reading-context`）。
+- Turn 生命周期不变量见 `apps/readest-app/src/services/wellread/assistant/turnLifecycle.ts`。
 _Avoid_: 快捷动作芯片、把 skill 塞进 `.wellread/` 当主根、SkillRegistry / reedy_skills 表、session 黏住 skill、把默认包 seed 进 Books/skills、把校验器 write 进 notes

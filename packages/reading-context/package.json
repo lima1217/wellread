@@ -1,9 +1,9 @@
 {
-  "name": "@wellread/eve-message",
+  "name": "@wellread/reading-context",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "SessionMessage ↔ UIMessage conversion for Reading Assistant (shared by eve-sidecar and readest-app).",
+  "description": "Reading-context envelope field SSOT for Reading Assistant (host readerState + eve sidecar).",
   "exports": {
     ".": {
       "types": "./src/index.d.ts",

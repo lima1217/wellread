@@ -5,6 +5,10 @@
 
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
+import {
+  ENVELOPE_KEYS,
+  normalizeReaderState as normalizeReaderStateShared,
+} from '@wellread/reading-context';
 import { CFI_COMPARE_MAX_LENGTH } from './epubcfiCompare.mjs';
 import { isSafeBookIdSegment } from './notesOkf.mjs';
 import {
@@ -21,39 +25,15 @@ export const NOTES_INDEX_MAX = 24;
 /** Cap filesystem visits while building notes_index (DoS / large OKF trees). */
 export const NOTES_INDEX_WALK_MAX = 400;
 
-const CHAPTER_ATTR = /^— 《(.+)》$/;
-
 /**
  * Optional client reading position for the reading-context envelope.
- * HTTP adapter and envelope builder share this so new fields land once.
+ * Field names live in @wellread/reading-context; CFI length matches epubcfiCompare.
  *
  * @param {unknown} raw
  * @returns {{ chapter?: string, cfi?: string, sectionIndex?: number } | null}
  */
 export function normalizeReaderState(raw) {
-  if (!raw || typeof raw !== 'object') return null;
-  const chapter =
-    typeof /** @type {{ chapter?: unknown }} */ (raw).chapter === 'string'
-      ? /** @type {{ chapter: string }} */ (raw).chapter.trim()
-      : '';
-  const cfiRaw =
-    typeof /** @type {{ cfi?: unknown }} */ (raw).cfi === 'string'
-      ? /** @type {{ cfi: string }} */ (raw).cfi.trim()
-      : '';
-  const cfi = cfiRaw.length <= CFI_COMPARE_MAX_LENGTH ? cfiRaw : '';
-  const sectionRaw = /** @type {{ sectionIndex?: unknown }} */ (raw).sectionIndex;
-  const sectionIndex =
-    typeof sectionRaw === 'number' &&
-    Number.isFinite(sectionRaw) &&
-    sectionRaw >= 0
-      ? Math.floor(sectionRaw)
-      : undefined;
-  if (!chapter && !cfi && sectionIndex === undefined) return null;
-  return {
-    ...(chapter ? { chapter } : {}),
-    ...(cfi ? { cfi } : {}),
-    ...(sectionIndex !== undefined ? { sectionIndex } : {}),
-  };
+  return normalizeReaderStateShared(raw, { cfiMaxLength: CFI_COMPARE_MAX_LENGTH });
 }
 
 /**
@@ -89,79 +69,6 @@ export function buildSystemPrompt(input) {
   const catalog = formatSkillsCatalog(input.skills);
   if (catalog) lines.push(catalog);
   return lines.join('\n');
-}
-
-/**
- * Split leading Pending Quote `> …` blocks from the trailing question.
- * Quote parts keep original wire segments (for skill expand reassembly).
- * @param {string} wire
- * @returns {{ quoteParts: string[], content: string }}
- */
-export function peelLeadingQuoteWire(wire) {
-  const trimmed = typeof wire === 'string' ? wire.trim() : '';
-  if (!trimmed) return { quoteParts: [], content: '' };
-  if (!trimmed.startsWith('>')) return { quoteParts: [], content: trimmed };
-
-  const parts = trimmed.split(/\n\n+/);
-  /** @type {string[]} */
-  const quoteParts = [];
-  let i = 0;
-  for (; i < parts.length; i++) {
-    const block = (parts[i] || '').trim();
-    if (!block) continue;
-    const lines = block.split('\n');
-    if (!lines.every((line) => line.startsWith('>'))) break;
-    quoteParts.push(parts[i]);
-  }
-
-  const content = parts.slice(i).join('\n\n').trim();
-  return {
-    quoteParts,
-    content: content || (quoteParts.length ? '' : trimmed),
-  };
-}
-
-/**
- * Peel leading Pending Quote blockquotes from wire text (mirrors client helper).
- * @param {string} wire
- * @returns {{
- *   quotes: Array<{ text: string, chapterTitle: string | null }>,
- *   content: string,
- * }}
- */
-export function parsePendingQuotesFromWire(wire) {
-  const { quoteParts, content } = peelLeadingQuoteWire(wire);
-  /** @type {Array<{ text: string, chapterTitle: string | null }>} */
-  const quotes = [];
-  for (const part of quoteParts) {
-    const block = (part || '').trim();
-    if (!block) continue;
-    const lines = block.split('\n');
-    /** @type {string | null} */
-    let chapterTitle = null;
-    /** @type {string[]} */
-    const textLines = [];
-    for (const line of lines) {
-      const body = line.replace(/^>\s?/, '');
-      const chapterMatch = CHAPTER_ATTR.exec(body);
-      if (chapterMatch) {
-        chapterTitle = chapterMatch[1] ?? null;
-      } else {
-        textLines.push(body);
-      }
-    }
-    const text = textLines.join('\n').trim();
-    if (text) quotes.push({ text, chapterTitle });
-  }
-  return { quotes, content };
-}
-
-/**
- * Strip leading Pending Quote blocks so quotes live only in the envelope.
- * @param {string} message
- */
-export function stripLeadingQuoteBlocks(message) {
-  return peelLeadingQuoteWire(message).content;
 }
 
 /**
@@ -328,31 +235,34 @@ function walkNotes(dir, root, spine, rest, state) {
 export function buildReadingContextEnvelope(input) {
   const title = (input.bookTitle || '').trim() || input.bookId;
   /** @type {string[]} */
+  const K = ENVELOPE_KEYS;
   const body = [
-    `book: ${JSON.stringify(title)}`,
-    `bookId: ${JSON.stringify(input.bookId)}`,
+    `${K.book}: ${JSON.stringify(title)}`,
+    `${K.bookId}: ${JSON.stringify(input.bookId)}`,
   ];
 
   const extractStatus = input.extractStatus;
   if (extractStatus && typeof extractStatus.status === 'string' && extractStatus.status) {
-    body.push(`extract_status: ${extractStatus.status}`);
+    body.push(`${K.extractStatus}: ${extractStatus.status}`);
     if (
       typeof extractStatus.chunkCount === 'number' &&
       Number.isFinite(extractStatus.chunkCount)
     ) {
-      body.push(`extract_chunk_count: ${Math.max(0, Math.floor(extractStatus.chunkCount))}`);
+      body.push(
+        `${K.extractChunkCount}: ${Math.max(0, Math.floor(extractStatus.chunkCount))}`,
+      );
     }
   }
 
   const position = normalizeReaderState(input.readerState);
   if (position) {
-    body.push('position: (client-reported, may be stale)');
+    body.push(`${K.position}: (client-reported, may be stale)`);
     if (position.chapter) {
-      body.push(`  chapter: ${JSON.stringify(position.chapter)}`);
+      body.push(`  ${K.chapter}: ${JSON.stringify(position.chapter)}`);
     }
-    if (position.cfi) body.push(`  cfi: ${JSON.stringify(position.cfi)}`);
+    if (position.cfi) body.push(`  ${K.cfi}: ${JSON.stringify(position.cfi)}`);
     if (position.sectionIndex !== undefined) {
-      body.push(`  sectionIndex: ${position.sectionIndex}`);
+      body.push(`  ${K.sectionIndex}: ${position.sectionIndex}`);
     }
   }
 
@@ -364,15 +274,15 @@ export function buildReadingContextEnvelope(input) {
           .slice(0, FOCUS_CHUNKS_MAX)
       : [];
   if (focusChunks && focusChunks.via && focusChunks.via !== 'none') {
-    body.push(`focus_chunks_via: ${focusChunks.via}`);
-    body.push(`focus_chunk_count: ${focusPaths.length}`);
+    body.push(`${K.focusChunksVia}: ${focusChunks.via}`);
+    body.push(`${K.focusChunkCount}: ${focusPaths.length}`);
     if (focusPaths.length) {
-      body.push('focus_chunks:');
+      body.push(`${K.focusChunks}:`);
       for (const p of focusPaths) {
         body.push(`  - ${JSON.stringify(p.trim())}`);
       }
     } else {
-      body.push('focus_chunks: (none matched)');
+      body.push(`${K.focusChunks}: (none matched)`);
     }
   }
 
@@ -386,21 +296,21 @@ export function buildReadingContextEnvelope(input) {
       ? sectionChunks.count
       : chunkPaths.length;
   if (sectionChunks && sectionChunks.via) {
-    body.push(`section_chunks_via: ${sectionChunks.via}`);
-    body.push(`section_chunk_count: ${chunkCount}`);
+    body.push(`${K.sectionChunksVia}: ${sectionChunks.via}`);
+    body.push(`${K.sectionChunkCount}: ${chunkCount}`);
     if (chunkCount > SECTION_CHUNKS_ASK_THRESHOLD) {
       body.push(
-        `section_chunks_note: ${chunkCount} chunks (>${SECTION_CHUNKS_ASK_THRESHOLD}); report count and ask before reading all`,
+        `${K.sectionChunksNote}: ${chunkCount} chunks (>${SECTION_CHUNKS_ASK_THRESHOLD}); report count and ask before reading all`,
       );
     }
     if (chunkPaths.length) {
-      body.push('section_chunks:');
+      body.push(`${K.sectionChunks}:`);
       for (const p of chunkPaths) {
         body.push(`  - ${JSON.stringify(p.trim())}`);
       }
     } else {
       body.push(
-        'section_chunks: (none matched — extract missing, stale position, or title mismatch)',
+        `${K.sectionChunks}: (none matched — extract missing, stale position, or title mismatch)`,
       );
     }
   }
@@ -422,13 +332,13 @@ export function buildReadingContextEnvelope(input) {
     );
   }
   if (quoteLines.length) {
-    body.push('quotes:');
+    body.push(`${K.quotes}:`);
     body.push(...quoteLines);
   }
 
   const priors = Array.isArray(input.priorSources) ? input.priorSources : [];
   if (priors.length) {
-    body.push('prior_sources:');
+    body.push(`${K.priorSources}:`);
     for (const s of priors) {
       if (!s?.cfi) continue;
       const label =
@@ -448,7 +358,7 @@ export function buildReadingContextEnvelope(input) {
     : [];
   if (notes.length) {
     body.push(
-      `notes_index: ${notes.map((n) => JSON.stringify(n.trim())).join(', ')}`,
+      `${K.notesIndex}: ${notes.map((n) => JSON.stringify(n.trim())).join(', ')}`,
     );
   }
 

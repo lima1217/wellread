@@ -1,9 +1,9 @@
 {
-  "name": "@wellread/eve-message",
+  "name": "@wellread/quote-wire",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "SessionMessage ↔ UIMessage conversion for Reading Assistant (shared by eve-sidecar and readest-app).",
+  "description": "Pending Quote wire format SSOT for Reading Assistant (host composer + eve sidecar).",
   "exports": {
     ".": {
       "types": "./src/index.d.ts",
