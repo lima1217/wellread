@@ -19,7 +19,7 @@ description: 苏格拉底式阅读教练——出运用题检验内化、评估�
 
 1. **Pending Quote**（消息前的 `> …` 划词块）— 当作本章/本段焦点。
 2. **slash 参数**（`/skill:socratic-check` 后的文字）— 章节名、页码提示、或用户刚写的回答。
-3. **Extract** — 需要原文时对 `/workspace/.wellread/extract/<bookId>/` 使用 `glob` / `grep` / `read_file`。
+3. **Extract** — 需要某章/某节原文时用 `resolve_section`（`sectionIndex` 和/或 `title`）再 `read_file`；短语检索用 `grep`。不要为找节去 `glob` extract `chunks/*`。
 4. **Notes**（可选）— 若已有 `index.md` / `chapters/` / `concepts/`，可读作全书已建立的模型。
 
 引用具体段落时用 `[小节标题](<epubcfi(...)>)`（完整 frontmatter cfi，含 `epubcfi(…)` 与尖括号）。用读者的语言回复，纯散文。未经要求不写文件。

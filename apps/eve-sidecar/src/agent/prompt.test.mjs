@@ -35,6 +35,9 @@ describe('buildSystemPrompt', () => {
     assert.match(prompt, /meta\.json/);
     assert.match(prompt, /\bNotes:/);
     assert.match(prompt, /Grounding is optional/i);
+    assert.match(prompt, /section_chunks/i);
+    assert.match(prompt, /resolve_section/);
+    assert.match(prompt, /never glob/i);
     assert.doesNotMatch(prompt, /\*\*\/\*\*\.md/);
     assert.match(prompt, /answer freely/i);
     assert.match(prompt, /\bcite\b/i);
@@ -205,6 +208,52 @@ describe('buildReadingContextEnvelope', () => {
     assert.match(env, /sectionIndex: 3/);
     assert.doesNotMatch(env, /chapter:/);
     assert.doesNotMatch(env, /cfi:/);
+  });
+
+  it('lists resolved section_chunks paths and long-section note', () => {
+    const paths = Array.from(
+      { length: 21 },
+      (_, i) =>
+        `/workspace/.wellread/extract/bk1/chunks/${String(i + 1).padStart(5, '0')}.md`,
+    );
+    const env = buildReadingContextEnvelope({
+      bookId: 'bk1',
+      bookTitle: 'Book',
+      readerState: { sectionIndex: 4, chapter: 'On Digital Extremities' },
+      sectionChunks: {
+        paths,
+        count: 21,
+        via: 'sectionIndex',
+        sectionIndex: 4,
+      },
+    });
+    assert.match(env, /section_chunks_via: sectionIndex/);
+    assert.match(env, /section_chunk_count: 21/);
+    assert.match(env, /section_chunks_note:/);
+    assert.match(env, /section_chunks:/);
+    assert.match(
+      env,
+      /"\/workspace\/\.wellread\/extract\/bk1\/chunks\/00001\.md"/,
+    );
+    assert.match(
+      env,
+      /"\/workspace\/\.wellread\/extract\/bk1\/chunks\/00021\.md"/,
+    );
+  });
+
+  it('notes when section resolution matched nothing', () => {
+    const env = buildReadingContextEnvelope({
+      bookId: 'bk1',
+      bookTitle: 'Book',
+      readerState: { sectionIndex: 4 },
+      sectionChunks: {
+        paths: [],
+        count: 0,
+        via: 'sectionIndex',
+        sectionIndex: 4,
+      },
+    });
+    assert.match(env, /section_chunks: \(none matched/);
   });
 
   it('keeps the full Pending Quote text with no char cap', () => {

@@ -25,9 +25,11 @@ import {
   collectSourcesFromTools,
   listNotesIndex,
 } from './prompt.mjs';
+import { resolveSectionChunksForReader } from './resolveSectionChunks.mjs';
 import { maybeApplyFirstTurnTitle } from './sessionStore.mjs';
 import { discoverSkills } from './skills/discover.mjs';
 import { createReadingTools } from './tools.mjs';
+import { createReasoningEmitter } from './reasoningEmitter.mjs';
 import { prepareToolExhaustionStep, resolveMaxToolRounds } from './toolRounds.mjs';
 import {
   sessionToUIMessage,
@@ -100,6 +102,13 @@ export function runTurn(input) {
   const notesIndex = booksRoot
     ? listNotesIndex(booksRoot, session.bookId)
     : [];
+  const sectionChunks = booksRoot
+    ? resolveSectionChunksForReader({
+        booksRoot,
+        bookId: session.bookId,
+        readerState: input.readerState,
+      })
+    : null;
   const envelope = buildReadingContextEnvelope({
     bookId: session.bookId,
     bookTitle: session.bookTitle,
@@ -107,6 +116,7 @@ export function runTurn(input) {
     quotes: turnQuotes,
     priorSources,
     notesIndex,
+    sectionChunks,
   });
   const instructions = buildSystemPrompt({
     bookId: session.bookId,
@@ -257,12 +267,11 @@ export function runTurn(input) {
         currentUserModelContent: modelUserMessage,
       });
 
-      let reasoningId = /** @type {string | null} */ (null);
-      const closeReasoning = () => {
-        if (!reasoningId) return;
-        writer.write({ type: 'reasoning-end', id: reasoningId });
-        reasoningId = null;
-      };
+      // finish-step clears AI SDK activeReasoningParts — never reuse one id
+      // across tool rounds or emit reasoning-end after that clear (kills Node).
+      const reasoning = createReasoningEmitter(writer, {
+        baseId: `reasoning_${assistantId}`,
+      });
 
       try {
         await turnFetchContext.run(
@@ -271,16 +280,8 @@ export function runTurn(input) {
             onReasoningDelta:
               thinkingMode === 'think'
                 ? (delta) => {
-                    if (abortSignal?.aborted || !delta) return;
-                    if (!reasoningId) {
-                      reasoningId = `reasoning_${assistantId}`;
-                      writer.write({ type: 'reasoning-start', id: reasoningId });
-                    }
-                    writer.write({
-                      type: 'reasoning-delta',
-                      id: reasoningId,
-                      delta,
-                    });
+                    if (abortSignal?.aborted) return;
+                    reasoning.writeDelta(delta);
                   }
                 : undefined,
           },
@@ -299,6 +300,9 @@ export function runTurn(input) {
                     system: apiMode === 'responses' ? envelope || '' : system,
                   });
                   return prep;
+                },
+                onStepFinish: () => {
+                  reasoning.beginNewSegment();
                 },
                 ...(apiMode === 'responses'
                   ? {
@@ -334,7 +338,7 @@ export function runTurn(input) {
 
             try {
               const text = (await result.text).trim();
-              closeReasoning();
+              reasoning.stop();
               if (!text) {
                 const steps = await result.steps;
                 const hasTools = steps.some(
@@ -350,7 +354,7 @@ export function runTurn(input) {
                 }
               }
             } catch (error) {
-              closeReasoning();
+              reasoning.stop();
               if (isAbortError(error) || abortSignal?.aborted) {
                 markFailed();
                 writer.write({ type: 'abort', reason: 'client aborted' });
@@ -365,7 +369,7 @@ export function runTurn(input) {
           },
         );
       } catch (error) {
-        closeReasoning();
+        reasoning.stop();
         if (isAbortError(error) || abortSignal?.aborted) {
           markFailed();
           writer.write({ type: 'abort', reason: 'client aborted' });

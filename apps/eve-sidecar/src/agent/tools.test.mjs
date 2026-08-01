@@ -20,7 +20,7 @@ import {
 } from './tools.mjs';
 
 describe('projectExtractContentForModel', () => {
-  it('keeps cfi/title/endCfi and drops other frontmatter keys', () => {
+  it('keeps cfi/title/endCfi/sectionIndex/chunkIndex and drops bookId', () => {
     const raw = `---
 bookId: "bk1"
 sectionIndex: 3
@@ -33,11 +33,12 @@ chunkIndex: 0
 Call me Ishmael.
 `;
     const out = projectExtractContentForModel(raw);
-    assert.match(out, /^---\ncfi: "epubcfi\(\/6\/2!\)"\ntitle: "Loomings"\nendCfi: "epubcfi\(\/6\/2!\/4\)"\n---\n/);
+    assert.match(
+      out,
+      /^---\ncfi: "epubcfi\(\/6\/2!\)"\ntitle: "Loomings"\nendCfi: "epubcfi\(\/6\/2!\/4\)"\nsectionIndex: 3\nchunkIndex: 0\n---\n/,
+    );
     assert.match(out, /Call me Ishmael/);
     assert.doesNotMatch(out, /bookId/);
-    assert.doesNotMatch(out, /sectionIndex/);
-    assert.doesNotMatch(out, /chunkIndex/);
   });
 
   it('leaves non-frontmatter content unchanged', () => {
@@ -135,7 +136,9 @@ describe('createReadingTools envelopes', () => {
   it('describes glob/grep by role without wide-path examples', () => {
     const tools = createReadingTools({ getBooksRoot: () => '/tmp', bookId: 'bk1' });
     assert.match(tools.glob.description, /List file paths/i);
+    assert.match(tools.glob.description, /resolve_section/);
     assert.match(tools.grep.description, /file contents/i);
+    assert.match(tools.resolve_section.description, /sectionIndex/i);
     assert.equal(
       tools.glob.inputSchema.shape.pattern.description,
       'Glob path pattern under /workspace/.wellread/',
@@ -145,6 +148,67 @@ describe('createReadingTools envelopes', () => {
       tools.glob.inputSchema.shape.pattern.description ?? '',
       /\*\*\/\*\*/,
     );
+  });
+
+  it('resolve_section returns ordered chunk paths for a sectionIndex', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'eve-tools-resolve-')));
+    const bookId = 'bk1';
+    try {
+      const chunks = join(booksRoot, '.wellread', 'extract', bookId, 'chunks');
+      mkdirSync(chunks, { recursive: true });
+      writeFileSync(
+        join(chunks, '00002-b.md'),
+        `---
+sectionIndex: 4
+chunkIndex: 2
+title: "B"
+cfi: "epubcfi(/6/2!)"
+---
+
+b
+`,
+      );
+      writeFileSync(
+        join(chunks, '00001-a.md'),
+        `---
+sectionIndex: 4
+chunkIndex: 1
+title: "A"
+cfi: "epubcfi(/6/2!)"
+---
+
+a
+`,
+      );
+      const tools = createReadingTools({ getBooksRoot: () => booksRoot, bookId });
+      const hit = await tools.resolve_section.execute(
+        { sectionIndex: 4 },
+        { toolCallId: 'rs1', messages: [] },
+      );
+      assert.equal(hit.ok, true);
+      assert.equal(hit.via, 'sectionIndex');
+      assert.equal(hit.count, 2);
+      assert.deepEqual(hit.paths, [
+        `/workspace/.wellread/extract/${bookId}/chunks/00001-a.md`,
+        `/workspace/.wellread/extract/${bookId}/chunks/00002-b.md`,
+      ]);
+
+      const byTitle = await tools.resolve_section.execute(
+        { title: 'A' },
+        { toolCallId: 'rs2', messages: [] },
+      );
+      assert.equal(byTitle.ok, true);
+      assert.equal(byTitle.count, 1);
+
+      const missing = await tools.resolve_section.execute(
+        {},
+        { toolCallId: 'rs3', messages: [] },
+      );
+      assert.equal(missing.ok, false);
+      assert.equal(missing.error, 'invalid_args');
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
   });
 
   it('write_file succeeds inside OKF package and soft-rejects outside', async () => {

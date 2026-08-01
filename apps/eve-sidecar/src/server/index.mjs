@@ -323,6 +323,16 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// Keep the loopback server alive if a turn's UI-message transform throws
+// (historically: AI SDK reasoning after finish-step). One bad turn must not
+// leave the app pointing at a dead PORT.
+process.on('uncaughtException', (err) => {
+  console.error('[eve-sidecar] uncaughtException', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[eve-sidecar] unhandledRejection', reason);
+});
+
 const preferredPort = Number(process.env.PORT || process.env.NITRO_PORT || '0');
 server.listen(preferredPort, HOST, () => {
   const address = server.address();

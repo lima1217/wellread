@@ -16,6 +16,7 @@ import {
   isSafeBookIdSegment,
   notesPackageWorkspaceRoot,
 } from './notesOkf.mjs';
+import { resolveSectionQuery } from './resolveSectionChunks.mjs';
 
 export { OKF_NOTES_DIRS, OKF_NOTES_ROOT_FILES } from './notesOkf.mjs';
 
@@ -26,8 +27,8 @@ export const GREP_MODEL_HIT_MAX = 40;
 export const GREP_LINE_TEXT_MAX = 160;
 
 /**
- * Compact extract-chunk markdown for the model: keep cfi/title (+ endCfi)
- * frontmatter, drop bookId/sectionIndex/chunkIndex noise.
+ * Compact extract-chunk markdown for the model: keep cfi/title/sectionIndex/chunkIndex
+ * (+ endCfi) frontmatter; drop bookId noise.
  * @param {string} content
  * @returns {string}
  */
@@ -45,9 +46,13 @@ export function projectExtractContentForModel(content) {
   if (!cfi) return content;
   const title = get('title');
   const endCfi = get('endCfi');
+  const sectionIndex = get('sectionIndex');
+  const chunkIndex = get('chunkIndex');
   const lines = ['---', `cfi: ${cfi}`];
   if (title !== undefined) lines.push(`title: ${title}`);
   if (endCfi !== undefined) lines.push(`endCfi: ${endCfi}`);
+  if (sectionIndex !== undefined) lines.push(`sectionIndex: ${sectionIndex}`);
+  if (chunkIndex !== undefined) lines.push(`chunkIndex: ${chunkIndex}`);
   lines.push('---', '', body.replace(/^\r?\n/, ''));
   return lines.join('\n');
 }
@@ -261,8 +266,46 @@ export function createReadingTools(options) {
       },
     }),
 
+    resolve_section: tool({
+      description:
+        "List this book's extract chunk paths for one spine section (by sectionIndex and/or chapter title). Prefer this over globbing extract chunks/*.md. When both are set, sectionIndex wins. Then read_file the returned paths in order.",
+      inputSchema: z.object({
+        sectionIndex: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe('0-based spine sectionIndex from reading_context or toc/chunk frontmatter'),
+        title: z
+          .string()
+          .optional()
+          .describe('Chapter/section title to match against chunk frontmatter title'),
+      }),
+      execute: async ({ sectionIndex, title }) => {
+        let booksRoot;
+        try {
+          booksRoot = options.getBooksRoot();
+        } catch (err) {
+          return {
+            ok: false,
+            error: 'unavailable',
+            message: errorMessage(err),
+            count: 0,
+            paths: [],
+          };
+        }
+        return resolveSectionQuery({
+          booksRoot,
+          bookId,
+          sectionIndex,
+          title,
+        });
+      },
+    }),
+
     glob: tool({
-      description: 'List file paths under /workspace/.wellread/ that match a glob pattern.',
+      description:
+        'List file paths under /workspace/.wellread/ that match a glob pattern. For a book section/chapter, use resolve_section instead of globbing extract chunks/*.',
       inputSchema: z.object({
         pattern: z.string().describe('Glob path pattern under /workspace/.wellread/'),
       }),

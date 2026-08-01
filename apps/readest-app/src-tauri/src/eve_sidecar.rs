@@ -510,7 +510,45 @@ fn start_or_restart_locked(
     inner.child = Some(child);
     inner.info = Some(info.clone());
     inner.last_fingerprint = Some(fingerprint);
+    drop(inner);
+
+    // If the Node process dies mid-turn (e.g. AI SDK throw), reap + respawn so
+    // the frontend is not left with a stale loopback PORT.
+    spawn_child_watch(app.clone(), generation);
+
     Ok(Some(info))
+}
+
+/// Poll the managed child; on unexpected exit, clear info and `ensure` again.
+fn spawn_child_watch(app: AppHandle, generation: u64) {
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_millis(500));
+            let Some(state) = app.try_state::<EveSidecarState>() else {
+                return;
+            };
+            let dead = {
+                let Ok(mut inner) = state.inner.lock() else {
+                    return;
+                };
+                if inner.generation != generation {
+                    return;
+                }
+                reap_if_dead(&mut inner)
+            };
+            if !dead {
+                continue;
+            }
+            log::warn!("eve sidecar exited unexpectedly; restarting");
+            emit_sidecar_changed(&app, None);
+            let model = read_model_config_from_settings(&app);
+            match ensure(&app, model) {
+                Ok(info) => emit_sidecar_changed(&app, info.as_ref()),
+                Err(err) => log::error!("eve sidecar auto-restart failed: {err}"),
+            }
+            return;
+        }
+    });
 }
 
 fn matching_running_info(
@@ -568,6 +606,9 @@ pub fn shutdown(app: &AppHandle) {
     if let Some(state) = app.try_state::<EveSidecarState>() {
         if let Ok(mut inner) = state.inner.lock() {
             stop_locked(&mut inner);
+            // Invalidate child-watch threads from the prior generation so they
+            // do not keep polling (or auto-restart) after an intentional stop.
+            inner.generation = inner.generation.wrapping_add(1);
         }
         emit_sidecar_changed(app, None);
     }
