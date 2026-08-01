@@ -1,26 +1,43 @@
 /**
- * Vendor Node 24.x (darwin-arm64) into Tauri externalBin path.
+ * Vendor Node 24.x into Tauri externalBin path.
  *
- * Destination: apps/readest-app/src-tauri/binaries/node-aarch64-apple-darwin
+ * Destination: apps/readest-app/src-tauri/binaries/node-<triple>
  * Spec: 10 §1.2 / 05 §2.1 — Node 24.x official binary, Tauri triple naming.
+ *
+ * Usage:
+ *   node scripts/vendor-node.mjs                 # host arch (default aarch64)
+ *   node scripts/vendor-node.mjs --triple x86_64-apple-darwin
  */
 import { createWriteStream, chmodSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pipeline } from 'node:stream/promises';
-import { createGunzip } from 'node:zlib';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
 
 const NODE_MAJOR = 24;
-const TRIPLE = 'aarch64-apple-darwin';
-const PLATFORM = 'darwin-arm64';
+
+const TRIPLE_TO_PLATFORM = {
+  'aarch64-apple-darwin': 'darwin-arm64',
+  'x86_64-apple-darwin': 'darwin-x64',
+};
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '../../..');
 const destDir = join(repoRoot, 'apps/readest-app/src-tauri/binaries');
-const destBin = join(destDir, `node-${TRIPLE}`);
+
+function resolveTriple(argTriple) {
+  if (argTriple) {
+    if (!TRIPLE_TO_PLATFORM[argTriple]) {
+      throw new Error(
+        `unsupported triple ${argTriple}; expected one of ${Object.keys(TRIPLE_TO_PLATFORM).join(', ')}`,
+      );
+    }
+    return argTriple;
+  }
+  return process.arch === 'x64' ? 'x86_64-apple-darwin' : 'aarch64-apple-darwin';
+}
 
 async function latestNode24Version() {
   const res = await fetch('https://nodejs.org/dist/index.json');
@@ -37,21 +54,31 @@ async function download(url, filePath) {
   await pipeline(res.body, createWriteStream(filePath));
 }
 
-export async function vendorNode({ force = false } = {}) {
+export async function vendorNode({ force = false, triple } = {}) {
+  const resolvedTriple = resolveTriple(triple);
+  const platform = TRIPLE_TO_PLATFORM[resolvedTriple];
+  const destBin = join(destDir, `node-${resolvedTriple}`);
+
   mkdirSync(destDir, { recursive: true });
   if (!force && existsSync(destBin)) {
     try {
-      const ver = execFileSync(destBin, ['-v'], { encoding: 'utf8' }).trim();
-      if (ver.startsWith(`v${NODE_MAJOR}.`)) {
-        console.log(`vendored node already present (${ver}) → ${destBin}`);
-        return { version: ver, path: destBin, skipped: true };
+      // Cross-arch binaries may not execute on this host; accept by file presence.
+      if (resolvedTriple.includes(process.arch === 'arm64' ? 'aarch64' : 'x86_64')) {
+        const ver = execFileSync(destBin, ['-v'], { encoding: 'utf8' }).trim();
+        if (ver.startsWith(`v${NODE_MAJOR}.`)) {
+          console.log(`vendored node already present (${ver}) → ${destBin}`);
+          return { version: ver, path: destBin, skipped: true, triple: resolvedTriple };
+        }
+      } else {
+        console.log(`vendored node already present → ${destBin}`);
+        return { version: null, path: destBin, skipped: true, triple: resolvedTriple };
       }
     } catch {
       // fall through to re-download
     }
   }
   const version = await latestNode24Version();
-  const tarball = `node-${version}-${PLATFORM}.tar.gz`;
+  const tarball = `node-${version}-${platform}.tar.gz`;
   const url = `https://nodejs.org/dist/${version}/${tarball}`;
   const staging = mkdtempSync(join(tmpdir(), 'wellread-node-'));
   const tarballPath = join(staging, tarball);
@@ -59,7 +86,7 @@ export async function vendorNode({ force = false } = {}) {
   console.log(`vendoring ${url}`);
   await download(url, tarballPath);
   execFileSync('tar', ['-xzf', tarballPath, '-C', staging], { stdio: 'inherit' });
-  const extracted = join(staging, `node-${version}-${PLATFORM}`, 'bin', 'node');
+  const extracted = join(staging, `node-${version}-${platform}`, 'bin', 'node');
   if (!existsSync(extracted)) {
     throw new Error(`extracted node missing at ${extracted}`);
   }
@@ -68,12 +95,18 @@ export async function vendorNode({ force = false } = {}) {
   chmodSync(destBin, 0o755);
   rmSync(staging, { recursive: true, force: true });
 
-  const ver = execFileSync(destBin, ['-v'], { encoding: 'utf8' }).trim();
-  if (!ver.startsWith(`v${NODE_MAJOR}.`)) {
-    throw new Error(`expected Node ${NODE_MAJOR}.x, got ${ver}`);
+  const canExec = resolvedTriple.includes(process.arch === 'arm64' ? 'aarch64' : 'x86_64');
+  if (canExec) {
+    const ver = execFileSync(destBin, ['-v'], { encoding: 'utf8' }).trim();
+    if (!ver.startsWith(`v${NODE_MAJOR}.`)) {
+      throw new Error(`expected Node ${NODE_MAJOR}.x, got ${ver}`);
+    }
+    console.log(`vendored ${ver} → ${destBin}`);
+    return { version: ver, path: destBin, skipped: false, triple: resolvedTriple };
   }
-  console.log(`vendored ${ver} → ${destBin}`);
-  return { version: ver, path: destBin, skipped: false };
+
+  console.log(`vendored ${version} → ${destBin}`);
+  return { version, path: destBin, skipped: false, triple: resolvedTriple };
 }
 
 const isMain =
@@ -82,7 +115,9 @@ const isMain =
 
 if (isMain) {
   const force = process.argv.includes('--force');
-  vendorNode({ force }).catch((err) => {
+  const tripleIdx = process.argv.indexOf('--triple');
+  const triple = tripleIdx >= 0 ? process.argv[tripleIdx + 1] : undefined;
+  vendorNode({ force, triple }).catch((err) => {
     console.error(err);
     process.exit(1);
   });
