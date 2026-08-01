@@ -88,6 +88,43 @@ function capturePromptModel(sink, text = 'ok') {
 }
 
 describe('runTurn model history', () => {
+  it('does not prepend the prior assistant reply into the next turn', async () => {
+    const session = emptySession();
+    const { assistant: first } = await run({
+      model: /** @type {any} */ (answerModel('FIRST_SECTION')),
+      session,
+      userMessage: 'explain section 1',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools: {},
+      generateTextFn: async () => ({ text: '', usage: {} }),
+    });
+    assert.ok(first);
+    assert.equal(first.content, 'FIRST_SECTION');
+
+    const { chunks, assistant: second } = await run({
+      model: /** @type {any} */ (answerModel('SECOND_SECTION')),
+      session,
+      userMessage: 'explain section 2',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools: {},
+      generateTextFn: async () => ({ text: '', usage: {} }),
+    });
+
+    assert.ok(second);
+    assert.equal(second.content, 'SECOND_SECTION');
+    assert.notEqual(second.id, first.id);
+    const start = chunks.find((c) => c.type === 'start');
+    assert.equal(start?.messageId, second.id);
+    assert.equal(
+      session.messages.filter((m) => m.role === 'assistant').length,
+      2,
+    );
+    assert.equal(
+      session.messages.find((m) => m.id === first.id)?.content,
+      'FIRST_SECTION',
+    );
+  });
+
   it('persists modelMessages from the SDK response when available', async () => {
     const session = emptySession();
     const { assistant } = await run({

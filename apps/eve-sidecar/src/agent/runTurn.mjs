@@ -179,9 +179,10 @@ export function runTurn(input) {
     dropUser();
   };
 
-  const originalMessages = session.messages
-    .filter((m) => m.id !== userId)
-    .map(sessionToUIMessage);
+  // Include the current user so the list does not end on a prior assistant.
+  // AI SDK treats a trailing assistant in originalMessages as a continuation and
+  // clones its parts into this turn's responseMessage (first reply + second).
+  const originalMessages = session.messages.map(sessionToUIMessage);
 
   return createUIMessageStream({
     originalMessages,
