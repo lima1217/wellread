@@ -15,6 +15,7 @@ import {
   shouldShowPendingReply,
   stripAssistantCfiCitations,
   summarizeToolTrace,
+  coalesceAssistantParts,
 } from '@/services/wellread/assistant/helpers';
 
 describe('isReadingAssistantAvailable', () => {
@@ -149,29 +150,86 @@ describe('hydrateEveMessagesForDisplay', () => {
   });
 });
 
+describe('coalesceAssistantParts', () => {
+  it('groups consecutive tools into one segment', () => {
+    expect(
+      coalesceAssistantParts([
+        { kind: 'reasoning', text: 'plan' },
+        { kind: 'tool', tool: { id: 't1', name: 'read_file' } },
+        { kind: 'tool', tool: { id: 't2', name: 'grep' } },
+        { kind: 'text', text: 'answer' },
+      ]),
+    ).toEqual([
+      { kind: 'reasoning', text: 'plan' },
+      {
+        kind: 'tools',
+        tools: [
+          { id: 't1', name: 'read_file' },
+          { id: 't2', name: 'grep' },
+        ],
+      },
+      { kind: 'text', text: 'answer' },
+    ]);
+  });
+
+  it('splits tool groups when text or reasoning interrupts', () => {
+    expect(
+      coalesceAssistantParts([
+        { kind: 'tool', tool: { id: 't1', name: 'read_file' } },
+        { kind: 'text', text: 'mid' },
+        { kind: 'tool', tool: { id: 't2', name: 'write_file' } },
+      ]),
+    ).toEqual([
+      { kind: 'tools', tools: [{ id: 't1', name: 'read_file' }] },
+      { kind: 'text', text: 'mid' },
+      { kind: 'tools', tools: [{ id: 't2', name: 'write_file' }] },
+    ]);
+  });
+
+  it('merges adjacent reasoning chunks before tools', () => {
+    expect(
+      coalesceAssistantParts([
+        { kind: 'reasoning', text: 'a' },
+        { kind: 'reasoning', text: 'b' },
+        { kind: 'tool', tool: { id: 't1', name: 'grep' } },
+      ]),
+    ).toEqual([
+      { kind: 'reasoning', text: 'ab' },
+      { kind: 'tools', tools: [{ id: 't1', name: 'grep' }] },
+    ]);
+  });
+});
+
 describe('summarizeToolTrace', () => {
   it('summarizes search tools as Searched extract', () => {
-    expect(summarizeToolTrace([{ name: 'grep' }, { name: 'grep' }, { name: 'read_file' }])).toBe(
-      'Searched extract · 3 steps',
+    expect(summarizeToolTrace([{ name: 'grep' }, { name: 'grep' }, { name: 'read_file' }])).toEqual(
+      { label: 'Searched extract', count: 3 },
     );
   });
 
   it('summarizes write_file tools as Saved notes', () => {
-    expect(summarizeToolTrace([{ name: 'write_file' }, { name: 'write_file' }])).toBe(
-      'Saved notes · 2 steps',
-    );
+    expect(summarizeToolTrace([{ name: 'write_file' }, { name: 'write_file' }])).toEqual({
+      label: 'Saved notes',
+      count: 2,
+    });
   });
 
   it('uses Saved notes when the only tools are writes', () => {
-    expect(summarizeToolTrace([{ name: 'write_file' }])).toBe('Saved notes · 1 step');
+    expect(summarizeToolTrace([{ name: 'write_file' }])).toEqual({
+      label: 'Saved notes',
+      count: 1,
+    });
   });
 
-  it('returns empty when there are no tools', () => {
-    expect(summarizeToolTrace([])).toBe('');
+  it('returns null when there are no tools', () => {
+    expect(summarizeToolTrace([])).toBeNull();
   });
 
-  it('uses singular step for one search tool call', () => {
-    expect(summarizeToolTrace([{ name: 'grep' }])).toBe('Searched extract · 1 step');
+  it('uses Searched extract for one search tool call', () => {
+    expect(summarizeToolTrace([{ name: 'grep' }])).toEqual({
+      label: 'Searched extract',
+      count: 1,
+    });
   });
 });
 

@@ -108,14 +108,83 @@ export function hydrateEveMessagesForDisplay<T extends HydrateableEveMessage>(me
 
 export type ToolTraceEntry = { name: string };
 
-/** Always-visible T3 summary line for tool traces (expand shows params). */
-export function summarizeToolTrace(tools: ToolTraceEntry[]): string {
-  const n = tools.length;
-  if (n === 0) return '';
+/** Label keys for tool-trace summary; UI interpolates count via i18n. */
+export type ToolTraceSummaryLabel = 'Saved notes' | 'Searched extract';
+
+export type ToolTraceSummary = {
+  label: ToolTraceSummaryLabel;
+  count: number;
+};
+
+/** Always-visible T3 summary for tool traces (expand shows params). */
+export function summarizeToolTrace(tools: ToolTraceEntry[]): ToolTraceSummary | null {
+  const count = tools.length;
+  if (count === 0) return null;
   const onlyWrites = tools.every((t) => t.name === 'write_file');
-  const label = onlyWrites ? 'Saved notes' : 'Searched extract';
-  // English key-as-content; UI may pass through useTranslation.
-  return `${label} · ${n} ${n === 1 ? 'step' : 'steps'}`;
+  return {
+    label: onlyWrites ? 'Saved notes' : 'Searched extract',
+    count,
+  };
+}
+
+export type AssistantToolTrace = {
+  id: string;
+  name: string;
+  args?: unknown;
+  result?: unknown;
+};
+
+export type AssistantPartInput =
+  | { kind: 'reasoning'; text: string }
+  | { kind: 'tool'; tool: AssistantToolTrace }
+  | { kind: 'text'; text: string };
+
+export type AssistantDisplaySegment =
+  | { kind: 'reasoning'; text: string }
+  | { kind: 'tools'; tools: AssistantToolTrace[] }
+  | { kind: 'text'; text: string };
+
+/**
+ * Merge stream parts for chat display: consecutive tools → one Tools block;
+ * adjacent reasoning chunks concatenate; text flushes pending buffers.
+ */
+export function coalesceAssistantParts(parts: AssistantPartInput[]): AssistantDisplaySegment[] {
+  const out: AssistantDisplaySegment[] = [];
+  let reasoning = '';
+  let tools: AssistantToolTrace[] = [];
+
+  const flushReasoning = () => {
+    if (!reasoning.trim()) {
+      reasoning = '';
+      return;
+    }
+    out.push({ kind: 'reasoning', text: reasoning });
+    reasoning = '';
+  };
+  const flushTools = () => {
+    if (!tools.length) return;
+    out.push({ kind: 'tools', tools });
+    tools = [];
+  };
+
+  for (const part of parts) {
+    if (part.kind === 'reasoning') {
+      flushTools();
+      reasoning += part.text;
+      continue;
+    }
+    if (part.kind === 'tool') {
+      flushReasoning();
+      tools.push(part.tool);
+      continue;
+    }
+    flushReasoning();
+    flushTools();
+    if (part.text.trim()) out.push({ kind: 'text', text: part.text });
+  }
+  flushReasoning();
+  flushTools();
+  return out;
 }
 
 export type EveSourceLike = {

@@ -27,6 +27,7 @@ import { reloadEveSidecar } from '@/services/wellread/eveSidecar';
 import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
 import {
   applySlashSkillSelection,
+  coalesceAssistantParts,
   filterSkillsForSlash,
   formatWorkDuration,
   getComposerSlashQuery,
@@ -39,6 +40,9 @@ import {
   shouldShowPendingReply,
   SKILL_SLASH_PREFIX,
   stripAssistantCfiCitations,
+  summarizeToolTrace,
+  type AssistantPartInput,
+  type AssistantToolTrace,
 } from '@/services/wellread/assistant/helpers';
 import { useEveAgent } from '@/services/wellread/assistant/useEveAgent';
 import {
@@ -51,7 +55,6 @@ import {
   type EveMessageQuote,
   type EveSkillSummary,
   type EveSource,
-  type EveToolTrace,
 } from '@/services/wellread/assistant/eveClient';
 import { openExternalUrl } from '@/utils/open';
 
@@ -294,7 +297,7 @@ const markdownBodyClass = clsx(
 );
 
 /** One tool step in the activity timeline (live or completed). */
-function ToolStep({ tool }: { tool: EveToolTrace }) {
+function ToolStep({ tool }: { tool: AssistantToolTrace }) {
   const _ = useTranslation();
   const [open, setOpen] = useState(false);
   const pending = tool.result === undefined;
@@ -367,6 +370,53 @@ function ReasoningBlock({
   );
 }
 
+/** Collapsed group of consecutive tool steps (mirrors ReasoningBlock). */
+function ToolsBlock({
+  tools,
+  forceCollapsed,
+}: {
+  tools: AssistantToolTrace[];
+  forceCollapsed?: boolean;
+}) {
+  const _ = useTranslation();
+  const [open, setOpen] = useState(!forceCollapsed);
+  useEffect(() => {
+    if (forceCollapsed) setOpen(false);
+  }, [forceCollapsed]);
+  if (!tools.length) return null;
+  const pending = tools.some((t) => t.result === undefined);
+  const summary = summarizeToolTrace(tools);
+  if (!summary) return null;
+  const summaryText =
+    summary.label === 'Saved notes'
+      ? _('Saved notes · {{count}} step(s)', { count: summary.count })
+      : _('Searched extract · {{count}} step(s)', { count: summary.count });
+  return (
+    <details
+      className='group border-base-content/10 mb-3.5 border-s ps-3'
+      open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary
+        className={clsx(
+          'text-base-content/50 hover:text-base-content/75 font-sans text-[0.8em] leading-none',
+          'cursor-pointer list-none select-none',
+          '[&::-webkit-details-marker]:hidden',
+          focusRing,
+        )}
+      >
+        <span>{summaryText}</span>
+        {pending ? <span className='text-base-content/40 ms-1.5'>{_('Running…')}</span> : null}
+      </summary>
+      <div className='mt-2.5'>
+        {tools.map((t) => (
+          <ToolStep key={t.id} tool={t} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
 /** Render assistant parts in stream order: reasoning → tools → text. */
 function AssistantPartsView({
   msg,
@@ -379,19 +429,72 @@ function AssistantPartsView({
 }) {
   const _ = useTranslation();
   const hasText = Boolean(msg.content.trim());
+  const forceCollapsed = hasText && !isLive;
   const parts = msg.parts;
 
+  const inputs: AssistantPartInput[] = [];
   if (!parts?.length) {
-    return (
-      <>
-        {msg.reasoning?.trim() ? (
-          <ReasoningBlock reasoning={msg.reasoning} forceCollapsed={hasText && !isLive} />
-        ) : null}
-        {(msg.tools ?? []).map((t) => (
-          <ToolStep key={t.id} tool={t} />
-        ))}
-        {hasText ? (
+    if (msg.reasoning?.trim()) inputs.push({ kind: 'reasoning', text: msg.reasoning });
+    for (const t of msg.tools ?? []) {
+      inputs.push({ kind: 'tool', tool: t });
+    }
+    if (hasText) inputs.push({ kind: 'text', text: msg.content });
+  } else {
+    for (const part of parts) {
+      if (part.type === 'reasoning') {
+        inputs.push({ kind: 'reasoning', text: part.text });
+        continue;
+      }
+      if (part.type === 'dynamic-tool') {
+        inputs.push({
+          kind: 'tool',
+          tool: {
+            id: part.toolCallId,
+            name: part.toolName,
+            args: part.input,
+            result: 'output' in part ? part.output : undefined,
+          },
+        });
+        continue;
+      }
+      if (typeof part.type === 'string' && part.type.startsWith('tool-') && 'toolCallId' in part) {
+        inputs.push({
+          kind: 'tool',
+          tool: {
+            id: part.toolCallId,
+            name: part.type.slice('tool-'.length),
+            args: 'input' in part ? part.input : undefined,
+            result: 'output' in part ? part.output : undefined,
+          },
+        });
+        continue;
+      }
+      if (part.type === 'text' && part.text.trim()) {
+        inputs.push({ kind: 'text', text: part.text });
+      }
+    }
+  }
+
+  return (
+    <>
+      {coalesceAssistantParts(inputs).map((segment, i) => {
+        if (segment.kind === 'reasoning') {
+          return (
+            <ReasoningBlock
+              key={`reasoning-${i}`}
+              reasoning={segment.text}
+              forceCollapsed={forceCollapsed}
+            />
+          );
+        }
+        if (segment.kind === 'tools') {
+          return (
+            <ToolsBlock key={`tools-${i}`} tools={segment.tools} forceCollapsed={forceCollapsed} />
+          );
+        }
+        return (
           <ReactMarkdown
+            key={`text-${i}`}
             remarkPlugins={[remarkGfm]}
             components={createAssistantMarkdownComponents({
               bookKey,
@@ -399,75 +502,12 @@ function AssistantPartsView({
               passageLabel: _('Passage'),
             })}
           >
-            {linkifyBareEpubCfi(msg.content, msg.sources, _('Passage'))}
+            {linkifyBareEpubCfi(segment.text, msg.sources, _('Passage'))}
           </ReactMarkdown>
-        ) : null}
-      </>
-    );
-  }
-
-  const nodes: ReactNode[] = [];
-  let reasoningBuf = '';
-  const flushReasoning = (key: string) => {
-    if (!reasoningBuf.trim()) return;
-    nodes.push(
-      <ReasoningBlock key={key} reasoning={reasoningBuf} forceCollapsed={hasText && !isLive} />,
-    );
-    reasoningBuf = '';
-  };
-
-  parts.forEach((part, i) => {
-    if (part.type === 'reasoning') {
-      reasoningBuf += part.text;
-      return;
-    }
-    flushReasoning(`reasoning-${i}`);
-    if (part.type === 'dynamic-tool') {
-      nodes.push(
-        <ToolStep
-          key={part.toolCallId}
-          tool={{
-            id: part.toolCallId,
-            name: part.toolName,
-            args: part.input,
-            result: 'output' in part ? part.output : undefined,
-          }}
-        />,
-      );
-      return;
-    }
-    if (typeof part.type === 'string' && part.type.startsWith('tool-') && 'toolCallId' in part) {
-      nodes.push(
-        <ToolStep
-          key={part.toolCallId}
-          tool={{
-            id: part.toolCallId,
-            name: part.type.slice('tool-'.length),
-            args: 'input' in part ? part.input : undefined,
-            result: 'output' in part ? part.output : undefined,
-          }}
-        />,
-      );
-      return;
-    }
-    if (part.type === 'text' && part.text.trim()) {
-      nodes.push(
-        <ReactMarkdown
-          key={`text-${i}`}
-          remarkPlugins={[remarkGfm]}
-          components={createAssistantMarkdownComponents({
-            bookKey,
-            sources: msg.sources,
-            passageLabel: _('Passage'),
-          })}
-        >
-          {linkifyBareEpubCfi(part.text, msg.sources, _('Passage'))}
-        </ReactMarkdown>,
-      );
-    }
-  });
-  flushReasoning('reasoning-tail');
-  return <>{nodes}</>;
+        );
+      })}
+    </>
+  );
 }
 
 /** B1: stacked left-rule quotes inside the user bubble. */
