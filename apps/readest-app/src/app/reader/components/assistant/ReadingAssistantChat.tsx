@@ -174,14 +174,6 @@ export const ReadingAssistantChat = ({
         onClear={clearPendingQuotes}
       />
       <div className='min-h-0 flex-1 space-y-8 overflow-y-auto overscroll-contain px-4 py-5 touch-pan-y'>
-        {agent.messages.length === 0 && !showPendingReply && !agent.error ? (
-          <div className='text-base-content/60 flex h-full min-h-40 flex-col justify-center gap-1.5 py-6 text-pretty leading-relaxed'>
-            <p className='text-base-content/80 font-medium'>{_('Ask about this book')}</p>
-            <p className='text-[0.92em]'>
-              {_('Select a passage and choose Ask, or type a question below.')}
-            </p>
-          </div>
-        ) : null}
         {agent.messages.map((msg, index) => {
           const isLiveAssistant =
             busy && msg.role === 'assistant' && index === agent.messages.length - 1;
