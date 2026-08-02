@@ -16,13 +16,23 @@ import {
   readExtractStatus,
 } from './extractMeta.mjs';
 import {
+  composeOkfNotePage,
+  okfNoteDraftSchema,
+} from './noteCompose.mjs';
+import {
   OKF_NOTES_DIRS,
   OKF_NOTES_ROOT_FILES,
   isSafeBookIdSegment,
   notesPackageWorkspaceRoot,
+  okfComposeTypeForDir,
+  okfDraftMatchesDir,
 } from './notesOkf.mjs';
 import { resolveSectionQuery } from './resolveSectionChunks.mjs';
-import { parallelGate } from './toolParallelBudget.mjs';
+import {
+  MAX_PARALLEL_COMPOSE,
+  composeGate,
+  parallelGate,
+} from './toolParallelBudget.mjs';
 
 export { OKF_NOTES_DIRS, OKF_NOTES_ROOT_FILES } from './notesOkf.mjs';
 
@@ -204,8 +214,18 @@ export const readingToolContextSchema = z.object({
     (v) =>
       Boolean(v) &&
       typeof v === 'object' &&
-      typeof /** @type {{ tryConsume?: unknown }} */ (v).tryConsume === 'function',
+      typeof /** @type {{ tryConsume?: unknown }} */ (v).tryConsume === 'function' &&
+      typeof /** @type {{ tryConsumeCompose?: unknown }} */ (v).tryConsumeCompose ===
+        'function',
   ),
+  /** Optional: required for write_file(draft=…) structured compose. */
+  model: z.custom((v) => v != null).optional(),
+  /**
+   * Test seam / override for note compose only (defaults to ai.generateText).
+   * Distinct from runTurn `generateTextFn` used by context compression.
+   */
+  composeGenerateTextFn: z.custom((v) => typeof v === 'function').optional(),
+  abortSignal: z.custom((v) => v == null || typeof v === 'object').optional(),
 });
 
 /**
@@ -213,6 +233,9 @@ export const readingToolContextSchema = z.object({
  *   bookId: string,
  *   booksRoot: string,
  *   parallelBudget: import('./toolParallelBudget.mjs').ToolParallelBudget,
+ *   model?: import('ai').LanguageModel,
+ *   composeGenerateTextFn?: typeof import('ai').generateText,
+ *   abortSignal?: AbortSignal,
  * }} ReadingToolContext
  */
 
@@ -263,17 +286,42 @@ export function createReadingTools() {
 
     write_file: tool({
       description:
-        "Write UTF-8 into this book's OKF notes package under /workspace/.wellread/notes/<bookId>/ (overwrite). Only on explicit user save/ingest. Not for AGENTS.md or tools/ (skill-bundled). At most 16 write_file calls may run in parallel per step.",
-      inputSchema: z.object({
-        path: z
-          .string()
-          .describe(
-            'Absolute path under /workspace/.wellread/notes/<bookId>/ (OKF tree: index.md, log.md, or sources|chapters|concepts|frameworks|claims|glossary|questions/…)',
-          ),
-        content: z.string().describe('Full UTF-8 file contents to write (overwrite in place)'),
-      }),
+        `Write UTF-8 into this book's OKF notes package under /workspace/.wellread/notes/<bookId>/ (overwrite). Only on explicit user save/ingest. Not for AGENTS.md or tools/ (skill-bundled). Prefer \`draft\` for content pages (sources|chapters|concepts|frameworks|claims|glossary|questions) so the sidecar composes validated OKF frontmatter+body; use \`content\` for index.md/log.md or when you already have full markdown. At most 16 write_file calls and ${MAX_PARALLEL_COMPOSE} draft composes may run in parallel per step.`,
+      inputSchema: z
+        .object({
+          path: z
+            .string()
+            .describe(
+              'Absolute path under /workspace/.wellread/notes/<bookId>/ (OKF tree: index.md, log.md, or sources|chapters|concepts|frameworks|claims|glossary|questions/…)',
+            ),
+          content: z
+            .string()
+            .optional()
+            .describe('Full UTF-8 file contents to write (overwrite in place)'),
+          draft: okfNoteDraftSchema
+            .optional()
+            .describe(
+              'Structured note-page draft for content pages; sidecar expands via JSON schema (retry on failure). Do not use for index.md/log.md. draft.type must match the target directory (e.g. Concept → concepts/).',
+            ),
+        })
+        .superRefine((value, ctx) => {
+          const hasContent = typeof value.content === 'string';
+          const hasDraft = value.draft != null;
+          if (!hasContent && !hasDraft) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'write_file requires content or draft',
+            });
+          }
+          if (hasContent && hasDraft) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'write_file accepts content or draft, not both',
+            });
+          }
+        }),
       contextSchema: readingToolContextSchema,
-      execute: async ({ path, content }, { context }) => {
+      execute: async ({ path, content, draft }, { context }) => {
         const blocked = parallelGate(context.parallelBudget, 'write_file');
         if (blocked) return blocked;
         const { bookId, booksRoot } = context;
@@ -286,14 +334,83 @@ export function createReadingTools() {
             message: gate.message,
           };
         }
+
+        /** @type {string | undefined} */
+        let bytesText = typeof content === 'string' ? content : undefined;
+        /** @type {boolean} */
+        let composed = false;
+        if (draft) {
+          const rel = gate.path.slice(
+            `${notesPackageWorkspaceRoot(bookId)}/`.length,
+          );
+          const top = rel.split('/')[0];
+          if (!OKF_NOTES_DIRS.includes(top)) {
+            return {
+              ok: false,
+              path: gate.path,
+              error: 'invalid_args',
+              message:
+                'write_file(draft=…) is only for OKF content pages under sources|chapters|concepts|frameworks|claims|glossary|questions; use content for index.md/log.md',
+            };
+          }
+          if (!okfDraftMatchesDir(top, draft.type)) {
+            const expected = okfComposeTypeForDir(top);
+            return {
+              ok: false,
+              path: gate.path,
+              error: 'invalid_args',
+              message: `write_file(draft=…) type ${draft.type} does not match directory ${top}/ (expected type ${expected})`,
+            };
+          }
+          const composeBlocked = composeGate(context.parallelBudget, {
+            path: gate.path,
+          });
+          if (composeBlocked) return composeBlocked;
+          if (!context.model) {
+            return {
+              ok: false,
+              path: gate.path,
+              error: 'compose_unavailable',
+              message: 'structured note compose requires a model on the turn context',
+            };
+          }
+          const composedPage = await composeOkfNotePage({
+            model: context.model,
+            path: gate.path,
+            draft,
+            generateTextFn: context.composeGenerateTextFn,
+            abortSignal: context.abortSignal,
+          });
+          if (!composedPage.ok) {
+            return {
+              ok: false,
+              path: gate.path,
+              error: composedPage.error,
+              message: composedPage.message,
+              attempts: composedPage.attempts,
+            };
+          }
+          bytesText = composedPage.markdown;
+          composed = true;
+        }
+
+        if (typeof bytesText !== 'string') {
+          return {
+            ok: false,
+            path: gate.path,
+            error: 'invalid_args',
+            message: 'write_file requires content or draft',
+          };
+        }
+
         const session = createBooksFsSession({ getBooksRoot: () => booksRoot });
         try {
           await session.writeFile({
             path: gate.path,
-            content: new TextEncoder().encode(content),
+            content: new TextEncoder().encode(bytesText),
             confineNotesBookId: bookId,
           });
-          return { ok: true, path: gate.path };
+          return { ok: true, path: gate.path, ...(composed ? { composed: true } : {}) };
         } catch (err) {
           return {
             ok: false,

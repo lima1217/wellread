@@ -64,7 +64,11 @@ Done when: 每页有 path + type + 理由；每条耐久主张有 cfi 或入 que
 
 ### A2. 写入
 
-对本 turn 子集：**batch** 写主页、回链、触及的 index、根/目录 log（`## [YYYY-MM-DD] ingest | <source> | <标题>`）。冲突则修订互指；重大张力进根 `index.md` 与 questions。有余页则 **handoff**。
+对本 turn 子集：
+
+- **内容页**（`sources|chapters|concepts|frameworks|claims|glossary|questions` 下）：用 `write_file` 的 **`draft`**（`type`/`title`/`material` 等），由 sidecar 按 OKF JSON schema 生成 frontmatter+正文并写入；失败会重试，仍失败则改写 draft 再调。不要手写整份 YAML 当 `content`。
+- **导航与 log**（根/目录 `index.md`、`log.md`）：继续用 `content` 原文写入。
+- **batch** 同 step 并行多个 `write_file`（主页 + 触及的 index + log）。冲突则修订互指；重大张力进根 `index.md` 与 questions。有余页则 **handoff**。
 
 Done when: 子集每页已写或附跳过理由；新页从某 `index.md` 可达；log 已记；已写路径已列；**handoff**（若有）齐全。
 

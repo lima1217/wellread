@@ -93,3 +93,38 @@ describe('session ↔ UIMessage round-trip', () => {
     assert.equal(toolsFromUIMessage(ui)[0]?.name, 'grep');
   });
 });
+
+describe('toolsFromUIMessage live pending', () => {
+  it('treats input-available as in-flight even when output key exists', () => {
+    const tools = toolsFromUIMessage({
+      parts: [
+        {
+          type: 'tool-grep',
+          toolCallId: 't1',
+          state: 'input-available',
+          input: { pattern: 'Ahab' },
+          output: undefined,
+        },
+      ],
+    });
+    assert.equal(tools.length, 1);
+    assert.equal(tools[0]?.name, 'grep');
+    assert.equal(tools[0]?.result, undefined);
+  });
+
+  it('exposes output only for output-available', () => {
+    const tools = toolsFromUIMessage({
+      parts: [
+        {
+          type: 'dynamic-tool',
+          toolCallId: 't2',
+          toolName: 'read_file',
+          state: 'output-available',
+          input: { path: 'a.md' },
+          output: { ok: true },
+        },
+      ],
+    });
+    assert.deepEqual(tools[0]?.result, { ok: true });
+  });
+});

@@ -223,6 +223,28 @@ export function reasoningFromUIMessage(msg) {
 }
 
 /**
+ * Tool UI parts keep an `output` key even while `state` is still
+ * `input-available` / `input-streaming` (value undefined). Treat only
+ * finished states as having a result so the client can show Running…
+ * during live tool execution (P3-1).
+ *
+ * @param {Record<string, unknown>} part
+ * @returns {unknown | undefined}
+ */
+function toolResultFromPart(part) {
+  const state = typeof part.state === 'string' ? part.state : '';
+  if (state === 'input-streaming' || state === 'input-available' || state === 'approval-requested') {
+    return undefined;
+  }
+  if (state === 'output-available' || state === 'output-error' || state === 'approval-responded') {
+    return 'output' in part ? part.output : undefined;
+  }
+  // Legacy / unknown: finished only when output is actually present.
+  if ('output' in part && part.output !== undefined) return part.output;
+  return undefined;
+}
+
+/**
  * @param {{ parts?: unknown[] } | null | undefined} msg
  * @returns {Array<{ id: string, name: string, args?: unknown, result?: unknown }>}
  */
@@ -237,7 +259,7 @@ export function toolsFromUIMessage(msg) {
         id: p.toolCallId,
         name: typeof p.toolName === 'string' ? p.toolName : 'tool',
         args: p.input,
-        result: 'output' in p ? p.output : undefined,
+        result: toolResultFromPart(p),
       });
       continue;
     }
@@ -246,7 +268,7 @@ export function toolsFromUIMessage(msg) {
         id: p.toolCallId,
         name: p.type.slice('tool-'.length),
         args: 'input' in p ? p.input : undefined,
-        result: 'output' in p ? p.output : undefined,
+        result: toolResultFromPart(p),
       });
     }
   }

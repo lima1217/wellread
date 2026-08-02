@@ -32,6 +32,9 @@ function hasReadingContextSchema(def) {
  *   bookId: string,
  *   booksRoot: string,
  *   tools?: import('ai').ToolSet,
+ *   model?: import('ai').LanguageModel,
+ *   composeGenerateTextFn?: typeof import('ai').generateText,
+ *   abortSignal?: AbortSignal,
  * }} input
  * @returns {{
  *   tools: import('ai').ToolSet,
@@ -60,6 +63,11 @@ export function bindTurnTools(input) {
     bookId: input.bookId,
     booksRoot: input.booksRoot,
     parallelBudget,
+    ...(input.model ? { model: input.model } : {}),
+    ...(input.composeGenerateTextFn
+      ? { composeGenerateTextFn: input.composeGenerateTextFn }
+      : {}),
+    ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
   };
   return {
     tools,

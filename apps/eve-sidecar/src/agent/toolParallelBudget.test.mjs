@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  MAX_PARALLEL_COMPOSE,
   MAX_PARALLEL_READ_TOOLS,
   MAX_PARALLEL_WRITE_TOOLS,
+  composeGate,
   createToolParallelBudget,
   parallelGate,
   wrapToolsWithParallelBudget,
@@ -60,6 +62,31 @@ describe('createToolParallelBudget', () => {
       assert.equal(budget.tryConsume('lookup').ok, true);
     }
   });
+
+  it('caps draft compose separately from write_file', () => {
+    const budget = createToolParallelBudget();
+    budget.beginStep();
+    for (let i = 0; i < MAX_PARALLEL_COMPOSE; i += 1) {
+      assert.equal(budget.tryConsumeCompose().ok, true);
+    }
+    const denied = budget.tryConsumeCompose();
+    assert.equal(denied.ok, false);
+    assert.equal(denied.error, 'too_many_parallel_compose');
+    assert.equal(denied.limit, MAX_PARALLEL_COMPOSE);
+    // Write budget remains independent.
+    assert.equal(budget.tryConsume('write_file').ok, true);
+  });
+
+  it('resets compose on beginStep', () => {
+    const budget = createToolParallelBudget();
+    budget.beginStep();
+    for (let i = 0; i < MAX_PARALLEL_COMPOSE; i += 1) {
+      budget.tryConsumeCompose();
+    }
+    assert.equal(budget.tryConsumeCompose().ok, false);
+    budget.beginStep();
+    assert.equal(budget.tryConsumeCompose().ok, true);
+  });
 });
 
 describe('parallelGate', () => {
@@ -78,6 +105,20 @@ describe('parallelGate', () => {
     assert.equal(denied?.error, 'too_many_parallel_tools');
     assert.equal(denied?.count, 0);
     assert.deepEqual(denied?.paths, []);
+  });
+});
+
+describe('composeGate', () => {
+  it('returns null under compose budget and merges extras on deny', () => {
+    const budget = createToolParallelBudget();
+    budget.beginStep();
+    for (let i = 0; i < MAX_PARALLEL_COMPOSE; i += 1) {
+      assert.equal(composeGate(budget, { path: `/p${i}` }), null);
+    }
+    const denied = composeGate(budget, { path: '/over' });
+    assert.equal(denied?.ok, false);
+    assert.equal(denied?.error, 'too_many_parallel_compose');
+    assert.equal(denied?.path, '/over');
   });
 });
 

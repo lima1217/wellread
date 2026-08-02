@@ -11,7 +11,10 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { createToolParallelBudget } from './toolParallelBudget.mjs';
+import {
+  MAX_PARALLEL_COMPOSE,
+  createToolParallelBudget,
+} from './toolParallelBudget.mjs';
 import {
   GREP_LINE_TEXT_MAX,
   authorizeOkfNotesWrite,
@@ -23,23 +26,25 @@ import { projectExtractContentForModel } from './extractChunk.mjs';
 /**
  * @param {string} booksRoot
  * @param {string} [bookId]
+ * @param {Partial<import('./tools.mjs').ReadingToolContext>} [extra]
  */
-function readingContext(booksRoot, bookId = 'bk1') {
+function readingContext(booksRoot, bookId = 'bk1', extra = {}) {
   const parallelBudget = createToolParallelBudget();
   parallelBudget.beginStep();
-  return { bookId, booksRoot, parallelBudget };
+  return { bookId, booksRoot, parallelBudget, ...extra };
 }
 
 /**
  * @param {string} booksRoot
  * @param {string} toolCallId
  * @param {string} [bookId]
+ * @param {Partial<import('./tools.mjs').ReadingToolContext>} [extra]
  */
-function execOpts(booksRoot, toolCallId, bookId = 'bk1') {
+function execOpts(booksRoot, toolCallId, bookId = 'bk1', extra = {}) {
   return {
     toolCallId,
     messages: [],
-    context: readingContext(booksRoot, bookId),
+    context: readingContext(booksRoot, bookId, extra),
   };
 }
 
@@ -288,6 +293,176 @@ a
       );
       assert.equal(agents.ok, false);
       assert.equal(agents.error, 'denied');
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('write_file(draft) composes structured OKF markdown then writes', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'eve-tools-draft-')));
+    const bookId = 'bk1';
+    try {
+      const tools = createReadingTools();
+      const notesPath = `/workspace/.wellread/notes/${bookId}/concepts/网络效应.md`;
+      const writeOk = await tools.write_file.execute(
+        {
+          path: notesPath,
+          draft: {
+            type: 'Concept',
+            title: '网络效应',
+            description: 'hint',
+            origin: 'chapter',
+            material: 'Metcalfe from ch3',
+          },
+        },
+        execOpts(booksRoot, 'draft1', bookId, {
+          model: /** @type {any} */ ({}),
+          composeGenerateTextFn: async () => ({
+            output: {
+              type: 'Concept',
+              title: '网络效应',
+              description: 'hint',
+              origin: 'chapter',
+              body: 'Composed body.',
+            },
+          }),
+        }),
+      );
+      assert.equal(writeOk.ok, true);
+      assert.equal(writeOk.composed, true);
+      const host = join(booksRoot, '.wellread', 'notes', bookId, 'concepts', '网络效应.md');
+      const md = readFileSync(host, 'utf8');
+      assert.match(md, /type: Concept/);
+      assert.match(md, /Composed body/);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('write_file(draft) retries generateText then soft-fails', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'eve-tools-draft-fail-')));
+    const bookId = 'bk1';
+    try {
+      let n = 0;
+      const tools = createReadingTools();
+      const result = await tools.write_file.execute(
+        {
+          path: `/workspace/.wellread/notes/${bookId}/claims/x.md`,
+          draft: {
+            type: 'Claim',
+            title: 'X',
+            material: 'evidence',
+          },
+        },
+        execOpts(booksRoot, 'draft2', bookId, {
+          model: /** @type {any} */ ({}),
+          composeGenerateTextFn: async () => {
+            n += 1;
+            throw new Error('nope');
+          },
+        }),
+      );
+      assert.equal(result.ok, false);
+      assert.equal(result.error, 'compose_failed');
+      assert.equal(n, 2);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('write_file(draft) rejects index.md / log.md paths', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'eve-tools-draft-index-')));
+    const bookId = 'bk1';
+    try {
+      const tools = createReadingTools();
+      const result = await tools.write_file.execute(
+        {
+          path: `/workspace/.wellread/notes/${bookId}/index.md`,
+          draft: {
+            type: 'Concept',
+            title: 'Nope',
+            material: 'x',
+          },
+        },
+        execOpts(booksRoot, 'draft3', bookId, {
+          model: /** @type {any} */ ({}),
+          composeGenerateTextFn: async () => {
+            throw new Error('compose must not run for index.md');
+          },
+        }),
+      );
+      assert.equal(result.ok, false);
+      assert.equal(result.error, 'invalid_args');
+      assert.match(result.message, /content pages/);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('write_file(draft) rejects type/directory mismatch', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'eve-tools-draft-type-')));
+    const bookId = 'bk1';
+    try {
+      const tools = createReadingTools();
+      const result = await tools.write_file.execute(
+        {
+          path: `/workspace/.wellread/notes/${bookId}/concepts/x.md`,
+          draft: {
+            type: 'Claim',
+            title: 'X',
+            material: 'evidence',
+          },
+        },
+        execOpts(booksRoot, 'draft4', bookId, {
+          model: /** @type {any} */ ({}),
+          composeGenerateTextFn: async () => {
+            throw new Error('compose must not run on type mismatch');
+          },
+        }),
+      );
+      assert.equal(result.ok, false);
+      assert.equal(result.error, 'invalid_args');
+      assert.match(result.message, /does not match directory concepts/);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('write_file(draft) soft-fails when compose parallel budget is exhausted', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'eve-tools-draft-cap-')));
+    const bookId = 'bk1';
+    try {
+      const tools = createReadingTools();
+      const parallelBudget = createToolParallelBudget();
+      parallelBudget.beginStep();
+      for (let i = 0; i < MAX_PARALLEL_COMPOSE; i += 1) {
+        assert.equal(parallelBudget.tryConsumeCompose().ok, true);
+      }
+      const result = await tools.write_file.execute(
+        {
+          path: `/workspace/.wellread/notes/${bookId}/concepts/c.md`,
+          draft: {
+            type: 'Concept',
+            title: 'C',
+            material: 'x',
+          },
+        },
+        {
+          toolCallId: 'draft5',
+          messages: [],
+          context: {
+            bookId,
+            booksRoot,
+            parallelBudget,
+            model: /** @type {any} */ ({}),
+            composeGenerateTextFn: async () => {
+              throw new Error('compose must not run over budget');
+            },
+          },
+        },
+      );
+      assert.equal(result.ok, false);
+      assert.equal(result.error, 'too_many_parallel_compose');
     } finally {
       rmSync(booksRoot, { recursive: true, force: true });
     }

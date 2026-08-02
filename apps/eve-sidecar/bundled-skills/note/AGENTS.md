@@ -14,4 +14,4 @@
 
 可写：`index.md`、`log.md`，以及 `sources|chapters|concepts|frameworks|claims|glossary|questions/` 下的页。
 
-写节奏（**budget** / **batch** / **handoff**）以 SKILL.md 为准。校验器只读：`/workspace/skills/note/tools/validate_okf_wiki.py`。
+内容页优先 `draft`（sidecar JSON-schema 合成）；`index.md` / `log.md` 用 `content`。写节奏（**budget** / **batch** / **handoff**）以 SKILL.md 为准。校验器只读：`/workspace/skills/note/tools/validate_okf_wiki.py`。

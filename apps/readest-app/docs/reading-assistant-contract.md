@@ -25,7 +25,9 @@ Sidecar `extract_status`: `ready` | `stale` (usable via scan, missing index/sche
 | `read_file` | `{ ok, path, content }` | `not_found` / `denied` / `extract_not_ready` on extract paths |
 | `grep` | `{ ok, hits }` | `invalid_grep_pattern` / `denied` / `extract_not_ready` when scoped to extract |
 | `glob` | `{ ok, hits }` | `denied` |
-| `write_file` | `{ ok, path }` | OKF gate / realpath deny |
+| `write_file` | `{ ok, path }` (+ `composed: true` when `draft` used) | OKF gate / realpath deny; `compose_failed` / `compose_unavailable` / `invalid_args` / `too_many_parallel_compose` for `draft` |
+
+`write_file` accepts **either** `content` (full markdown) **or** `draft` (structured OKF page fields + `material`). `draft` is for content pages under `sources|chapters|concepts|frameworks|claims|glossary|questions` only; `draft.type` must match the target directory (e.g. `Concept` → `concepts/`). Sidecar expands via AI SDK structured output (JSON schema) with one retry; at most 4 draft composes may run in parallel per step (independent of the 16 `write_file` parallel cap). Chat turn `streamText` path is unchanged. Context-compression `generateTextFn` overrides do not affect draft compose (`composeGenerateTextFn`).
 
 ## `<reading_context>` fields
 

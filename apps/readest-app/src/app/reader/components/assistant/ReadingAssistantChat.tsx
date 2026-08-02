@@ -14,6 +14,10 @@ import {
   mergeModelConfig,
   setActiveProfile,
 } from '@/services/wellread/modelConfig';
+import {
+  isComposerTextInputDisabled,
+  shouldBlockComposerSubmit,
+} from '@/services/wellread/assistant/composerBusyPolicy';
 import { reloadEveIfNeeded } from '@/services/wellread/assistant/reloadEveIfNeeded';
 import {
   shouldPushAgentSessionToStore,
@@ -118,11 +122,11 @@ export const ReadingAssistantChat = ({
   }, [bookId]);
 
   const busy = agent.status === 'submitted' || agent.status === 'streaming';
-  const canSend = Boolean(agent.composer.trim()) && !busy;
+  const canSend = Boolean(agent.composer.trim()) && !shouldBlockComposerSubmit(busy);
   const showPendingReply = shouldShowPendingReply(busy, agent.messages);
 
   const handleSend = useCallback(() => {
-    if (!agent.composer.trim() || busy) return;
+    if (!agent.composer.trim() || shouldBlockComposerSubmit(busy)) return;
     const quotes = useReadingAssistantStore.getState().pendingQuotes;
     clearPendingQuotes();
     void agent.send({
@@ -238,6 +242,7 @@ export const ReadingAssistantChat = ({
             aria-label={_('Message')}
             autoComplete='off'
             spellCheck
+            disabled={isComposerTextInputDisabled(busy)}
             className={clsx(
               'min-h-[48px] w-full resize-none bg-transparent px-3.5 py-2.5 outline-none',
               messageTypeClass,

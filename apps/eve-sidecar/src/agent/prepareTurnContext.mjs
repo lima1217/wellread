@@ -40,6 +40,9 @@ import { prepareUserTurn } from './userTurn.mjs';
  *   maxToolRounds?: number,
  *   finalMaxOutputTokens?: number,
  *   tools?: import('ai').ToolSet, // schema tools self-gate; bare tools wrapped in bindTurnTools
+ *   model?: import('ai').LanguageModel,
+ *   composeGenerateTextFn?: typeof import('ai').generateText,
+ *   abortSignal?: AbortSignal,
  * }} input
  */
 export function prepareTurnContext(input) {
@@ -119,6 +122,9 @@ export function prepareTurnContext(input) {
     bookId: session.bookId,
     booksRoot,
     tools: input.tools,
+    model: input.model,
+    composeGenerateTextFn: input.composeGenerateTextFn,
+    abortSignal: input.abortSignal,
   });
 
   const maxToolRounds = resolveMaxToolRounds(

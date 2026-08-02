@@ -56,7 +56,8 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   thinkingMode?: 'think' | 'fast',
  *   apiMode?: 'chat' | 'responses',
  *   readerState?: { chapter?: string | null, cfi?: string | null, sectionIndex?: number | null } | null,
- *   generateTextFn?: import('ai').generateText,
+ *   generateTextFn?: import('ai').generateText, // context compression only
+ *   composeGenerateTextFn?: import('ai').generateText, // write_file(draft) only
  *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
  *   tools?: import('ai').ToolSet, // prefer readingToolContextSchema (+ parallelGate); bare tools get wrap fallback
  * }} input
@@ -79,6 +80,9 @@ export function runTurn(input) {
     maxToolRounds: input.maxToolRounds,
     finalMaxOutputTokens: input.finalMaxOutputTokens,
     tools: input.tools,
+    model,
+    composeGenerateTextFn: input.composeGenerateTextFn,
+    abortSignal,
   });
 
   const userMsg = {

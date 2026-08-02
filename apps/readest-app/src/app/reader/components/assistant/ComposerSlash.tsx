@@ -7,6 +7,7 @@ import clsx from 'clsx';
 
 import { useTranslation } from '@/hooks/useTranslation';
 import { listEveSkills, type EveSkillSummary } from '@/services/wellread/assistant/eveClient';
+import { shouldBlockComposerSubmit } from '@/services/wellread/assistant/composerBusyPolicy';
 import {
   applySlashSkillSelection,
   filterSkillsForSlash,
@@ -164,7 +165,7 @@ export function useComposerSlash({
       }
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
-        if (busy) return;
+        if (shouldBlockComposerSubmit(busy)) return;
         onSubmit();
       }
     },

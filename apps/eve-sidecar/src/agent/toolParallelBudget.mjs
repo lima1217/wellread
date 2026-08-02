@@ -1,12 +1,16 @@
 /**
- * Per-step parallel tool-call caps (asymmetric read vs write).
+ * Per-step parallel tool-call caps (asymmetric read vs write vs compose).
  *
  * Read/search tools share one budget; write_file has a higher budget so note
  * skill batch (content pages + indexes + logs) stays legal in one step.
+ * Nested LLM compose for write_file(draft) has a tighter cap so batch ingest
+ * cannot fan out into O(writes × retries) provider calls.
  */
 
 export const MAX_PARALLEL_READ_TOOLS = 8;
 export const MAX_PARALLEL_WRITE_TOOLS = 16;
+/** Max concurrent write_file(draft) compose calls per step (nested generateText). */
+export const MAX_PARALLEL_COMPOSE = 4;
 
 /** @type {ReadonlySet<string>} */
 export const READ_PARALLEL_TOOL_NAMES = new Set([
@@ -25,6 +29,9 @@ export const WRITE_PARALLEL_TOOL_NAMES = new Set(['write_file']);
  *   tryConsume: (toolName: string) =>
  *     | { ok: true }
  *     | { ok: false, error: string, message: string, limit: number, toolName: string },
+ *   tryConsumeCompose: () =>
+ *     | { ok: true }
+ *     | { ok: false, error: string, message: string, limit: number, toolName: string },
  * }} ToolParallelBudget
  */
 
@@ -34,11 +41,13 @@ export const WRITE_PARALLEL_TOOL_NAMES = new Set(['write_file']);
 export function createToolParallelBudget() {
   let readUsed = 0;
   let writeUsed = 0;
+  let composeUsed = 0;
 
   return {
     beginStep() {
       readUsed = 0;
       writeUsed = 0;
+      composeUsed = 0;
     },
 
     tryConsume(toolName) {
@@ -71,6 +80,20 @@ export function createToolParallelBudget() {
       }
       return { ok: true };
     },
+
+    tryConsumeCompose() {
+      composeUsed += 1;
+      if (composeUsed > MAX_PARALLEL_COMPOSE) {
+        return {
+          ok: false,
+          error: 'too_many_parallel_compose',
+          message: `本 step 最多并行 ${MAX_PARALLEL_COMPOSE} 个 write_file(draft) 结构化合成；超出的调用未执行，请分批合成后再写。`,
+          limit: MAX_PARALLEL_COMPOSE,
+          toolName: 'write_file',
+        };
+      }
+      return { ok: true };
+    },
   };
 }
 
@@ -94,6 +117,33 @@ export function createToolParallelBudget() {
  */
 export function parallelGate(budget, toolName, extras) {
   const gate = budget.tryConsume(toolName);
+  if (gate.ok) return null;
+  return {
+    ok: false,
+    error: gate.error,
+    message: gate.message,
+    limit: gate.limit,
+    toolName: gate.toolName,
+    ...(extras ?? /** @type {Extras} */ ({})),
+  };
+}
+
+/**
+ * Soft-fail gate for nested write_file(draft) compose concurrency.
+ *
+ * @template {Record<string, unknown>} [Extras={}]
+ * @param {ToolParallelBudget} budget
+ * @param {Extras} [extras]
+ * @returns {null | ({
+ *   ok: false,
+ *   error: string,
+ *   message: string,
+ *   limit: number,
+ *   toolName: string,
+ * } & Extras)}
+ */
+export function composeGate(budget, extras) {
+  const gate = budget.tryConsumeCompose();
   if (gate.ok) return null;
   return {
     ok: false,

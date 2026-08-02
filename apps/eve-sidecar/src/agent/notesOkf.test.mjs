@@ -1,16 +1,30 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  OKF_COMPOSE_PAGE_TYPES,
   OKF_NOTES_DIRS,
   OKF_NOTES_ROOT_FILES,
+  OKF_PAGE_KINDS,
   isSafeBookIdSegment,
   notesPackageWorkspaceRoot,
+  okfComposeTypeForDir,
+  okfDirForComposeType,
+  okfDraftMatchesDir,
 } from './notesOkf.mjs';
 
 describe('notesOkf SSOT', () => {
   it('exposes writable roots without AGENTS or tools', () => {
     assert.deepEqual([...OKF_NOTES_ROOT_FILES], ['index.md', 'log.md']);
     assert.ok(!OKF_NOTES_DIRS.includes('tools'));
+  });
+
+  it('keeps dir↔type pairs aligned for compose and path gates', () => {
+    assert.equal(OKF_PAGE_KINDS.length, OKF_NOTES_DIRS.length);
+    assert.equal(OKF_PAGE_KINDS.length, OKF_COMPOSE_PAGE_TYPES.length);
+    assert.equal(okfComposeTypeForDir('concepts'), 'Concept');
+    assert.equal(okfDirForComposeType('OpenQuestions'), 'questions');
+    assert.equal(okfDraftMatchesDir('claims', 'Claim'), true);
+    assert.equal(okfDraftMatchesDir('claims', 'Concept'), false);
   });
 
   it('builds notes package workspace root for safe book ids', () => {
