@@ -21,6 +21,7 @@ import {
   notesPackageWorkspaceRoot,
 } from './notesOkf.mjs';
 import { resolveSectionQuery } from './resolveSectionChunks.mjs';
+import { parallelGate } from './toolParallelBudget.mjs';
 
 export { OKF_NOTES_DIRS, OKF_NOTES_ROOT_FILES } from './notesOkf.mjs';
 
@@ -219,12 +220,37 @@ export function authorizeOkfNotesWrite(workspacePath, bookId) {
 }
 
 /**
- * @param {{ getBooksRoot: () => string, bookId: string }} options
+ * Per-tool context passed via streamText `toolsContext` (not closures).
+ *
+ * `parallelBudget` is the same mutable object also placed on streamText
+ * `runtimeContext`: prepareStep resets counters via beginStep(); each
+ * execute gates via parallelGate(tryConsume). Not two budgets — one ref,
+ * two SDK injection points.
  */
-export function createReadingTools(options) {
-  const session = createBooksFsSession({ getBooksRoot: options.getBooksRoot });
-  const bookId = options.bookId;
+export const readingToolContextSchema = z.object({
+  bookId: z.string(),
+  booksRoot: z.string(),
+  parallelBudget: z.custom(
+    (v) =>
+      Boolean(v) &&
+      typeof v === 'object' &&
+      typeof /** @type {{ tryConsume?: unknown }} */ (v).tryConsume === 'function',
+  ),
+});
 
+/**
+ * @typedef {{
+ *   bookId: string,
+ *   booksRoot: string,
+ *   parallelBudget: import('./toolParallelBudget.mjs').ToolParallelBudget,
+ * }} ReadingToolContext
+ */
+
+/**
+ * Reading-assistant tools. Inject turn state via streamText `toolsContext`
+ * (same object for every tool name), not factory closures.
+ */
+export function createReadingTools() {
   return {
     read_file: tool({
       description:
@@ -232,11 +258,16 @@ export function createReadingTools(options) {
       inputSchema: z.object({
         path: z.string().describe('Absolute workspace path starting with /workspace'),
       }),
-      execute: async ({ path }) => {
+      contextSchema: readingToolContextSchema,
+      execute: async ({ path }, { context }) => {
+        const blocked = parallelGate(context.parallelBudget, 'read_file');
+        if (blocked) return blocked;
+        const { bookId, booksRoot } = context;
         if (isExtractWorkspacePath(path)) {
-          const gate = booksExtractGate(options.getBooksRoot, bookId);
+          const gate = booksExtractGate(() => booksRoot, bookId);
           if (gate) return { ...gate, path };
         }
+        const session = createBooksFsSession({ getBooksRoot: () => booksRoot });
         try {
           const bytes = await session.readFile({ path });
           if (bytes === null) {
@@ -271,7 +302,11 @@ export function createReadingTools(options) {
           ),
         content: z.string().describe('Full UTF-8 file contents to write (overwrite in place)'),
       }),
-      execute: async ({ path, content }) => {
+      contextSchema: readingToolContextSchema,
+      execute: async ({ path, content }, { context }) => {
+        const blocked = parallelGate(context.parallelBudget, 'write_file');
+        if (blocked) return blocked;
+        const { bookId, booksRoot } = context;
         const gate = authorizeOkfNotesWrite(path, bookId);
         if (!gate.ok) {
           return {
@@ -281,6 +316,7 @@ export function createReadingTools(options) {
             message: gate.message,
           };
         }
+        const session = createBooksFsSession({ getBooksRoot: () => booksRoot });
         try {
           await session.writeFile({
             path: gate.path,
@@ -314,10 +350,25 @@ export function createReadingTools(options) {
           .optional()
           .describe('Chapter/section title to match against chunk frontmatter title'),
       }),
-      execute: async ({ sectionIndex, title }) => {
-        let booksRoot;
+      contextSchema: readingToolContextSchema,
+      execute: async ({ sectionIndex, title }, { context }) => {
+        const blocked = parallelGate(context.parallelBudget, 'resolve_section', {
+          count: 0,
+          paths: [],
+        });
+        if (blocked) return blocked;
+        const { bookId, booksRoot } = context;
         try {
-          booksRoot = options.getBooksRoot();
+          const gate = extractUnavailableEnvelope(
+            readExtractStatus(booksRoot, bookId).status,
+          );
+          if (gate) return { ...gate, count: 0, paths: [] };
+          return resolveSectionQuery({
+            booksRoot,
+            bookId,
+            sectionIndex,
+            title,
+          });
         } catch (err) {
           return {
             ok: false,
@@ -327,16 +378,6 @@ export function createReadingTools(options) {
             paths: [],
           };
         }
-        const gate = extractUnavailableEnvelope(
-          readExtractStatus(booksRoot, bookId).status,
-        );
-        if (gate) return { ...gate, count: 0, paths: [] };
-        return resolveSectionQuery({
-          booksRoot,
-          bookId,
-          sectionIndex,
-          title,
-        });
       },
     }),
 
@@ -346,9 +387,12 @@ export function createReadingTools(options) {
       inputSchema: z.object({
         pattern: z.string().describe('Glob path pattern under /workspace/.wellread/'),
       }),
-      execute: async ({ pattern }) => {
+      contextSchema: readingToolContextSchema,
+      execute: async ({ pattern }, { context }) => {
+        const blocked = parallelGate(context.parallelBudget, 'glob', { hits: [] });
+        if (blocked) return blocked;
         try {
-          const hits = globWellread(options.getBooksRoot(), pattern);
+          const hits = globWellread(context.booksRoot, pattern);
           return { ok: true, hits };
         } catch (err) {
           return {
@@ -375,13 +419,17 @@ export function createReadingTools(options) {
           .optional()
           .describe('Treat pattern as regex (default true); set false for literal match'),
       }),
-      execute: async ({ pattern, path, regex }) => {
+      contextSchema: readingToolContextSchema,
+      execute: async ({ pattern, path, regex }, { context }) => {
+        const blocked = parallelGate(context.parallelBudget, 'grep', { hits: [] });
+        if (blocked) return blocked;
+        const { bookId, booksRoot } = context;
         if (typeof path === 'string' && isExtractWorkspacePath(path.trim())) {
-          const gate = booksExtractGate(options.getBooksRoot, bookId);
+          const gate = booksExtractGate(() => booksRoot, bookId);
           if (gate) return { ...gate, hits: [] };
         }
         try {
-          const hits = grepWellread(options.getBooksRoot(), pattern, {
+          const hits = grepWellread(booksRoot, pattern, {
             path,
             regex: regex !== false,
             maxHits: GREP_MODEL_HIT_MAX,
@@ -407,4 +455,20 @@ export function createReadingTools(options) {
       },
     }),
   };
+}
+
+/**
+ * Build the per-tool toolsContext map (shared context object for every tool).
+ *
+ * @param {import('ai').ToolSet} tools
+ * @param {ReadingToolContext} context
+ * @returns {Record<string, ReadingToolContext>}
+ */
+export function readingToolsContext(tools, context) {
+  /** @type {Record<string, ReadingToolContext>} */
+  const out = {};
+  for (const name of Object.keys(tools)) {
+    out[name] = context;
+  }
+  return out;
 }

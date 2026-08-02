@@ -581,7 +581,7 @@ describe('resolveTurnModelPresentation', () => {
     assert.deepEqual(out.streamTextOptions, { instructions: 'full-system' });
   });
 
-  it('maps responses mode to envelope + instructions + reasoningEffort', () => {
+  it('maps responses mode to envelope + instructions + top-level reasoning', () => {
     const out = resolveTurnModelPresentation({
       apiMode: 'responses',
       thinkingMode: 'think',
@@ -591,14 +591,31 @@ describe('resolveTurnModelPresentation', () => {
     });
     assert.equal(out.toolSystem, '<reading_context/>');
     assert.deepEqual(out.streamTextOptions, {
+      reasoning: 'high',
       instructions: '<reading_context/>',
       providerOptions: {
         openai: {
           store: false,
           instructions: 'base',
-          reasoningEffort: 'high',
         },
       },
     });
+  });
+
+  it('maps responses fast mode to reasoning none', () => {
+    const out = resolveTurnModelPresentation({
+      apiMode: 'responses',
+      thinkingMode: 'fast',
+      system: 'full-system',
+      envelope: '<reading_context/>',
+      instructions: 'base',
+    });
+    assert.equal(out.streamTextOptions.reasoning, 'none');
+    assert.equal(
+      /** @type {{ openai?: { reasoningEffort?: unknown } }} */ (
+        out.streamTextOptions.providerOptions
+      )?.openai?.reasoningEffort,
+      undefined,
+    );
   });
 });

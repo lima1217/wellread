@@ -4,6 +4,18 @@
  */
 
 /**
+ * @param {Record<string, unknown>} payload
+ */
+function logJson(payload) {
+  if (process.env.EVE_TURN_LOG !== '1') return;
+  try {
+    console.error(JSON.stringify({ ts: Date.now(), ...payload }));
+  } catch {
+    // never break a turn for logging
+  }
+}
+
+/**
  * @param {{
  *   sessionId?: string,
  *   bookId?: string,
@@ -17,16 +29,18 @@
  * }} fields
  */
 export function logTurnContract(fields) {
-  if (process.env.EVE_TURN_LOG !== '1') return;
-  try {
-    console.error(
-      JSON.stringify({
-        type: 'eve.turn_contract',
-        ts: Date.now(),
-        ...fields,
-      }),
-    );
-  } catch {
-    // never break a turn for logging
-  }
+  logJson({ type: 'eve.turn_contract', ...fields });
+}
+
+/**
+ * @param {{
+ *   phase: 'start' | 'end',
+ *   toolName?: string,
+ *   toolCallId?: string,
+ *   toolOutputType?: string,
+ *   toolExecutionMs?: number,
+ * }} fields
+ */
+export function logToolExecution(fields) {
+  logJson({ type: 'eve.tool_execution', ...fields });
 }

@@ -37,7 +37,7 @@ import {
 } from './resolveSectionChunks.mjs';
 import { maybeApplyFirstTurnTitle } from './sessionStore.mjs';
 import { discoverSkills } from './skills/discover.mjs';
-import { createReadingTools } from './tools.mjs';
+import { createReadingTools, readingToolsContext } from './tools.mjs';
 import { createReasoningEmitter } from './reasoningEmitter.mjs';
 import {
   ensureContinueHintOnMessage,
@@ -62,7 +62,7 @@ import {
   uiMessageToSession,
 } from '@wellread/eve-message';
 import { parseSlashInvocation } from './skills/invoke.mjs';
-import { logTurnContract } from './turnLog.mjs';
+import { logToolExecution, logTurnContract } from './turnLog.mjs';
 import { prepareUserTurn } from './userTurn.mjs';
 
 /** Fallback when caller omits contextWindowTokens (matches createModel default). */
@@ -187,11 +187,24 @@ export function runTurn(input) {
       ? Number(input.contextWindowTokens)
       : DEFAULT_CONTEXT_WINDOW_TOKENS;
 
+  // One shared budget object, two SDK slots (same reference):
+  // - runtimeContext → prepareStep.beginStep() resets counters each model step
+  // - toolsContext → production tool execute calls parallelGate/tryConsume
+  // Injected test tools have no contextSchema, so they still use the wrapper.
   const parallelBudget = createToolParallelBudget();
-  const tools = wrapToolsWithParallelBudget(
-    input.tools ?? createReadingTools({ getBooksRoot, bookId: session.bookId }),
-    parallelBudget,
-  );
+  const usingInjectedTools = Boolean(input.tools);
+  const tools = usingInjectedTools
+    ? wrapToolsWithParallelBudget(input.tools, parallelBudget)
+    : createReadingTools();
+  const toolsContext = usingInjectedTools
+    ? undefined
+    : readingToolsContext(tools, {
+        bookId: session.bookId,
+        booksRoot,
+        parallelBudget,
+      });
+  /** @type {{ parallelBudget: ReturnType<typeof createToolParallelBudget> }} */
+  const runtimeContext = { parallelBudget };
 
   const maxToolRounds = resolveMaxToolRounds(
     input.maxToolRounds ?? process.env.EVE_MAX_TOOL_ROUNDS,
@@ -347,17 +360,43 @@ export function runTurn(input) {
                 model,
                 messages: historyMessages,
                 tools,
+                ...(toolsContext ? { toolsContext } : {}),
+                runtimeContext,
                 abortSignal,
                 stopWhen: isStepCount(maxToolRounds + 1),
                 ...streamTextOptions,
                 // After streamTextOptions so presentation cannot clobber loop control.
-                prepareStep: ({ stepNumber }) => {
-                  parallelBudget.beginStep();
+                prepareStep: ({ stepNumber, runtimeContext: stepRuntime }) => {
+                  const budget =
+                    stepRuntime &&
+                    typeof stepRuntime === 'object' &&
+                    'parallelBudget' in stepRuntime
+                      ? /** @type {{ parallelBudget: { beginStep: () => void } }} */ (
+                          stepRuntime
+                        ).parallelBudget
+                      : parallelBudget;
+                  budget.beginStep();
                   return prepareToolExhaustionStep({
                     stepNumber,
                     maxToolRounds,
                     instructions: toolSystem,
                     maxOutputTokens: finalMaxOutputTokens,
+                  });
+                },
+                onToolExecutionStart: ({ toolCall }) => {
+                  logToolExecution({
+                    phase: 'start',
+                    toolName: toolCall.toolName,
+                    toolCallId: toolCall.toolCallId,
+                  });
+                },
+                onToolExecutionEnd: ({ toolCall, toolOutput, toolExecutionMs }) => {
+                  logToolExecution({
+                    phase: 'end',
+                    toolName: toolCall.toolName,
+                    toolCallId: toolCall.toolCallId,
+                    toolOutputType: toolOutput?.type,
+                    toolExecutionMs,
                   });
                 },
                 onStepEnd: () => {

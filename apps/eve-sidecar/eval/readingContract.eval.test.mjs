@@ -140,11 +140,20 @@ describe('eval: reading contract', () => {
 
   it('resolve_section soft-fails when extract is missing', async () => {
     const root = mkdtempSync(join(tmpdir(), 'eve-eval-miss-'));
-    const tools = createReadingTools({
-      getBooksRoot: () => root,
-      bookId: 'bk1',
-    });
-    const result = await tools.resolve_section.execute({ sectionIndex: 0 });
+    const { createToolParallelBudget } = await import(
+      '../src/agent/toolParallelBudget.mjs'
+    );
+    const parallelBudget = createToolParallelBudget();
+    parallelBudget.beginStep();
+    const tools = createReadingTools();
+    const result = await tools.resolve_section.execute(
+      { sectionIndex: 0 },
+      {
+        toolCallId: 'rs0',
+        messages: [],
+        context: { bookId: 'bk1', booksRoot: root, parallelBudget },
+      },
+    );
     assert.equal(result.ok, false);
     assert.equal(result.error, 'extract_not_ready');
   });

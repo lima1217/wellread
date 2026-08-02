@@ -127,6 +127,9 @@ export function resolveTurnModelPresentation(input) {
     return {
       toolSystem: input.envelope || '',
       streamTextOptions: {
+        // Top-level reasoning maps to provider effort (@ai-sdk/openai).
+        reasoning:
+          thinkingMode === 'think' ? THINK_MODE_REASONING_EFFORT : 'none',
         // Envelope stays as top-level instructions; book base prompt rides
         // providerOptions.openai.instructions (Responses API field).
         instructions: input.envelope || undefined,
@@ -134,8 +137,6 @@ export function resolveTurnModelPresentation(input) {
           openai: {
             store: false,
             instructions: input.instructions,
-            reasoningEffort:
-              thinkingMode === 'think' ? THINK_MODE_REASONING_EFFORT : 'none',
           },
         },
       },

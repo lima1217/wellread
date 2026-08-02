@@ -11,6 +11,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { createToolParallelBudget } from './toolParallelBudget.mjs';
 import {
   GREP_LINE_TEXT_MAX,
   authorizeOkfNotesWrite,
@@ -18,6 +19,29 @@ import {
   projectExtractContentForModel,
   projectGrepHitForModel,
 } from './tools.mjs';
+
+/**
+ * @param {string} booksRoot
+ * @param {string} [bookId]
+ */
+function readingContext(booksRoot, bookId = 'bk1') {
+  const parallelBudget = createToolParallelBudget();
+  parallelBudget.beginStep();
+  return { bookId, booksRoot, parallelBudget };
+}
+
+/**
+ * @param {string} booksRoot
+ * @param {string} toolCallId
+ * @param {string} [bookId]
+ */
+function execOpts(booksRoot, toolCallId, bookId = 'bk1') {
+  return {
+    toolCallId,
+    messages: [],
+    context: readingContext(booksRoot, bookId),
+  };
+}
 
 describe('projectExtractContentForModel', () => {
   it('keeps cfi/title/endCfi/sectionIndex/chunkIndex and drops bookId', () => {
@@ -152,7 +176,7 @@ function writeExtractMeta(booksRoot, bookId, chunkCount = 1) {
 
 describe('createReadingTools envelopes', () => {
   it('describes glob/grep by role without wide-path examples', () => {
-    const tools = createReadingTools({ getBooksRoot: () => '/tmp', bookId: 'bk1' });
+    const tools = createReadingTools();
     assert.match(tools.glob.description, /List file paths/i);
     assert.match(tools.glob.description, /resolve_section/);
     assert.match(tools.grep.description, /file contents/i);
@@ -199,10 +223,10 @@ cfi: "epubcfi(/6/2!)"
 a
 `,
       );
-      const tools = createReadingTools({ getBooksRoot: () => booksRoot, bookId });
+      const tools = createReadingTools();
       const hit = await tools.resolve_section.execute(
         { sectionIndex: 4 },
-        { toolCallId: 'rs1', messages: [] },
+        execOpts(booksRoot, 'rs1', bookId),
       );
       assert.equal(hit.ok, true);
       assert.equal(hit.via, 'sectionIndex');
@@ -214,14 +238,14 @@ a
 
       const byTitle = await tools.resolve_section.execute(
         { title: 'A' },
-        { toolCallId: 'rs2', messages: [] },
+        execOpts(booksRoot, 'rs2', bookId),
       );
       assert.equal(byTitle.ok, true);
       assert.equal(byTitle.count, 1);
 
       const missing = await tools.resolve_section.execute(
         {},
-        { toolCallId: 'rs3', messages: [] },
+        execOpts(booksRoot, 'rs3', bookId),
       );
       assert.equal(missing.ok, false);
       assert.equal(missing.error, 'invalid_args');
@@ -234,11 +258,11 @@ a
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'eve-tools-notes-')));
     const bookId = 'bk1';
     try {
-      const tools = createReadingTools({ getBooksRoot: () => booksRoot, bookId });
+      const tools = createReadingTools();
       const notesPath = `/workspace/.wellread/notes/${bookId}/concepts/测试.md`;
       const writeOk = await tools.write_file.execute(
         { path: notesPath, content: '---\ntype: Concept\n---\n\nbody\n' },
-        { toolCallId: 't1', messages: [] },
+        execOpts(booksRoot, 't1', bookId),
       );
       assert.equal(writeOk.ok, true);
       assert.equal(writeOk.path, notesPath);
@@ -250,7 +274,7 @@ a
           path: `/workspace/.wellread/extract/${bookId}/chunk.md`,
           content: 'nope',
         },
-        { toolCallId: 't2', messages: [] },
+        execOpts(booksRoot, 't2', bookId),
       );
       assert.equal(denied.ok, false);
       assert.equal(denied.error, 'denied');
@@ -260,7 +284,7 @@ a
           path: `/workspace/.wellread/notes/${bookId}/AGENTS.md`,
           content: 'poison',
         },
-        { toolCallId: 't3', messages: [] },
+        execOpts(booksRoot, 't3', bookId),
       );
       assert.equal(agents.ok, false);
       assert.equal(agents.error, 'denied');
@@ -278,13 +302,13 @@ a
       mkdirSync(extract, { recursive: true });
       mkdirSync(notes, { recursive: true });
       symlinkSync(extract, join(notes, 'concepts'));
-      const tools = createReadingTools({ getBooksRoot: () => booksRoot, bookId });
+      const tools = createReadingTools();
       const result = await tools.write_file.execute(
         {
           path: `/workspace/.wellread/notes/${bookId}/concepts/evil.md`,
           content: 'pwn',
         },
-        { toolCallId: 't4', messages: [] },
+        execOpts(booksRoot, 't4', bookId),
       );
       assert.equal(result.ok, false);
       assert.equal(result.error, 'denied');
@@ -302,18 +326,18 @@ a
       mkdirSync(join(booksRoot, rel), { recursive: true });
       writeExtractMeta(booksRoot, bookId, 1);
       writeFileSync(join(booksRoot, rel, 'a.md'), 'hello\n');
-      const tools = createReadingTools({ getBooksRoot: () => booksRoot, bookId });
+      const tools = createReadingTools();
 
       const hit = await tools.read_file.execute(
         { path: `/workspace/.wellread/extract/${bookId}/a.md` },
-        { toolCallId: 'r1', messages: [] },
+        execOpts(booksRoot, 'r1', bookId),
       );
       assert.equal(hit.ok, true);
       assert.equal(hit.content, 'hello\n');
 
       const miss = await tools.read_file.execute(
         { path: `/workspace/.wellread/extract/${bookId}/missing.md` },
-        { toolCallId: 'r2', messages: [] },
+        execOpts(booksRoot, 'r2', bookId),
       );
       assert.equal(miss.ok, false);
       assert.equal(miss.error, 'not_found');
@@ -326,16 +350,35 @@ a
   it('resolve_section soft-fails with extract_not_ready when meta is missing', async () => {
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'eve-tools-noready-')));
     try {
-      const tools = createReadingTools({ getBooksRoot: () => booksRoot, bookId: 'bk1' });
+      const tools = createReadingTools();
       const hit = await tools.resolve_section.execute(
         { sectionIndex: 0 },
-        { toolCallId: 'rs0', messages: [] },
+        execOpts(booksRoot, 'rs0'),
       );
       assert.equal(hit.ok, false);
       assert.equal(hit.error, 'extract_not_ready');
     } finally {
       rmSync(booksRoot, { recursive: true, force: true });
     }
+  });
+
+  it('soft-fails when parallelBudget is exhausted via toolsContext', async () => {
+    const tools = createReadingTools();
+    const parallelBudget = createToolParallelBudget();
+    parallelBudget.beginStep();
+    for (let i = 0; i < 8; i += 1) {
+      assert.equal(parallelBudget.tryConsume('read_file').ok, true);
+    }
+    const denied = await tools.read_file.execute(
+      { path: '/workspace/.wellread/extract/bk1/a.md' },
+      {
+        toolCallId: 'r_over',
+        messages: [],
+        context: { bookId: 'bk1', booksRoot: '/tmp', parallelBudget },
+      },
+    );
+    assert.equal(denied.ok, false);
+    assert.equal(denied.error, 'too_many_parallel_tools');
   });
 });
 

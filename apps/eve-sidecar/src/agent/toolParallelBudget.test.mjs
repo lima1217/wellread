@@ -4,6 +4,7 @@ import {
   MAX_PARALLEL_READ_TOOLS,
   MAX_PARALLEL_WRITE_TOOLS,
   createToolParallelBudget,
+  parallelGate,
   wrapToolsWithParallelBudget,
 } from './toolParallelBudget.mjs';
 
@@ -58,6 +59,25 @@ describe('createToolParallelBudget', () => {
     for (let i = 0; i < 30; i += 1) {
       assert.equal(budget.tryConsume('lookup').ok, true);
     }
+  });
+});
+
+describe('parallelGate', () => {
+  it('returns null when under budget and merges extras on deny', () => {
+    const budget = createToolParallelBudget();
+    budget.beginStep();
+    assert.equal(parallelGate(budget, 'glob'), null);
+    for (let i = 1; i < MAX_PARALLEL_READ_TOOLS; i += 1) {
+      assert.equal(parallelGate(budget, 'read_file'), null);
+    }
+    const denied = parallelGate(budget, 'resolve_section', {
+      count: 0,
+      paths: [],
+    });
+    assert.equal(denied?.ok, false);
+    assert.equal(denied?.error, 'too_many_parallel_tools');
+    assert.equal(denied?.count, 0);
+    assert.deepEqual(denied?.paths, []);
   });
 });
 

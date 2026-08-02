@@ -283,7 +283,8 @@ describe('runTurn model history', () => {
     });
 
     assert.equal(sink.opts?.providerOptions?.openai?.store, false);
-    assert.equal(sink.opts?.providerOptions?.openai?.reasoningEffort, 'high');
+    assert.equal(sink.opts?.reasoning, 'high');
+    assert.equal(sink.opts?.providerOptions?.openai?.reasoningEffort, undefined);
     assert.match(String(sink.opts?.providerOptions?.openai?.instructions || ''), /Reading Assistant/);
     const systemMessages = Array.isArray(sink.opts?.prompt)
       ? sink.opts.prompt.filter((p) => p?.role === 'system')

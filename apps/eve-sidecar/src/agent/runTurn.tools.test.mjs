@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { tool } from 'ai';
 import { z } from 'zod';
@@ -820,6 +823,38 @@ describe('runTurn empty / DSML soft-landing after tools', () => {
     assert.equal(capped.length, 3);
     assert.match(assistant.content, /读完了/);
   });
+
+  it('soft-fails excess parallel read_file via production toolsContext', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'eve-runturn-par-')));
+    try {
+      const session = emptySession();
+      const { assistant } = await run({
+        model: /** @type {any} */ (
+          manyParallelReadsThenAnswerModel(MAX_PARALLEL_READ_TOOLS + 3)
+        ),
+        session,
+        userMessage: '读这些 chunk',
+        getBooksRoot: () => booksRoot,
+        // omit tools → createReadingTools + readingToolsContext wiring
+        maxToolRounds: 2,
+      });
+
+      assert.ok(assistant);
+      const toolRows = assistant.tools ?? [];
+      assert.equal(toolRows.length, MAX_PARALLEL_READ_TOOLS + 3);
+      const capped = toolRows.filter(
+        (t) => t.result?.error === 'too_many_parallel_tools',
+      );
+      assert.equal(capped.length, 3);
+      assert.equal(
+        toolRows.filter((t) => t.result?.error !== 'too_many_parallel_tools').length,
+        MAX_PARALLEL_READ_TOOLS,
+      );
+      assert.match(assistant.content, /读完了/);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('runTurn parts persistence + live sources', () => {
@@ -943,5 +978,132 @@ describe('runTurn tool trace timing', () => {
       true,
       'tool-input-* must arrive during tool execution',
     );
+  });
+
+  it('logs onToolExecutionStart before execute body and End after success', async () => {
+    const session = emptySession();
+    /** @type {string[]} */
+    const lines = [];
+    const origError = console.error;
+    console.error = (...args) => {
+      lines.push(args.map(String).join(' '));
+    };
+    const prevLog = process.env.EVE_TURN_LOG;
+    process.env.EVE_TURN_LOG = '1';
+    let sawStartBeforeExecute = false;
+
+    try {
+      const tools = {
+        slow: tool({
+          description: 'slow lookup',
+          inputSchema: z.object({ q: z.string() }),
+          execute: async ({ q }) => {
+            const startLogged = lines.some((line) => {
+              try {
+                const row = JSON.parse(line);
+                return (
+                  row.type === 'eve.tool_execution' &&
+                  row.phase === 'start' &&
+                  row.toolName === 'slow'
+                );
+              } catch {
+                return false;
+              }
+            });
+            sawStartBeforeExecute = startLogged;
+            await new Promise((r) => setTimeout(r, 20));
+            return { hits: [q] };
+          },
+        }),
+      };
+
+      await run({
+        model: /** @type {any} */ (toolThenAnswerModel()),
+        session,
+        userMessage: 'Who is Ahab?',
+        getBooksRoot: () => '/tmp/books-should-not-matter',
+        tools,
+        maxToolRounds: 2,
+      });
+
+      assert.equal(sawStartBeforeExecute, true);
+      const endRow = lines
+        .map((line) => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return null;
+          }
+        })
+        .find(
+          (row) =>
+            row &&
+            row.type === 'eve.tool_execution' &&
+            row.phase === 'end' &&
+            row.toolName === 'slow',
+        );
+      assert.ok(endRow, 'expected tool_execution end log');
+      assert.equal(endRow.toolOutputType, 'tool-result');
+      assert.equal(typeof endRow.toolExecutionMs, 'number');
+    } finally {
+      console.error = origError;
+      if (prevLog === undefined) delete process.env.EVE_TURN_LOG;
+      else process.env.EVE_TURN_LOG = prevLog;
+    }
+  });
+
+  it('logs onToolExecutionEnd with tool-error when execute throws', async () => {
+    const session = emptySession();
+    /** @type {string[]} */
+    const lines = [];
+    const origError = console.error;
+    console.error = (...args) => {
+      lines.push(args.map(String).join(' '));
+    };
+    const prevLog = process.env.EVE_TURN_LOG;
+    process.env.EVE_TURN_LOG = '1';
+
+    try {
+      const tools = {
+        slow: tool({
+          description: 'slow lookup',
+          inputSchema: z.object({ q: z.string() }),
+          execute: async () => {
+            throw new Error('tool boom');
+          },
+        }),
+      };
+
+      await run({
+        model: /** @type {any} */ (toolThenAnswerModel()),
+        session,
+        userMessage: 'Who is Ahab?',
+        getBooksRoot: () => '/tmp/books-should-not-matter',
+        tools,
+        maxToolRounds: 2,
+      });
+
+      const endRow = lines
+        .map((line) => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return null;
+          }
+        })
+        .find(
+          (row) =>
+            row &&
+            row.type === 'eve.tool_execution' &&
+            row.phase === 'end' &&
+            row.toolName === 'slow',
+        );
+      assert.ok(endRow, 'expected tool_execution end log');
+      assert.equal(endRow.toolOutputType, 'tool-error');
+    } finally {
+      console.error = origError;
+      if (prevLog === undefined) delete process.env.EVE_TURN_LOG;
+      else process.env.EVE_TURN_LOG = prevLog;
+    }
   });
 });

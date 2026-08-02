@@ -75,7 +75,40 @@ export function createToolParallelBudget() {
 }
 
 /**
+ * Shared soft-fail gate for per-step parallel budgets.
+ * Returns null when the call may proceed; otherwise a denied envelope.
+ * Tool-specific fields (hits/paths/…) go in `extras` so wrapper and
+ * production execute paths stay shape-compatible.
+ *
+ * @template {Record<string, unknown>} [Extras={}]
+ * @param {ToolParallelBudget} budget
+ * @param {string} toolName
+ * @param {Extras} [extras]
+ * @returns {null | ({
+ *   ok: false,
+ *   error: string,
+ *   message: string,
+ *   limit: number,
+ *   toolName: string,
+ * } & Extras)}
+ */
+export function parallelGate(budget, toolName, extras) {
+  const gate = budget.tryConsume(toolName);
+  if (gate.ok) return null;
+  return {
+    ok: false,
+    error: gate.error,
+    message: gate.message,
+    limit: gate.limit,
+    toolName: gate.toolName,
+    ...(extras ?? /** @type {Extras} */ ({})),
+  };
+}
+
+/**
  * Wrap tool execute handlers so excess parallel calls return a soft-fail envelope.
+ * Prefer production tools that gate via `parallelGate` + toolsContext; this
+ * wrapper remains for injected test tools without contextSchema.
  *
  * @param {import('ai').ToolSet} tools
  * @param {ToolParallelBudget} budget
@@ -98,16 +131,8 @@ export function wrapToolsWithParallelBudget(tools, budget) {
     wrapped[name] = {
       ...toolDef,
       execute: async (input, options) => {
-        const gate = budget.tryConsume(name);
-        if (!gate.ok) {
-          return {
-            ok: false,
-            error: gate.error,
-            message: gate.message,
-            limit: gate.limit,
-            toolName: gate.toolName,
-          };
-        }
+        const blocked = parallelGate(budget, name);
+        if (blocked) return blocked;
         return execute(input, options);
       },
     };
