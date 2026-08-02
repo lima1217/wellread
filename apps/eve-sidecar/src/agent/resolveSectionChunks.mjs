@@ -6,6 +6,7 @@
 import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CFI_COMPARE_MAX_LENGTH, cfiInRange } from './epubcfiCompare.mjs';
+import { parseExtractChunkFrontmatter } from './extractChunk.mjs';
 import { isSafeBookIdSegment } from './notesOkf.mjs';
 import {
   chunkWorkspacePath as indexChunkWorkspacePath,
@@ -22,91 +23,6 @@ export const SECTION_CHUNKS_WALK_MAX = 2000;
 
 /** Max focus chunk paths listed in reading_context. */
 export const FOCUS_CHUNKS_MAX = 2;
-
-/**
- * @param {string} block frontmatter body (between --- fences)
- * @param {string} key
- * @returns {string | undefined}
- */
-function frontmatterValue(block, key) {
-  const m = block.match(new RegExp(`^${key}:\\s*(.*)$`, 'm'));
-  return m ? m[1].trim() : undefined;
-}
-
-/**
- * @param {string} rawJsonish
- * @returns {string}
- */
-function parseFrontmatterString(rawJsonish) {
-  let title = rawJsonish;
-  if (title.startsWith('"')) {
-    try {
-      title = JSON.parse(title);
-    } catch {
-      title = rawJsonish;
-    }
-  }
-  return typeof title === 'string' ? title.trim() : '';
-}
-
-/**
- * @param {string} raw
- * @returns {{
- *   sectionIndex?: number,
- *   chunkIndex?: number,
- *   title?: string,
- *   cfi?: string,
- *   endCfi?: string,
- * } | null}
- */
-export function parseExtractChunkFrontmatter(raw) {
-  if (typeof raw !== 'string') return null;
-  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) return null;
-  const block = match[1];
-  const sectionRaw = frontmatterValue(block, 'sectionIndex');
-  const chunkRaw = frontmatterValue(block, 'chunkIndex');
-  const titleRaw = frontmatterValue(block, 'title');
-  const cfiRaw = frontmatterValue(block, 'cfi');
-  const endCfiRaw = frontmatterValue(block, 'endCfi');
-  /** @type {{
-   *   sectionIndex?: number,
-   *   chunkIndex?: number,
-   *   title?: string,
-   *   cfi?: string,
-   *   endCfi?: string,
-   * }} */
-  const out = {};
-  if (sectionRaw !== undefined) {
-    const n = Number(sectionRaw);
-    if (Number.isFinite(n) && n >= 0) out.sectionIndex = Math.floor(n);
-  }
-  if (chunkRaw !== undefined) {
-    const n = Number(chunkRaw);
-    if (Number.isFinite(n) && n >= 0) out.chunkIndex = Math.floor(n);
-  }
-  if (titleRaw !== undefined) {
-    const title = parseFrontmatterString(titleRaw);
-    if (title) out.title = title;
-  }
-  if (cfiRaw !== undefined) {
-    const cfi = parseFrontmatterString(cfiRaw);
-    if (cfi) out.cfi = cfi;
-  }
-  if (endCfiRaw !== undefined) {
-    const endCfi = parseFrontmatterString(endCfiRaw);
-    if (endCfi) out.endCfi = endCfi;
-  }
-  if (
-    out.sectionIndex === undefined &&
-    out.chunkIndex === undefined &&
-    out.title === undefined &&
-    out.cfi === undefined
-  ) {
-    return null;
-  }
-  return out;
-}
 
 /**
  * @param {string} booksRoot

@@ -7,6 +7,7 @@ import {
   parsePendingQuotesFromWire,
   stripLeadingQuoteBlocks,
 } from '@wellread/quote-wire';
+import { listNotesIndex } from './notesIndex.mjs';
 import {
   PRIOR_SOURCES_MAX,
   SKILL_CATALOG_DESC_MAX,
@@ -15,7 +16,6 @@ import {
   buildSystemPrompt,
   collectPriorSources,
   formatSkillsCatalog,
-  listNotesIndex,
   normalizeReaderState,
   sanitizeSkillCatalogDescription,
 } from './prompt.mjs';

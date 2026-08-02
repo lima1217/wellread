@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, after } from 'node:test';
 import { createSessionStore, maybeApplyFirstTurnTitle } from './sessionStore.mjs';
-import { extractSourcesFromChunkMarkdown, collectSourcesFromTools } from './prompt.mjs';
+import {
+  collectSourcesFromTools,
+  extractSourcesFromChunkMarkdown,
+} from './extractChunk.mjs';
 
 describe('sessionStore', () => {
   const dir = mkdtempSync(join(tmpdir(), 'eve-sessions-'));

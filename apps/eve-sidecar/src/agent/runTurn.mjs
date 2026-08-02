@@ -11,33 +11,14 @@ import {
   toUIMessageStream,
 } from 'ai';
 import { randomBytes } from 'node:crypto';
-import {
-  normalizeThinkingMode,
-  resolveTurnModelPresentation,
-  turnFetchContext,
-} from '../createModel.mjs';
+import { turnFetchContext } from '../createModel.mjs';
 import { maybeCompressSession } from './contextCompress.mjs';
-import { isAbortError } from './httpAbort.mjs';
+import { collectSourcesFromTools } from './extractChunk.mjs';
 import {
   buildModelMessages,
   serializeModelMessages,
 } from './modelHistory.mjs';
-import {
-  appendReadingContext,
-  buildReadingContextEnvelope,
-  buildSystemPrompt,
-  collectPriorSources,
-  collectSourcesFromTools,
-  listNotesIndex,
-} from './prompt.mjs';
-import { readExtractStatus } from './extractMeta.mjs';
-import {
-  resolveFocusChunks,
-  resolveSectionChunksForReader,
-} from './resolveSectionChunks.mjs';
-import { maybeApplyFirstTurnTitle } from './sessionStore.mjs';
-import { discoverSkills } from './skills/discover.mjs';
-import { createReadingTools, readingToolsContext } from './tools.mjs';
+import { prepareTurnContext } from './prepareTurnContext.mjs';
 import { createReasoningEmitter } from './reasoningEmitter.mjs';
 import {
   ensureContinueHintOnMessage,
@@ -46,24 +27,18 @@ import {
   sanitizeUIMessageTextStream,
   TOOLS_READY_CONTINUE_HINT,
 } from './sanitizeModelReply.mjs';
-import {
-  createToolParallelBudget,
-  wrapToolsWithParallelBudget,
-} from './toolParallelBudget.mjs';
+import { maybeApplyFirstTurnTitle } from './sessionStore.mjs';
 import {
   prepareToolExhaustionStep,
-  resolveFinalMaxOutputTokens,
-  resolveMaxToolRounds,
 } from './toolRounds.mjs';
+import { createTurnFailure } from './turnFailure.mjs';
+import { logToolExecution } from './turnLog.mjs';
 import {
   encodeEveSideChunk,
   sessionToUIMessage,
   toolsFromUIMessage,
   uiMessageToSession,
 } from '@wellread/eve-message';
-import { parseSlashInvocation } from './skills/invoke.mjs';
-import { logToolExecution, logTurnContract } from './turnLog.mjs';
-import { prepareUserTurn } from './userTurn.mjs';
 
 /** Fallback when caller omits contextWindowTokens (matches createModel default). */
 const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
@@ -83,25 +58,36 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   readerState?: { chapter?: string | null, cfi?: string | null, sectionIndex?: number | null } | null,
  *   generateTextFn?: import('ai').generateText,
  *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
- *   tools?: import('ai').ToolSet,
+ *   tools?: import('ai').ToolSet, // prefer readingToolContextSchema (+ parallelGate); bare tools get wrap fallback
  * }} input
  * @returns {ReadableStream<import('ai').UIMessageChunk>}
  */
 export function runTurn(input) {
   const { model, session, userMessage, getBooksRoot, abortSignal } = input;
+  // Mid-turn + onFinish own durability via persistSession. Server catch-path
+  // save is only a crash belt when the stream throws before onFinish.
   const persistSession = input.persistSession;
-  const thinkingMode = normalizeThinkingMode(input.thinkingMode);
-  const prepared = prepareUserTurn(userMessage, getBooksRoot);
-  const modelUserMessage = prepared.modelContent;
-  const turnQuotes = prepared.quotes;
   const userId = `msg_${randomBytes(6).toString('hex')}`;
+
+  const ctx = prepareTurnContext({
+    session,
+    userMessage,
+    getBooksRoot,
+    thinkingMode: input.thinkingMode,
+    apiMode: input.apiMode,
+    readerState: input.readerState,
+    maxToolRounds: input.maxToolRounds,
+    finalMaxOutputTokens: input.finalMaxOutputTokens,
+    tools: input.tools,
+  });
+
   const userMsg = {
     id: userId,
     role: /** @type {const} */ ('user'),
-    content: prepared.sessionContent,
+    content: ctx.prepared.sessionContent,
     createdAt: Date.now(),
-    ...(prepared.modelContent !== prepared.sessionContent
-      ? { modelContent: prepared.modelContent }
+    ...(ctx.prepared.modelContent !== ctx.prepared.sessionContent
+      ? { modelContent: ctx.prepared.modelContent }
       : {}),
   };
   session.messages.push(userMsg);
@@ -114,104 +100,23 @@ export function runTurn(input) {
     persistSession?.(session);
   };
 
-  let skills = [];
-  let booksRoot = '';
-  try {
-    booksRoot = getBooksRoot();
-    skills = discoverSkills({ booksRoot });
-  } catch {
-    // Missing books root or FS errors: omit catalog / notes index.
-  }
-  const priorSources = collectPriorSources(
-    session.messages.filter((m) => m.id !== userId),
-  );
-  const notesIndex = booksRoot
-    ? listNotesIndex(booksRoot, session.bookId)
-    : [];
-  const sectionChunks = booksRoot
-    ? resolveSectionChunksForReader({
-        booksRoot,
-        bookId: session.bookId,
-        readerState: input.readerState,
-      })
-    : null;
-  const focusChunks = booksRoot
-    ? resolveFocusChunks({
-        booksRoot,
-        bookId: session.bookId,
-        readerState: input.readerState,
-      })
-    : null;
-  const extractStatus = booksRoot
-    ? readExtractStatus(booksRoot, session.bookId)
-    : { status: 'missing', chunkCount: 0, schemaVersion: null };
-  const envelope = buildReadingContextEnvelope({
-    bookId: session.bookId,
-    bookTitle: session.bookTitle,
-    readerState: input.readerState,
-    quotes: turnQuotes,
-    priorSources,
-    notesIndex,
-    extractStatus,
-    focusChunks,
-    sectionChunks,
-  });
-  const instructions = buildSystemPrompt({
-    bookId: session.bookId,
-    bookTitle: session.bookTitle,
-    skills,
-  });
-  const system = appendReadingContext(instructions, envelope);
-  const { toolSystem, streamTextOptions } = resolveTurnModelPresentation({
-    apiMode: input.apiMode,
-    thinkingMode,
-    system,
-    envelope,
-    instructions,
-  });
-
-  logTurnContract({
-    sessionId: session.id,
-    bookId: session.bookId,
-    extractStatus: extractStatus.status,
-    focusVia: focusChunks?.via ?? null,
-    focusCount: focusChunks?.count ?? 0,
-    sectionVia: sectionChunks?.via ?? null,
-    sectionCount: sectionChunks?.count ?? 0,
-    skillId: parseSlashInvocation(input.userMessage)?.skillId ?? null,
-    quoteCount: Array.isArray(turnQuotes) ? turnQuotes.length : 0,
-  });
-
   const contextWindowTokens =
     Number(input.contextWindowTokens) > 0
       ? Number(input.contextWindowTokens)
       : DEFAULT_CONTEXT_WINDOW_TOKENS;
 
-  // One shared budget object, two SDK slots (same reference):
-  // - runtimeContext → prepareStep.beginStep() resets counters each model step
-  // - toolsContext → production tool execute calls parallelGate/tryConsume
-  // Injected test tools have no contextSchema, so they still use the wrapper.
-  const parallelBudget = createToolParallelBudget();
-  const usingInjectedTools = Boolean(input.tools);
-  const tools = usingInjectedTools
-    ? wrapToolsWithParallelBudget(input.tools, parallelBudget)
-    : createReadingTools();
-  const toolsContext = usingInjectedTools
-    ? undefined
-    : readingToolsContext(tools, {
-        bookId: session.bookId,
-        booksRoot,
-        parallelBudget,
-      });
-  /** @type {{ parallelBudget: ReturnType<typeof createToolParallelBudget> }} */
-  const runtimeContext = { parallelBudget };
-
-  const maxToolRounds = resolveMaxToolRounds(
-    input.maxToolRounds ?? process.env.EVE_MAX_TOOL_ROUNDS,
-  );
-  const finalMaxOutputTokens = resolveFinalMaxOutputTokens(
-    input.finalMaxOutputTokens ?? process.env.EVE_FINAL_MAX_OUTPUT_TOKENS,
-  );
+  const {
+    thinkingMode,
+    system,
+    toolSystem,
+    streamTextOptions,
+    tools,
+    toolsContext,
+    runtimeContext,
+    parallelBudget,
+    maxToolRounds,
+    finalMaxOutputTokens,
+  } = ctx;
 
   const assistantId = `msg_${randomBytes(6).toString('hex')}`;
   /** @type {import('ai').StreamTextResult<any, any> | null} */
@@ -224,6 +129,7 @@ export function runTurn(input) {
     skipPersist = true;
     dropUser();
   };
+  const failure = createTurnFailure({ abortSignal, onFailed: markFailed });
 
   // Include the current user so the list does not end on a prior assistant.
   // AI SDK treats a trailing assistant in originalMessages as a continuation and
@@ -287,11 +193,7 @@ export function runTurn(input) {
       persisted = true;
     },
     execute: async ({ writer }) => {
-      if (abortSignal?.aborted) {
-        markFailed();
-        writer.write({ type: 'abort', reason: 'client aborted' });
-        return;
-      }
+      if (failure.failIfAborted(writer)) return;
 
       try {
         const compressed = await maybeCompressSession({
@@ -310,30 +212,17 @@ export function runTurn(input) {
           persistSession?.(session);
         }
       } catch (error) {
-        if (isAbortError(error) || abortSignal?.aborted) {
-          markFailed();
-          writer.write({ type: 'abort', reason: 'client aborted' });
-          return;
-        }
-        markFailed();
-        writer.write({
-          type: 'error',
-          errorText: error instanceof Error ? error.message : String(error),
-        });
+        failure.failCaught(writer, error);
         return;
       }
 
-      if (abortSignal?.aborted) {
-        markFailed();
-        writer.write({ type: 'abort', reason: 'client aborted' });
-        return;
-      }
+      if (failure.failIfAborted(writer)) return;
 
       // Build after compress so this turn's model context matches disk/UI.
       const historyMessages = buildModelMessages({
         messages: session.messages,
         excludeMessageId: userId,
-        currentUserModelContent: modelUserMessage,
+        currentUserModelContent: ctx.prepared.modelContent,
       });
 
       // finish-step clears AI SDK activeReasoningParts — never reuse one id
@@ -360,7 +249,7 @@ export function runTurn(input) {
                 model,
                 messages: historyMessages,
                 tools,
-                ...(toolsContext ? { toolsContext } : {}),
+                toolsContext,
                 runtimeContext,
                 abortSignal,
                 stopWhen: isStepCount(maxToolRounds + 1),
@@ -436,12 +325,10 @@ export function runTurn(input) {
                   (step) => (step.toolCalls?.length ?? 0) > 0,
                 );
                 if (!hasTools) {
-                  markFailed();
-                  writer.write({
-                    type: 'error',
-                    errorText:
-                      'Model returned an empty reply. Check API key/model.',
-                  });
+                  failure.writeError(
+                    writer,
+                    'Model returned an empty reply. Check API key/model.',
+                  );
                 } else {
                   // Keep tool ledger; surface a recoverable hint for the next poke.
                   const hintId = `text_continue_${assistantId}`;
@@ -456,31 +343,13 @@ export function runTurn(input) {
               }
             } catch (error) {
               reasoning.stop();
-              if (isAbortError(error) || abortSignal?.aborted) {
-                markFailed();
-                writer.write({ type: 'abort', reason: 'client aborted' });
-                return;
-              }
-              markFailed();
-              writer.write({
-                type: 'error',
-                errorText: error instanceof Error ? error.message : String(error),
-              });
+              failure.failCaught(writer, error);
             }
           },
         );
       } catch (error) {
         reasoning.stop();
-        if (isAbortError(error) || abortSignal?.aborted) {
-          markFailed();
-          writer.write({ type: 'abort', reason: 'client aborted' });
-          return;
-        }
-        markFailed();
-        writer.write({
-          type: 'error',
-          errorText: error instanceof Error ? error.message : String(error),
-        });
+        failure.failCaught(writer, error);
       }
     },
   });

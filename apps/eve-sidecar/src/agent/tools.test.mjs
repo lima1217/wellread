@@ -16,9 +16,9 @@ import {
   GREP_LINE_TEXT_MAX,
   authorizeOkfNotesWrite,
   createReadingTools,
-  projectExtractContentForModel,
   projectGrepHitForModel,
 } from './tools.mjs';
+import { projectExtractContentForModel } from './extractChunk.mjs';
 
 /**
  * @param {string} booksRoot
@@ -70,7 +70,7 @@ Call me Ishmael.
   });
 
   it('still yields sources via extractSourcesFromChunkMarkdown', async () => {
-    const { extractSourcesFromChunkMarkdown } = await import('./prompt.mjs');
+    const { extractSourcesFromChunkMarkdown } = await import('./extractChunk.mjs');
     const raw = `---
 bookId: "bk1"
 title: "Loomings"

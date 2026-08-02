@@ -107,8 +107,8 @@ export function parallelGate(budget, toolName, extras) {
 
 /**
  * Wrap tool execute handlers so excess parallel calls return a soft-fail envelope.
- * Prefer production tools that gate via `parallelGate` + toolsContext; this
- * wrapper remains for injected test tools without contextSchema.
+ * Production turns bind budget via toolsContext (`bindTurnTools`); this
+ * wrapper is a unit-test / adapter helper for tools without contextSchema.
  *
  * @param {import('ai').ToolSet} tools
  * @param {ToolParallelBudget} budget

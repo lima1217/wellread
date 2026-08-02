@@ -276,6 +276,7 @@ const server = http.createServer(async (req, res) => {
             thinkingMode,
             apiMode: modelConfig.apiMode,
             readerState,
+            // runTurn owns mid-turn + onFinish persistence via this callback.
             persistSession: (s) => sessions.save(s),
           });
           pipeUIMessageStreamToResponse({
@@ -285,7 +286,8 @@ const server = http.createServer(async (req, res) => {
           });
           // Hold the turn gate until the response ends (or abort/timeout).
           await waitForResponseEnd(res);
-          sessions.save(session);
+          // No success-path re-save: onFinish / compress / dropUser already
+          // persisted through persistSession.
         } catch (error) {
           if (!res.headersSent) {
             sendJson(
@@ -298,6 +300,7 @@ const server = http.createServer(async (req, res) => {
               req,
             );
           }
+          // Crash belt when the stream throws before onFinish.
           sessions.save(session);
         } finally {
           settleAbort();

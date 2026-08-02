@@ -1,16 +1,13 @@
 /**
- * System prompt + source extraction for the Reading Assistant agent.
+ * System prompt + reading-context envelope for the Reading Assistant agent.
  * Kept in sidecar so the model loop does not depend on the frontend bundle.
  */
 
-import { readdirSync, statSync } from 'node:fs';
-import { join, relative, resolve, sep } from 'node:path';
 import {
   ENVELOPE_KEYS,
   normalizeReaderState as normalizeReaderStateShared,
 } from '@wellread/reading-context';
 import { CFI_COMPARE_MAX_LENGTH } from './epubcfiCompare.mjs';
-import { isSafeBookIdSegment } from './notesOkf.mjs';
 import {
   FOCUS_CHUNKS_MAX,
   SECTION_CHUNKS_ASK_THRESHOLD,
@@ -18,12 +15,6 @@ import {
 
 /** Max prior CFI sources replayed into the reading-context envelope. */
 export const PRIOR_SOURCES_MAX = 12;
-
-/** Max note file paths listed in the envelope (names only). */
-export const NOTES_INDEX_MAX = 24;
-
-/** Cap filesystem visits while building notes_index (DoS / large OKF trees). */
-export const NOTES_INDEX_WALK_MAX = 400;
 
 /**
  * Optional client reading position for the reading-context envelope.
@@ -106,103 +97,6 @@ export function collectPriorSources(messages, max = PRIOR_SOURCES_MAX) {
     }
   }
   return out;
-}
-
-/**
- * List note .md paths relative to the book notes root (names only, no body).
- * Prefers navigation spine (root index.md, then dir index.md) before content
- * pages so NOTES_INDEX_MAX does not bury the OKF entry points. Walk is capped.
- * @param {string} booksRoot
- * @param {string} bookId
- * @param {number} [max]
- * @returns {string[]}
- */
-export function listNotesIndex(booksRoot, bookId, max = NOTES_INDEX_MAX) {
-  if (!booksRoot || !isSafeBookIdSegment(bookId)) return [];
-  const limit = Number.isFinite(max) && max > 0 ? Math.floor(max) : NOTES_INDEX_MAX;
-  const notesBase = resolve(join(booksRoot, '.wellread', 'notes'));
-  const root = resolve(join(notesBase, bookId));
-  if (root !== notesBase && !root.startsWith(`${notesBase}${sep}`)) return [];
-  /** @type {string[]} */
-  const spine = [];
-  /** @type {string[]} */
-  const rest = [];
-  const state = { visited: 0, stop: false };
-  try {
-    walkNotes(root, root, spine, rest, state);
-  } catch {
-    return [];
-  }
-  const byName = (a, b) => a.localeCompare(b);
-  spine.sort((a, b) => {
-    const d = notesIndexRank(a) - notesIndexRank(b);
-    return d !== 0 ? d : byName(a, b);
-  });
-  rest.sort(byName);
-  return [...spine, ...rest].slice(0, limit);
-}
-
-/** Root spine first, then per-directory index.md, then other pages. */
-function notesIndexRank(rel) {
-  if (rel === 'index.md') return 0;
-  if (rel.endsWith('/index.md')) return 10;
-  return 100;
-}
-
-/**
- * @param {string} rel posix-relative path under notes root
- */
-function isNotesIndexCandidate(rel) {
-  if (!rel || rel.startsWith('..') || /[\r\n\u0000]/.test(rel)) return false;
-  if (!rel.toLowerCase().endsWith('.md')) return false;
-  const parts = rel.split('/');
-  if (parts[0] === 'tools') return false;
-  if (parts[parts.length - 1] === 'log.md') return false;
-  if (parts[parts.length - 1] === 'AGENTS.md') return false;
-  return true;
-}
-
-/**
- * @param {string} dir
- * @param {string} root
- * @param {string[]} spine
- * @param {string[]} rest
- * @param {{ visited: number, stop: boolean }} state
- */
-function walkNotes(dir, root, spine, rest, state) {
-  if (state.stop) return;
-  let entries;
-  try {
-    entries = readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  entries.sort((a, b) => a.name.localeCompare(b.name));
-  for (const ent of entries) {
-    if (state.stop) return;
-    if (ent.name.startsWith('.')) continue;
-    if (ent.name === 'tools' && ent.isDirectory()) continue;
-    const abs = join(dir, ent.name);
-    if (ent.isDirectory()) {
-      walkNotes(abs, root, spine, rest, state);
-      continue;
-    }
-    if (!ent.isFile()) continue;
-    state.visited += 1;
-    if (state.visited > NOTES_INDEX_WALK_MAX) {
-      state.stop = true;
-      return;
-    }
-    try {
-      if (!statSync(abs).isFile()) continue;
-    } catch {
-      continue;
-    }
-    const rel = relative(root, abs).split('\\').join('/');
-    if (!isNotesIndexCandidate(rel)) continue;
-    if (notesIndexRank(rel) < 100) spine.push(rel);
-    else rest.push(rel);
-  }
 }
 
 /**
@@ -428,63 +322,4 @@ export function formatSkillsCatalog(skills) {
     ...entries,
     "Follow a skill's instructions after /skill: expansion or after reading its file. Do not invent skills.",
   ].join('\n');
-}
-
-/**
- * @param {string} markdown
- * @param {string} [path]
- * @returns {Array<{ cfi: string, endCfi?: string, title?: string, path?: string }>}
- */
-export function extractSourcesFromChunkMarkdown(markdown, path) {
-  const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) return [];
-  const block = match[1];
-  const get = (key) => {
-    const m = block.match(new RegExp(`^${key}:\\s*(.*)$`, 'm'));
-    if (!m) return undefined;
-    const raw = m[1].trim();
-    // Values are written with JSON.stringify (see formatChunkMarkdown).
-    if (raw.startsWith('"') || raw.startsWith("'")) {
-      try {
-        return JSON.parse(raw);
-      } catch {
-        return raw.slice(1, -1);
-      }
-    }
-    return raw || undefined;
-  };
-  const cfi = get('cfi');
-  if (!cfi) return [];
-  const endCfi = get('endCfi');
-  const title = get('title');
-  return [
-    {
-      cfi,
-      ...(endCfi ? { endCfi } : {}),
-      ...(title ? { title } : {}),
-      ...(path ? { path } : {}),
-    },
-  ];
-}
-
-/**
- * Collect sources from tool results (read_file content with frontmatter).
- * @param {Array<{ name: string, result?: unknown }>} tools
- */
-export function collectSourcesFromTools(tools) {
-  /** @type {Array<{ cfi: string, endCfi?: string, title?: string, path?: string }>} */
-  const sources = [];
-  const seen = new Set();
-  for (const t of tools) {
-    if (t.name !== 'read_file' || !t.result || typeof t.result !== 'object') continue;
-    const result =
-      /** @type {{ ok?: boolean, path?: string, content?: string | null }} */ (t.result);
-    if (result.ok === false || !result.content) continue;
-    for (const src of extractSourcesFromChunkMarkdown(result.content, result.path)) {
-      if (seen.has(src.cfi)) continue;
-      seen.add(src.cfi);
-      sources.push(src);
-    }
-  }
-  return sources;
 }

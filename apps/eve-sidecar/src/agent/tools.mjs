@@ -10,6 +10,7 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import { createBooksFsSession, globWellread, grepWellread, normalizeAbsolute } from '../books/index.mjs';
+import { projectExtractContentForModel } from './extractChunk.mjs';
 import {
   extractUnavailableEnvelope,
   readExtractStatus,
@@ -55,37 +56,6 @@ export const GREP_MODEL_HIT_MAX = 40;
 
 /** Truncate each grep line text for token density. */
 export const GREP_LINE_TEXT_MAX = 160;
-
-/**
- * Compact extract-chunk markdown for the model: keep cfi/title/sectionIndex/chunkIndex
- * (+ endCfi) frontmatter; drop bookId noise.
- * @param {string} content
- * @returns {string}
- */
-export function projectExtractContentForModel(content) {
-  if (typeof content !== 'string') return content;
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-  if (!match) return content;
-  const block = match[1];
-  const body = match[2] ?? '';
-  const get = (key) => {
-    const m = block.match(new RegExp(`^${key}:\\s*(.*)$`, 'm'));
-    return m ? m[1].trim() : undefined;
-  };
-  const cfi = get('cfi');
-  if (!cfi) return content;
-  const title = get('title');
-  const endCfi = get('endCfi');
-  const sectionIndex = get('sectionIndex');
-  const chunkIndex = get('chunkIndex');
-  const lines = ['---', `cfi: ${cfi}`];
-  if (title !== undefined) lines.push(`title: ${title}`);
-  if (endCfi !== undefined) lines.push(`endCfi: ${endCfi}`);
-  if (sectionIndex !== undefined) lines.push(`sectionIndex: ${sectionIndex}`);
-  if (chunkIndex !== undefined) lines.push(`chunkIndex: ${chunkIndex}`);
-  lines.push('---', '', body.replace(/^\r?\n/, ''));
-  return lines.join('\n');
-}
 
 /**
  * @param {{ path: string, line: number, text: string }} hit
