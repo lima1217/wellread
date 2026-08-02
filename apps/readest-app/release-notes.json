@@ -1,5 +1,14 @@
 {
   "releases": {
+    "1.2.1": {
+      "date": "2026-08-02",
+      "notes": [
+        "Assistant: Structured write_file(draft) compose with live UX fixes",
+        "Assistant: AI SDK v7 toolsContext migration and top-level reasoning",
+        "Assistant: Hardened soft-landing turns and eve turn-prep path",
+        "Sidecar: Session path hardening, CORS allowlist, and test discovery fixes"
+      ]
+    },
     "1.2.0": {
       "date": "2026-08-01",
       "notes": [
