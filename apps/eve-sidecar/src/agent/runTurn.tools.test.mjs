@@ -7,6 +7,9 @@ import {
   runTurn,
   consumeUIMessageStream,
 } from './runTurn.mjs';
+import { TOOLS_READY_CONTINUE_HINT } from './sanitizeModelReply.mjs';
+import { MAX_PARALLEL_READ_TOOLS } from './toolParallelBudget.mjs';
+import { DEFAULT_FINAL_MAX_OUTPUT_TOKENS } from './toolRounds.mjs';
 
 /**
  * @returns {import('./sessionStore.mjs').Session}
@@ -452,6 +455,370 @@ describe('runTurn visible model output', () => {
       chunks.some((c) => c.type === 'error'),
       false,
     );
+  });
+});
+
+/** Tool once, then empty soft-landing (no prose). */
+function toolThenEmptySoftLandingModel() {
+  let callCount = 0;
+  return {
+    specificationVersion: 'v2',
+    provider: 'test',
+    modelId: 'empty-after-tools',
+    supportedUrls: {},
+    doGenerate: async () => {
+      throw new Error('doGenerate unused');
+    },
+    doStream: async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'tool-call',
+                toolCallId: 'tc_empty_1',
+                toolName: 'read_file',
+                input: JSON.stringify({ path: '/workspace/a.md' }),
+              });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      }
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 0, totalTokens: 1 },
+            });
+            controller.close();
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  };
+}
+
+/** Tool once, then DSML dump as soft-landing prose. */
+function toolThenDsmlSoftLandingModel() {
+  let callCount = 0;
+  const dsml = [
+    'tool_calls>',
+    '<invoke name="read_file">',
+    '<parameter name="path" string="true">/workspace/.wellread/extract/x/chunks/00464.md</parameter>',
+    '</invoke>',
+  ].join(' ');
+  return {
+    specificationVersion: 'v2',
+    provider: 'test',
+    modelId: 'dsml-after-tools',
+    supportedUrls: {},
+    doGenerate: async () => {
+      throw new Error('doGenerate unused');
+    },
+    doStream: async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'tool-call',
+                toolCallId: 'tc_dsml_1',
+                toolName: 'read_file',
+                input: JSON.stringify({ path: '/workspace/a.md' }),
+              });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      }
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 't1' });
+            controller.enqueue({ type: 'text-delta', id: 't1', delta: dsml });
+            controller.enqueue({ type: 'text-end', id: 't1' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  };
+}
+
+/** Emit many parallel read_file calls in one step, then answer. */
+function manyParallelReadsThenAnswerModel(count) {
+  let callCount = 0;
+  return {
+    specificationVersion: 'v2',
+    provider: 'test',
+    modelId: 'many-parallel-reads',
+    supportedUrls: {},
+    doGenerate: async () => {
+      throw new Error('doGenerate unused');
+    },
+    doStream: async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              for (let i = 0; i < count; i += 1) {
+                controller.enqueue({
+                  type: 'tool-call',
+                  toolCallId: `tc_par_${i}`,
+                  toolName: 'read_file',
+                  input: JSON.stringify({ path: `/workspace/c${i}.md` }),
+                });
+              }
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      }
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 't1' });
+            controller.enqueue({
+              type: 'text-delta',
+              id: 't1',
+              delta: '读完了。',
+            });
+            controller.enqueue({ type: 'text-end', id: 't1' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  };
+}
+
+describe('runTurn empty / DSML soft-landing after tools', () => {
+  it('persists a continue hint when tools ran but final prose is empty', async () => {
+    const session = emptySession();
+    const tools = {
+      read_file: tool({
+        description: 'read',
+        inputSchema: z.object({ path: z.string() }),
+        execute: async ({ path }) => ({ ok: true, path, content: 'x' }),
+      }),
+    };
+
+    const { assistant, chunks } = await run({
+      model: /** @type {any} */ (toolThenEmptySoftLandingModel()),
+      session,
+      userMessage: '总结这一章',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools,
+      maxToolRounds: 2,
+    });
+
+    assert.ok(assistant);
+    assert.match(assistant.content, new RegExp(TOOLS_READY_CONTINUE_HINT));
+    assert.equal(session.messages.some((m) => m.role === 'user'), true);
+    assert.equal(
+      chunks.some((c) => c.type === 'error'),
+      false,
+    );
+  });
+
+  it('strips DSML soft-landing and persists continue hint', async () => {
+    const session = emptySession();
+    const tools = {
+      read_file: tool({
+        description: 'read',
+        inputSchema: z.object({ path: z.string() }),
+        execute: async ({ path }) => ({ ok: true, path, content: 'x' }),
+      }),
+    };
+
+    const { assistant, chunks } = await run({
+      model: /** @type {any} */ (toolThenDsmlSoftLandingModel()),
+      session,
+      userMessage: '继续读',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools,
+      maxToolRounds: 2,
+    });
+
+    assert.ok(assistant);
+    assert.doesNotMatch(assistant.content, /invoke/i);
+    assert.match(assistant.content, new RegExp(TOOLS_READY_CONTINUE_HINT));
+    const liveText = chunks
+      .filter((c) => c.type === 'text-delta')
+      .map((c) => c.delta ?? '')
+      .join('');
+    assert.doesNotMatch(liveText, /invoke/i);
+    assert.doesNotMatch(liveText, /tool_calls/i);
+    assert.match(liveText, new RegExp(TOOLS_READY_CONTINUE_HINT));
+  });
+
+  it('injects final-step maxOutputTokens on soft-landing', async () => {
+    const session = emptySession();
+    /** @type {number[]} */
+    const maxTokensSeen = [];
+    let callCount = 0;
+    const model = {
+      specificationVersion: 'v2',
+      provider: 'test',
+      modelId: 'final-budget',
+      supportedUrls: {},
+      doGenerate: async () => {
+        throw new Error('doGenerate unused');
+      },
+      doStream: async (options) => {
+        callCount += 1;
+        maxTokensSeen.push(
+          typeof options?.maxOutputTokens === 'number'
+            ? options.maxOutputTokens
+            : -1,
+        );
+        // Two tool-capable steps (maxToolRounds clamps to ≥2), then soft-landing.
+        if (callCount <= 2) {
+          return {
+            stream: new ReadableStream({
+              start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({
+                  type: 'tool-call',
+                  toolCallId: `tc_budget_${callCount}`,
+                  toolName: 'read_file',
+                  input: JSON.stringify({ path: `/workspace/a${callCount}.md` }),
+                });
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          };
+        }
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 't1' });
+              controller.enqueue({
+                type: 'text-delta',
+                id: 't1',
+                delta: '终局回答。',
+              });
+              controller.enqueue({ type: 'text-end', id: 't1' });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    };
+    const tools = {
+      read_file: tool({
+        description: 'read',
+        inputSchema: z.object({ path: z.string() }),
+        execute: async ({ path }) => ({ ok: true, path, content: 'x' }),
+      }),
+    };
+
+    const { assistant } = await run({
+      model: /** @type {any} */ (model),
+      session,
+      userMessage: '总结',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools,
+      maxToolRounds: 2,
+    });
+
+    assert.ok(assistant);
+    assert.match(assistant.content, /终局回答/);
+    // Steps 0–1 tool-capable (no forced budget); step 2 is soft-landing.
+    assert.equal(maxTokensSeen[0], -1);
+    assert.equal(maxTokensSeen[1], -1);
+    assert.equal(maxTokensSeen[2], DEFAULT_FINAL_MAX_OUTPUT_TOKENS);
+  });
+
+  it('soft-fails excess parallel read_file in one step', async () => {
+    const session = emptySession();
+    /** @type {string[]} */
+    const executed = [];
+    const tools = {
+      read_file: tool({
+        description: 'read',
+        inputSchema: z.object({ path: z.string() }),
+        execute: async ({ path }) => {
+          executed.push(path);
+          return { ok: true, path, content: 'x' };
+        },
+      }),
+    };
+
+    const { assistant } = await run({
+      model: /** @type {any} */ (
+        manyParallelReadsThenAnswerModel(MAX_PARALLEL_READ_TOOLS + 3)
+      ),
+      session,
+      userMessage: '读这些 chunk',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools,
+      maxToolRounds: 2,
+    });
+
+    assert.ok(assistant);
+    assert.equal(executed.length, MAX_PARALLEL_READ_TOOLS);
+    const capped = (assistant.tools ?? []).filter(
+      (t) => t.result?.error === 'too_many_parallel_tools',
+    );
+    assert.equal(capped.length, 3);
+    assert.match(assistant.content, /读完了/);
   });
 });
 

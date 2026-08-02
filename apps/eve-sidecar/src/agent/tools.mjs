@@ -228,7 +228,7 @@ export function createReadingTools(options) {
   return {
     read_file: tool({
       description:
-        'Read UTF-8 text at an absolute /workspace path (extract chunks, or /workspace/skills/<id>/… package files).',
+        'Read UTF-8 text at an absolute /workspace path (extract chunks, or /workspace/skills/<id>/… package files). At most 8 read/search tools (read_file/grep/glob/resolve_section) may run in parallel per step.',
       inputSchema: z.object({
         path: z.string().describe('Absolute workspace path starting with /workspace'),
       }),
@@ -262,7 +262,7 @@ export function createReadingTools(options) {
 
     write_file: tool({
       description:
-        "Write UTF-8 into this book's OKF notes package under /workspace/.wellread/notes/<bookId>/ (overwrite). Only on explicit user save/ingest. Not for AGENTS.md or tools/ (skill-bundled).",
+        "Write UTF-8 into this book's OKF notes package under /workspace/.wellread/notes/<bookId>/ (overwrite). Only on explicit user save/ingest. Not for AGENTS.md or tools/ (skill-bundled). At most 16 write_file calls may run in parallel per step.",
       inputSchema: z.object({
         path: z
           .string()
@@ -301,7 +301,7 @@ export function createReadingTools(options) {
 
     resolve_section: tool({
       description:
-        "List this book's extract chunk paths for one spine section (by sectionIndex and/or chapter title). Prefer this over globbing extract chunks/*.md. When both are set, sectionIndex wins. Then read_file the returned paths in order.",
+        "List this book's extract chunk paths for one spine section (by sectionIndex and/or chapter title). Prefer this over globbing extract chunks/*.md. When both are set, sectionIndex wins. Then read_file the returned paths in order (≤8 read/search tools per step).",
       inputSchema: z.object({
         sectionIndex: z
           .number()
@@ -342,7 +342,7 @@ export function createReadingTools(options) {
 
     glob: tool({
       description:
-        'List file paths under /workspace/.wellread/ that match a glob pattern. For a book section/chapter, use resolve_section instead of globbing extract chunks/*.',
+        'List file paths under /workspace/.wellread/ that match a glob pattern. For a book section/chapter, use resolve_section instead of globbing extract chunks/*. Counts toward the ≤8 parallel read/search tools per step.',
       inputSchema: z.object({
         pattern: z.string().describe('Glob path pattern under /workspace/.wellread/'),
       }),
@@ -363,7 +363,7 @@ export function createReadingTools(options) {
 
     grep: tool({
       description:
-        'Search file contents under /workspace/.wellread/ (returns path, line, matching text).',
+        'Search file contents under /workspace/.wellread/ (returns path, line, matching text). Counts toward the ≤8 parallel read/search tools per step.',
       inputSchema: z.object({
         pattern: z.string().describe('Substring or regex to match against file lines'),
         path: z

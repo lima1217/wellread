@@ -1,9 +1,15 @@
 /**
  * Run one chat turn with AI SDK streamText + Books tools.
- * Emits an AI SDK UIMessage chunk stream (model output shown as-is).
+ * Emits an AI SDK UIMessage chunk stream; text parts are sanitized for
+ * leaked provider tool markup before reaching the client.
  */
 
-import { createUIMessageStream, streamText, stepCountIs } from 'ai';
+import {
+  createUIMessageStream,
+  isStepCount,
+  streamText,
+  toUIMessageStream,
+} from 'ai';
 import { randomBytes } from 'node:crypto';
 import {
   normalizeThinkingMode,
@@ -33,11 +39,25 @@ import { maybeApplyFirstTurnTitle } from './sessionStore.mjs';
 import { discoverSkills } from './skills/discover.mjs';
 import { createReadingTools } from './tools.mjs';
 import { createReasoningEmitter } from './reasoningEmitter.mjs';
-import { prepareToolExhaustionStep, resolveMaxToolRounds } from './toolRounds.mjs';
+import {
+  ensureContinueHintOnMessage,
+  sanitizeModelReplyText,
+  sanitizeUIMessageTextParts,
+  sanitizeUIMessageTextStream,
+  TOOLS_READY_CONTINUE_HINT,
+} from './sanitizeModelReply.mjs';
+import {
+  createToolParallelBudget,
+  wrapToolsWithParallelBudget,
+} from './toolParallelBudget.mjs';
+import {
+  prepareToolExhaustionStep,
+  resolveFinalMaxOutputTokens,
+  resolveMaxToolRounds,
+} from './toolRounds.mjs';
 import {
   encodeEveSideChunk,
   sessionToUIMessage,
-  textFromUIMessage,
   toolsFromUIMessage,
   uiMessageToSession,
 } from '@wellread/eve-message';
@@ -55,6 +75,7 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   userMessage: string,
  *   getBooksRoot: () => string,
  *   maxToolRounds?: number,
+ *   finalMaxOutputTokens?: number,
  *   abortSignal?: AbortSignal,
  *   contextWindowTokens?: number,
  *   thinkingMode?: 'think' | 'fast',
@@ -166,11 +187,17 @@ export function runTurn(input) {
       ? Number(input.contextWindowTokens)
       : DEFAULT_CONTEXT_WINDOW_TOKENS;
 
-  const tools =
-    input.tools ?? createReadingTools({ getBooksRoot, bookId: session.bookId });
+  const parallelBudget = createToolParallelBudget();
+  const tools = wrapToolsWithParallelBudget(
+    input.tools ?? createReadingTools({ getBooksRoot, bookId: session.bookId }),
+    parallelBudget,
+  );
 
   const maxToolRounds = resolveMaxToolRounds(
     input.maxToolRounds ?? process.env.EVE_MAX_TOOL_ROUNDS,
+  );
+  const finalMaxOutputTokens = resolveFinalMaxOutputTokens(
+    input.finalMaxOutputTokens ?? process.env.EVE_FINAL_MAX_OUTPUT_TOKENS,
   );
 
   const assistantId = `msg_${randomBytes(6).toString('hex')}`;
@@ -200,8 +227,12 @@ export function runTurn(input) {
         return;
       }
 
-      const text = textFromUIMessage(responseMessage).trim();
       const toolTrace = toolsFromUIMessage(responseMessage);
+      let text = sanitizeUIMessageTextParts(responseMessage);
+      if (!text && toolTrace.length) {
+        ensureContinueHintOnMessage(responseMessage, TOOLS_READY_CONTINUE_HINT);
+        text = TOOLS_READY_CONTINUE_HINT;
+      }
       // Tools-only turns still count: keep the ledger even without prose.
       if (!text && !toolTrace.length) {
         dropUser();
@@ -232,6 +263,9 @@ export function runTurn(input) {
       }
       if (sources.length) {
         assistantMsg.sources = sources;
+      }
+      if (text && !assistantMsg.content?.trim()) {
+        assistantMsg.content = text;
       }
 
       session.messages.push(assistantMsg);
@@ -314,41 +348,51 @@ export function runTurn(input) {
                 messages: historyMessages,
                 tools,
                 abortSignal,
-                stopWhen: stepCountIs(maxToolRounds + 1),
+                stopWhen: isStepCount(maxToolRounds + 1),
+                ...streamTextOptions,
+                // After streamTextOptions so presentation cannot clobber loop control.
                 prepareStep: ({ stepNumber }) => {
-                  const prep = prepareToolExhaustionStep({
+                  parallelBudget.beginStep();
+                  return prepareToolExhaustionStep({
                     stepNumber,
                     maxToolRounds,
-                    system: toolSystem,
+                    instructions: toolSystem,
+                    maxOutputTokens: finalMaxOutputTokens,
                   });
-                  return prep;
                 },
-                onStepFinish: () => {
+                onStepEnd: () => {
                   reasoning.beginNewSegment();
                 },
-                ...streamTextOptions,
               }),
             );
             streamResult = result;
 
             writer.merge(
               enrichUIMessageStreamWithSources(
-                result.toUIMessageStream({
-                  generateMessageId: () => assistantId,
-                  sendReasoning: false,
-                  sendStart: true,
-                  sendFinish: true,
-                  onError: (error) =>
-                    error instanceof Error ? error.message : String(error),
-                }),
+                sanitizeUIMessageTextStream(
+                  toUIMessageStream({
+                    stream: result.stream,
+                    generateMessageId: () => assistantId,
+                    sendReasoning: false,
+                    sendStart: true,
+                    sendFinish: true,
+                    onError: (error) =>
+                      error instanceof Error ? error.message : String(error),
+                  }),
+                ),
               ),
             );
 
             try {
-              const text = (await result.text).trim();
+              // Prefer joining every step — result.text can be only the last step.
+              const steps = await result.steps;
+              const rawText = steps
+                .map((step) => (typeof step.text === 'string' ? step.text : ''))
+                .join('')
+                .trim();
+              const text = sanitizeModelReplyText(rawText);
               reasoning.stop();
               if (!text) {
-                const steps = await result.steps;
                 const hasTools = steps.some(
                   (step) => (step.toolCalls?.length ?? 0) > 0,
                 );
@@ -359,6 +403,16 @@ export function runTurn(input) {
                     errorText:
                       'Model returned an empty reply. Check API key/model.',
                   });
+                } else {
+                  // Keep tool ledger; surface a recoverable hint for the next poke.
+                  const hintId = `text_continue_${assistantId}`;
+                  writer.write({ type: 'text-start', id: hintId });
+                  writer.write({
+                    type: 'text-delta',
+                    id: hintId,
+                    delta: TOOLS_READY_CONTINUE_HINT,
+                  });
+                  writer.write({ type: 'text-end', id: hintId });
                 }
               }
             } catch (error) {

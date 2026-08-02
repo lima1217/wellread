@@ -1,0 +1,15 @@
+diff --git a/dist/index.js b/dist/index.js
+index 01cb7bbc9d08f488d5c8bf805775a3e501f876ed..d68286d915dafbf0cdeb5fb009815f8b54b6589c 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2276,8 +2276,8 @@ function stringifyRegExpWithFlags(regex, refs) {
+     }
+     if (flags.m) {
+       if (source[i] === "^") {
+-        pattern += `(^|(?<=[\r
+-]))`;
++        pattern += `(^|[\r
++])`;
+         continue;
+       } else if (source[i] === "$") {
+         pattern += `($|(?=[\r

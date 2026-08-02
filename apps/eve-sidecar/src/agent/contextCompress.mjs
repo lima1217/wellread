@@ -274,7 +274,7 @@ export async function maybeCompressSession(input) {
   try {
     const result = await generateTextFn({
       model: input.model,
-      system: buildCompressPrompt({
+      instructions: buildCompressPrompt({
         bookTitle: input.session.bookTitle,
         summaryBudgetTokens: plan.summaryBudgetTokens,
       }),

@@ -578,7 +578,7 @@ describe('resolveTurnModelPresentation', () => {
       instructions: 'base',
     });
     assert.equal(out.toolSystem, 'full-system');
-    assert.deepEqual(out.streamTextOptions, { system: 'full-system' });
+    assert.deepEqual(out.streamTextOptions, { instructions: 'full-system' });
   });
 
   it('maps responses mode to envelope + instructions + reasoningEffort', () => {
@@ -591,7 +591,7 @@ describe('resolveTurnModelPresentation', () => {
     });
     assert.equal(out.toolSystem, '<reading_context/>');
     assert.deepEqual(out.streamTextOptions, {
-      system: '<reading_context/>',
+      instructions: '<reading_context/>',
       providerOptions: {
         openai: {
           store: false,

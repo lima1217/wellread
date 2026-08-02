@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  DEFAULT_FINAL_MAX_OUTPUT_TOKENS,
   DEFAULT_MAX_TOOL_ROUNDS,
+  HARD_FINAL_MAX_OUTPUT_TOKENS,
   HARD_MAX_TOOL_ROUNDS,
+  MIN_FINAL_MAX_OUTPUT_TOKENS,
   MIN_MAX_TOOL_ROUNDS,
   TOOLS_EXHAUSTED_SYSTEM_PROMPT,
   prepareToolExhaustionStep,
+  resolveFinalMaxOutputTokens,
   resolveMaxToolRounds,
 } from './toolRounds.mjs';
 
@@ -29,29 +33,55 @@ describe('resolveMaxToolRounds', () => {
   });
 });
 
+describe('resolveFinalMaxOutputTokens', () => {
+  it('defaults to 8192', () => {
+    assert.equal(resolveFinalMaxOutputTokens(), DEFAULT_FINAL_MAX_OUTPUT_TOKENS);
+    assert.equal(resolveFinalMaxOutputTokens(undefined), 8192);
+  });
+
+  it('clamps to 1024–32768', () => {
+    assert.equal(resolveFinalMaxOutputTokens(1), MIN_FINAL_MAX_OUTPUT_TOKENS);
+    assert.equal(resolveFinalMaxOutputTokens(100_000), HARD_FINAL_MAX_OUTPUT_TOKENS);
+    assert.equal(resolveFinalMaxOutputTokens('4096'), 4096);
+  });
+});
+
 describe('prepareToolExhaustionStep', () => {
-  const system = 'base system';
+  const instructions = 'base instructions';
 
   it('leaves early steps unchanged', () => {
     assert.equal(
-      prepareToolExhaustionStep({ stepNumber: 0, maxToolRounds: 10, system }),
+      prepareToolExhaustionStep({
+        stepNumber: 0,
+        maxToolRounds: 10,
+        instructions,
+      }),
       undefined,
     );
     assert.equal(
-      prepareToolExhaustionStep({ stepNumber: 9, maxToolRounds: 10, system }),
+      prepareToolExhaustionStep({
+        stepNumber: 9,
+        maxToolRounds: 10,
+        instructions,
+      }),
       undefined,
     );
   });
 
-  it('disables tools and appends exhaustion prompt on the landing step', () => {
+  it('disables tools and sets native output budget on the landing step', () => {
     const step = prepareToolExhaustionStep({
       stepNumber: 10,
       maxToolRounds: 10,
-      system,
+      instructions,
+      maxOutputTokens: 4096,
     });
     assert.ok(step);
     assert.equal(step.toolChoice, 'none');
     assert.deepEqual(step.activeTools, []);
-    assert.equal(step.system, `${system}\n\n${TOOLS_EXHAUSTED_SYSTEM_PROMPT}`);
+    assert.equal(
+      step.instructions,
+      `${instructions}\n\n${TOOLS_EXHAUSTED_SYSTEM_PROMPT}`,
+    );
+    assert.equal(step.maxOutputTokens, 4096);
   });
 });

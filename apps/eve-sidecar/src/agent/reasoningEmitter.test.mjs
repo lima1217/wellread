@@ -41,8 +41,10 @@ describe('createReasoningEmitter', () => {
           writer.write({ type: 'finish' });
         }),
       (err) =>
-        err instanceof TypeError &&
-        /Cannot read properties of undefined/.test(err.message),
+        // AI SDK 7 throws UIMessageStreamError; older SDKs threw TypeError.
+        /missing reasoning part|Cannot read properties of undefined/i.test(
+          err instanceof Error ? err.message : String(err),
+        ),
     );
   });
 

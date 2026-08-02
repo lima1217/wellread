@@ -127,7 +127,9 @@ export function resolveTurnModelPresentation(input) {
     return {
       toolSystem: input.envelope || '',
       streamTextOptions: {
-        system: input.envelope || undefined,
+        // Envelope stays as top-level instructions; book base prompt rides
+        // providerOptions.openai.instructions (Responses API field).
+        instructions: input.envelope || undefined,
         providerOptions: {
           openai: {
             store: false,
@@ -141,6 +143,6 @@ export function resolveTurnModelPresentation(input) {
   }
   return {
     toolSystem: input.system,
-    streamTextOptions: { system: input.system },
+    streamTextOptions: { instructions: input.system },
   };
 }

@@ -71,8 +71,9 @@ function systemTextFromPrompt(prompt) {
       .map((p) => (typeof p.content === 'string' ? p.content : JSON.stringify(p.content)))
       .join('\n');
   }
-  if (prompt && typeof prompt === 'object' && typeof prompt.system === 'string') {
-    return prompt.system;
+  if (prompt && typeof prompt === 'object') {
+    if (typeof prompt.instructions === 'string') return prompt.instructions;
+    if (typeof prompt.system === 'string') return prompt.system;
   }
   return JSON.stringify(prompt);
 }
