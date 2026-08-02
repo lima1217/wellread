@@ -9,7 +9,7 @@
     "build": "node scripts/build.mjs",
     "vendor-node": "node scripts/vendor-node.mjs",
     "dod:static": "node scripts/dod-static-check.mjs",
-    "test": "node --test src/**/*.test.mjs src/**/**/*.test.mjs eval/**/*.test.mjs scripts/build.test.mjs"
+    "test": "node --test 'src/**/*.test.mjs' 'eval/**/*.test.mjs' scripts/build.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.27",

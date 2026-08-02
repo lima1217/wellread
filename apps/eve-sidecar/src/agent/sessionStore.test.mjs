@@ -3,11 +3,32 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, after } from 'node:test';
-import { createSessionStore, maybeApplyFirstTurnTitle } from './sessionStore.mjs';
+import {
+  createSessionStore,
+  isSafeSessionId,
+  maybeApplyFirstTurnTitle,
+} from './sessionStore.mjs';
 import {
   collectSourcesFromTools,
   extractSourcesFromChunkMarkdown,
 } from './extractChunk.mjs';
+
+describe('isSafeSessionId', () => {
+  it('accepts create()-shaped ids', () => {
+    assert.equal(isSafeSessionId('ses_0123456789abcdef'), true);
+  });
+
+  it('rejects path traversal and non-hex shapes', () => {
+    assert.equal(isSafeSessionId('../anything'), false);
+    assert.equal(isSafeSessionId('..%2F..%2Fanything'), false);
+    assert.equal(isSafeSessionId('ses_../x'), false);
+    assert.equal(isSafeSessionId('ses_0123456789ABCDEF'), false);
+    assert.equal(isSafeSessionId('ses_0123456789abcde'), false);
+    assert.equal(isSafeSessionId('ses_0123456789abcdef0'), false);
+    assert.equal(isSafeSessionId(''), false);
+    assert.equal(isSafeSessionId(null), false);
+  });
+});
 
 describe('sessionStore', () => {
   const dir = mkdtempSync(join(tmpdir(), 'eve-sessions-'));
@@ -21,6 +42,7 @@ describe('sessionStore', () => {
     assert.equal(listed.length, 1);
     assert.equal(listed[0].id, a.id);
     assert.equal(listed[0].bookId, 'book-a');
+    assert.equal(isSafeSessionId(a.id), true);
   });
 
   it('persists messages on save', () => {
@@ -35,6 +57,12 @@ describe('sessionStore', () => {
     const loaded = store.get(s.id);
     assert.equal(loaded.messages.length, 1);
     assert.equal(loaded.messages[0].content, 'hello');
+  });
+
+  it('refuses traversal ids without touching the filesystem path', () => {
+    assert.equal(store.get('../escape'), null);
+    assert.equal(store.get('ses_../escape'), null);
+    assert.equal(store.remove('../../etc/passwd'), false);
   });
 });
 

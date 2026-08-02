@@ -8,6 +8,18 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { stripLeadingQuoteBlocks } from '@wellread/quote-wire';
 
+/** create() stamps `ses_` + 16 hex chars; reject anything else before path join. */
+const SESSION_ID_RE = /^ses_[0-9a-f]{16}$/;
+
+/**
+ * Session ids are path segments under EVE_DATA_DIR/sessions — never allow
+ * separators or traversal after URL decode.
+ * @param {unknown} id
+ */
+export function isSafeSessionId(id) {
+  return typeof id === 'string' && SESSION_ID_RE.test(id);
+}
+
 /**
  * @typedef {{
  *   id: string,
@@ -66,6 +78,9 @@ export function createSessionStore(dataDir) {
   mkdirSync(root, { recursive: true });
 
   function pathFor(id) {
+    if (!isSafeSessionId(id)) {
+      throw new Error(`invalid session id: ${id}`);
+    }
     return join(root, `${id}.json`);
   }
 
@@ -107,6 +122,7 @@ export function createSessionStore(dataDir) {
      * @returns {Session | null}
      */
     get(id) {
+      if (!isSafeSessionId(id)) return null;
       try {
         return read(id);
       } catch {
@@ -156,6 +172,7 @@ export function createSessionStore(dataDir) {
      * @returns {boolean}
      */
     remove(id) {
+      if (!isSafeSessionId(id)) return false;
       try {
         rmSync(pathFor(id));
         return true;

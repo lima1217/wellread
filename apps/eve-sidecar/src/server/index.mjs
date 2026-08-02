@@ -4,6 +4,7 @@
  * Speaks the 05/10 handshake: listen on 127.0.0.1 with PORT=0, print a
  * `Listening http://127.0.0.1:<port>/` line, require Bearer loopback token,
  * expose GET /eve/v1 for readiness + session/chat APIs under /eve/v1/*.
+ * CORS is an Origin allowlist (see cors.mjs / README) — never reflect `*`.
  */
 
 import http from 'node:http';
@@ -16,11 +17,19 @@ import {
   normalizeThinkingMode,
 } from '../createModel.mjs';
 import { createHttpAbort } from '../agent/httpAbort.mjs';
-import { createSessionStore } from '../agent/sessionStore.mjs';
+import {
+  createSessionStore,
+  isSafeSessionId,
+} from '../agent/sessionStore.mjs';
 import { isSafeBookIdSegment } from '../agent/notesOkf.mjs';
 import { normalizeReaderState } from '../agent/prompt.mjs';
 import { runTurn } from '../agent/runTurn.mjs';
 import { discoverSkills } from '../agent/skills/discover.mjs';
+import {
+  buildAllowedOriginSet,
+  corsHeaders as buildCorsHeaders,
+  parseCorsOriginsEnv,
+} from './cors.mjs';
 import { resolveLoopbackToken } from './loopbackToken.mjs';
 import {
   BadJsonError,
@@ -41,6 +50,9 @@ if (!tokenResult.ok) {
   process.exit(1);
 }
 const token = tokenResult.token;
+const allowedOrigins = buildAllowedOriginSet(
+  parseCorsOriginsEnv(process.env.EVE_CORS_ORIGINS),
+);
 
 const dataDir = process.env.EVE_DATA_DIR || './.eve-data';
 const booksRootEnv = (process.env.EVE_BOOKS_ROOT || '').trim();
@@ -87,14 +99,7 @@ function unauthorized(res, req) {
 }
 
 function corsHeaders(req) {
-  const origin = req?.headers?.origin || '*';
-  return {
-    'access-control-allow-origin': origin,
-    'access-control-allow-methods': 'GET,POST,DELETE,OPTIONS',
-    'access-control-allow-headers': 'authorization,content-type',
-    'access-control-max-age': '86400',
-    vary: 'Origin',
-  };
+  return buildCorsHeaders(req, { allowedOrigins });
 }
 
 function checkAuth(req) {
@@ -206,6 +211,10 @@ const server = http.createServer(async (req, res) => {
     const sessionMatch = path.match(/^\/eve\/v1\/sessions\/([^/]+)$/);
     if (sessionMatch) {
       const id = decodeURIComponent(sessionMatch[1]);
+      if (!isSafeSessionId(id)) {
+        sendJson(res, 400, { error: 'session_id_invalid' }, req);
+        return;
+      }
       if (req.method === 'GET') {
         const session = sessions.get(id);
         if (!session) {
@@ -239,6 +248,10 @@ const server = http.createServer(async (req, res) => {
     const turnMatch = path.match(/^\/eve\/v1\/sessions\/([^/]+)\/turns$/);
     if (req.method === 'POST' && turnMatch) {
       const id = decodeURIComponent(turnMatch[1]);
+      if (!isSafeSessionId(id)) {
+        sendJson(res, 400, { error: 'session_id_invalid' }, req);
+        return;
+      }
       const session = sessions.get(id);
       if (!session) {
         sendJson(res, 404, { error: 'not_found' }, req);
