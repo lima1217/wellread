@@ -1,12 +1,11 @@
 import clsx from 'clsx';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEnv } from '@/context/EnvContext';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useLongPress } from '@/hooks/useLongPress';
-import { Menu, type MenuItemOptions } from '@tauri-apps/api/menu';
+import { Menu } from '@tauri-apps/api/menu';
 import { LogicalPosition } from '@tauri-apps/api/dpi';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { eventDispatcher } from '@/utils/event';
 import { openExternalUrl } from '@/utils/open';
@@ -24,6 +23,7 @@ import {
 import { md5Fingerprint } from '@/utils/md5';
 import BookItem from './BookItem';
 import GroupItem from './GroupItem';
+import BookContextMenuPopup, { type BookContextMenuItem } from './BookContextMenuPopup';
 import { useOpenBook } from '../hooks/useOpenBook';
 
 export const generateBookshelfItems = (
@@ -151,7 +151,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
     [isSelectMode, handleLibraryNavigation],
   );
 
-  const buildBookMenu = async (book: Book) => {
+  const buildBookMenuItems = (book: Book): BookContextMenuItem[] => {
     const osPlatform = getOSPlatform();
     const fileRevealLabel =
       FILE_REVEAL_LABELS[osPlatform as FILE_REVEAL_PLATFORMS] || FILE_REVEAL_LABELS.default;
@@ -159,7 +159,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
     // in a single Menu.new({ items }) call. Appending items one-by-one with
     // un-awaited Menu.append() promises races on the Tauri IPC boundary and
     // shuffles the order on every open (issue #4389).
-    const itemOptions: Record<BookContextMenuItemId, MenuItemOptions> = {
+    const itemOptions: Record<BookContextMenuItemId, BookContextMenuItem> = {
       select: {
         text: itemSelected ? _('Deselect Book') : _('Select Book'),
         action: async () => {
@@ -227,14 +227,13 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
         },
       },
     };
-    const items = getBookContextMenuItemIds(book).map((id) => itemOptions[id]);
-    return Menu.new({ items });
+    return getBookContextMenuItemIds(book).map((id) => itemOptions[id]);
   };
 
-  const buildGroupMenu = async (group: BooksGroup) => {
+  const buildGroupMenuItems = (group: BooksGroup): BookContextMenuItem[] => {
     // Single Menu.new({ items }) call keeps the order deterministic — see the
     // note in bookContextMenuHandler about the Menu.append() IPC race (#4389).
-    const items: MenuItemOptions[] = [
+    return [
       {
         text: itemSelected ? _('Deselect Group') : _('Select Group'),
         action: async () => {
@@ -264,8 +263,17 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
         },
       },
     ];
-    return Menu.new({ items });
   };
+
+  const buildMenuItems = () =>
+    'format' in item ? buildBookMenuItems(item as Book) : buildGroupMenuItems(item as BooksGroup);
+
+  // In-app fallback for the native context menu: GTK3 menus popped over
+  // Wayland after the trigger button was already released (a touchpad
+  // two-finger tap) are dismissed as soon as they map, flashing for a single
+  // frame (issue #5360). The popup path (JS → Tauri IPC → muda → GTK) cannot
+  // beat a tap's instant release, so Linux renders the menu in-app instead.
+  const [inAppMenuPosition, setInAppMenuPosition] = useState<{ x: number; y: number } | null>(null);
 
   // Building the menu crosses the Tauri IPC boundary and takes long enough
   // that the popup visibly lags the right-click (issue #5181). Cache the
@@ -275,8 +283,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
 
   const ensureMenu = () => {
     if (!cachedMenuRef.current) {
-      const building =
-        'format' in item ? buildBookMenu(item as Book) : buildGroupMenu(item as BooksGroup);
+      const building = Menu.new({ items: buildMenuItems() });
       building.catch(() => {
         // A failed build must not poison the cache with a rejected promise.
         if (cachedMenuRef.current === building) cachedMenuRef.current = null;
@@ -332,23 +339,17 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
   const handleContextMenu = useCallback(
     throttle(async (position: { x: number; y: number }) => {
       if (!appService?.hasContextMenu) return;
+      if (appService.isLinuxApp) {
+        setInAppMenuPosition(position);
+        return;
+      }
       const menu = await ensureMenu();
-      // Pop up at an explicit window position: a positionless popup is
-      // anchored to the X11 root window, which doesn't exist on Wayland, so
-      // the menu fails to map and disappears immediately (issue #5181).
-      // CSS px are not window-logical px when the webview carries a page
-      // zoom (WebKitGTK folds the desktop text-scaling factor into one
-      // without reflecting it in devicePixelRatio), so map the click's
-      // fraction of the CSS viewport onto the window's logical size — any
-      // uniform zoom cancels out of the ratio.
-      const win = getCurrentWindow();
-      const [innerSize, scale] = await Promise.all([win.innerSize(), win.scaleFactor()]);
-      await menu.popup(
-        new LogicalPosition(
-          (position.x / window.innerWidth) * (innerSize.width / scale),
-          (position.y / window.innerHeight) * (innerSize.height / scale),
-        ),
-      );
+      // Pop up at an explicit position so keyboard invocation (ContextMenu /
+      // Shift+F10) anchors the menu to the item instead of wherever the mouse
+      // happens to sit. On macOS and Windows — the only platforms still on the
+      // native menu — CSS px are window-logical px, so the client coordinates
+      // pass through unchanged.
+      await menu.popup(new LogicalPosition(position.x, position.y));
     }, 100),
     [item, itemSelected, isSelectMode, settings.localBooksDir],
   );
@@ -411,7 +412,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
         }}
         onKeyDown={handleKeyDown}
         onPointerEnter={() => {
-          if (appService?.hasContextMenu) void ensureMenu();
+          if (appService?.hasContextMenu && !appService.isLinuxApp) void ensureMenu();
         }}
         {...itemDataAttrs}
         {...handlers}
@@ -438,6 +439,13 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
           )}
         </div>
       </div>
+      {inAppMenuPosition && (
+        <BookContextMenuPopup
+          position={inAppMenuPosition}
+          items={buildMenuItems()}
+          onClose={() => setInAppMenuPosition(null)}
+        />
+      )}
     </div>
   );
 };
