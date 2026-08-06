@@ -1,6 +1,6 @@
 # eve-sidecar — agent notes
 
-Canonical product docs: [README.md](./README.md) (env contract, handshake, `.output`, CORS).
+Canonical product docs: [README.md](./README.md) (env contract, handshake, `.output`, CORS). Domain glossary: [`CONTEXT.md`](../../CONTEXT.md). Reading contract: [`reading-assistant-contract.md`](../readest-app/docs/reading-assistant-contract.md).
 
 ## Commands
 

@@ -1,6 +1,6 @@
 ---
 name: note
-description: "note — 当前书的 OKF notes 包。记章、划词沉淀、会话入库、问笔记、体检笔记、或建包骨架时使用。"
+description: note — 当前书的 OKF notes 包。记章、划词沉淀、会话入库、问笔记、体检笔记、或建包骨架时使用。
 ---
 
 # note

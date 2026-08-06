@@ -24,13 +24,11 @@ describe('extract-contract SSOT', () => {
     assert.equal(SECTION_INDEX_JSON_SCHEMA.properties.schemaVersion.const, EXTRACT_SCHEMA_VERSION);
   });
 
-  it('keeps reading-assistant-contract.md appendix version in sync', () => {
+  it('points reading-assistant-contract.md at this package as schema SSOT', () => {
     const md = readFileSync(contractDoc, 'utf8');
-    assert.match(
-      md,
-      new RegExp(`Current \`EXTRACT_SCHEMA_VERSION\` is \\*\\*${EXTRACT_SCHEMA_VERSION}\\*\\*`),
-    );
-    assert.match(md, new RegExp(`"schemaVersion": \\{ "type": "number", "const": ${EXTRACT_SCHEMA_VERSION} \\}`));
+    assert.match(md, /@wellread\/extract-contract/);
+    assert.match(md, /EXTRACT_SCHEMA_VERSION/);
+    assert.match(md, /EXTRACT_META_JSON_SCHEMA|JSON Schemas/);
   });
 
   it('accepts host chunk file names and rejects traversal', () => {

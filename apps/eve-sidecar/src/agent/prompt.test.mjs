@@ -51,7 +51,7 @@ describe('buildSystemPrompt', () => {
     assert.match(prompt, /write_file/);
     assert.match(prompt, /unavailable until mounted/);
     assert.match(prompt, /no emoji/i);
-    assert.match(prompt, /Do not narrate tool use/i);
+    assert.match(prompt, /Final answer only/i);
     assert.doesNotMatch(prompt, /Available skills/);
   });
 
@@ -81,6 +81,7 @@ describe('buildSystemPrompt', () => {
     assert.match(prompt, /continuing a prior \/skill: turn/);
     assert.match(prompt, /\/skill:<id> already expands/);
     assert.match(prompt, /Do not invent skills/);
+    assert.match(prompt, /read_file the path/);
   });
 });
 

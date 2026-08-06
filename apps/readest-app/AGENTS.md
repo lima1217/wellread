@@ -2,6 +2,8 @@
 
 Wellread is a cross-platform ebook reader built as a Next.js 16 + Tauri v2 hybrid app. Package code lives at `apps/readest-app` (`@wellread/wellread-app`). Targets: web (Cloudflare Workers), desktop (macOS / Windows / Linux via Tauri), and mobile (iOS / Android via Tauri).
 
+Reading Assistant domain terms: [`CONTEXT.md`](../../CONTEXT.md). Extract/tools/skill contract: [`docs/reading-assistant-contract.md`](docs/reading-assistant-contract.md).
+
 ## Common commands
 
 ```bash
