@@ -1,5 +1,12 @@
 {
   "releases": {
+    "1.2.2": {
+      "date": "2026-08-07",
+      "notes": [
+        "Assistant: Raise section-chunk ask threshold to 64 and lock assistant prose style",
+        "Assistant: Tighten Reading Assistant agent docs, skills, and system prompt"
+      ]
+    },
     "1.2.1": {
       "date": "2026-08-02",
       "notes": [
