@@ -36,7 +36,7 @@ Appended to the system prompt when any extra signal exists:
 - `extract_status`, `extract_chunk_count`
 - `position` (client-reported; may be stale): `chapter`, `cfi`, `sectionIndex`
 - `focus_chunks` / `focus_chunks_via` (`cfi` \| `section_mid`) — default read set for “this page”
-- `section_chunks` / `section_chunk_count` — whole spine section; ask before reading if count > 20
+- `section_chunks` / `section_chunk_count` — whole spine section; ask before reading if count > 64
 - `quotes`, `prior_sources`, `notes_index`
 
 **Locate policy** (also in system prompt): quotes first; “current page” → `focus_chunks` only; “this chapter” → `section_chunks` / `resolve_section`; never glob extract chunks for discovery; `extract_status: missing` → explain and stop empty tool loops; `stale` → tools still work (prefer index, else scan).

@@ -17,7 +17,7 @@ description: 翻译 — 将选区、引用或当前章节译为简体中文。/s
    - `<reading_context>` 已有目标节的 `section_chunks` → 按序读那些路径。
    - 否则 `resolve_section`（`sectionIndex` 和/或 `title`）再按返回 `paths` 升序读齐。
    - 默认「本章」= 当前 spine 整节（同一 `sectionIndex`）。
-   - `count` **多于 20**（或 `section_chunks_note`）：先报章名、`sectionIndex`、chunk 数，问是否继续或只要当前位置附近。
+   - `count` **多于 64**（或 `section_chunks_note`）：先报章名、`sectionIndex`、chunk 数，问是否继续或只要当前位置附近。
 
 定位不到时，说明缺什么，请用户划选或给一句定位原文。
 

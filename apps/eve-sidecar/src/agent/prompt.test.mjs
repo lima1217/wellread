@@ -19,6 +19,7 @@ import {
   normalizeReaderState,
   sanitizeSkillCatalogDescription,
 } from './prompt.mjs';
+import { SECTION_CHUNKS_ASK_THRESHOLD } from './resolveSectionChunks.mjs';
 
 describe('buildSystemPrompt', () => {
   it('injects bookId, extract root, notes root, and steering phrases', () => {
@@ -52,6 +53,12 @@ describe('buildSystemPrompt', () => {
     assert.match(prompt, /unavailable until mounted/);
     assert.match(prompt, /no emoji/i);
     assert.match(prompt, /Final answer only/i);
+    assert.match(prompt, /asserts directly/i);
+    assert.match(prompt, /commas, periods, or colons/i);
+    assert.match(prompt, /style locks/i);
+    assert.match(prompt, /破折号/);
+    assert.match(prompt, /不是…而是/);
+    assert.doesNotMatch(prompt, /—|–|——/);
     assert.doesNotMatch(prompt, /Available skills/);
   });
 
@@ -236,24 +243,26 @@ describe('buildReadingContextEnvelope', () => {
   });
 
   it('lists resolved section_chunks paths and long-section note', () => {
+    const overThreshold = SECTION_CHUNKS_ASK_THRESHOLD + 1;
     const paths = Array.from(
-      { length: 21 },
+      { length: overThreshold },
       (_, i) =>
         `/workspace/.wellread/extract/bk1/chunks/${String(i + 1).padStart(5, '0')}.md`,
     );
+    const lastName = String(overThreshold).padStart(5, '0');
     const env = buildReadingContextEnvelope({
       bookId: 'bk1',
       bookTitle: 'Book',
       readerState: { sectionIndex: 4, chapter: 'On Digital Extremities' },
       sectionChunks: {
         paths,
-        count: 21,
+        count: overThreshold,
         via: 'sectionIndex',
         sectionIndex: 4,
       },
     });
     assert.match(env, /section_chunks_via: sectionIndex/);
-    assert.match(env, /section_chunk_count: 21/);
+    assert.match(env, new RegExp(`section_chunk_count: ${overThreshold}`));
     assert.match(env, /section_chunks_note:/);
     assert.match(env, /section_chunks:/);
     assert.match(
@@ -262,7 +271,9 @@ describe('buildReadingContextEnvelope', () => {
     );
     assert.match(
       env,
-      /"\/workspace\/\.wellread\/extract\/bk1\/chunks\/00021\.md"/,
+      new RegExp(
+        `"\\/workspace\\/\\.wellread\\/extract\\/bk1\\/chunks\\/${lastName}\\.md"`,
+      ),
     );
   });
 

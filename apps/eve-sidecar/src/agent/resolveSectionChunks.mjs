@@ -16,7 +16,7 @@ import {
 } from './sectionIndex.mjs';
 
 /** Above this count, envelope warns the model to confirm before reading all. */
-export const SECTION_CHUNKS_ASK_THRESHOLD = 20;
+export const SECTION_CHUNKS_ASK_THRESHOLD = 64;
 
 /** Cap files visited while scanning one extract (DoS / huge books). */
 export const SECTION_CHUNKS_WALK_MAX = 2000;

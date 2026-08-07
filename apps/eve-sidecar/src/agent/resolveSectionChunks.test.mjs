@@ -285,7 +285,7 @@ describe('resolveSectionChunksForReader', () => {
   });
 
   it('exposes ask threshold constant used by envelope', () => {
-    assert.equal(SECTION_CHUNKS_ASK_THRESHOLD, 20);
+    assert.equal(SECTION_CHUNKS_ASK_THRESHOLD, 64);
   });
 });
 
