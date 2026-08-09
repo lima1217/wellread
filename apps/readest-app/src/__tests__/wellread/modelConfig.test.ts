@@ -50,7 +50,7 @@ describe('ModelConfig (multi ModelProfile)', () => {
       baseURL: 'https://api.deepseek.com/v1',
       modelId: 'deepseek-v4-flash',
       contextWindowTokens: 1_000_000,
-      apiMode: 'chat',
+      apiMode: 'responses',
     });
     expect(DEFAULT_MODEL_CONFIG.profiles[0]).not.toHaveProperty('apiKey');
     expect(DEFAULT_MODEL_CONFIG).not.toHaveProperty('apiKey');
@@ -108,10 +108,28 @@ describe('ModelConfig (multi ModelProfile)', () => {
           baseURL: 'https://api.deepseek.com/v1',
           modelId: 'custom-model',
           contextWindowTokens: 1_000_000,
-          apiMode: 'chat',
+          apiMode: 'responses',
         },
       ],
     });
+  });
+
+  it('mergeModelConfig promotes DeepSeek hosts to responses for native web_search', () => {
+    const merged = mergeModelConfig({
+      enabled: true,
+      profiles: [
+        {
+          id: 'deepseek-default',
+          name: 'DeepSeek',
+          baseURL: 'https://api.deepseek.com/v1',
+          modelId: 'deepseek-v4-flash',
+          contextWindowTokens: 1_000_000,
+          apiMode: 'chat',
+        },
+      ],
+      activeProfileId: 'deepseek-default',
+    });
+    expect(merged.profiles[0]!.apiMode).toBe('responses');
   });
 
   it('mergeModelConfig presets DeepSeek when profiles are omitted, keeps explicit empty list', () => {
@@ -185,7 +203,7 @@ describe('ModelConfig (multi ModelProfile)', () => {
           baseURL: 'https://api.deepseek.com/v1',
           modelId: 'deepseek-v4-flash',
           contextWindowTokens: 1_000_000,
-          apiMode: 'chat',
+          apiMode: 'responses',
         },
       ],
     });
@@ -237,7 +255,7 @@ describe('ModelConfig (multi ModelProfile)', () => {
       baseURL: 'https://api.deepseek.com/v1',
       modelId: 'deepseek-v4-flash',
       contextWindowTokens: 1_000_000,
-      apiMode: 'chat',
+      apiMode: 'responses',
     });
     expect(config.activeProfileId).toBe('a');
     expect(config.profiles[2]!.id).toBe(profile.id);

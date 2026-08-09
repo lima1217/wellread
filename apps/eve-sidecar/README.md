@@ -36,7 +36,7 @@ Fail-closed at boot: missing `EVE_LOOPBACK_TOKEN` exits non-zero unless `EVE_ALL
 | `EVE_MODEL_API_KEY` | for turns | Empty → `modelReady: false`, turns return 503 |
 | `EVE_MODEL_ID` | no | Model id |
 | `EVE_MODEL_CONTEXT_WINDOW` | no | Token budget for compress / context |
-| `EVE_MODEL_API_MODE` | no | `chat` (default) or `responses` |
+| `EVE_MODEL_API_MODE` | no | `responses` (default, DeepSeek web_search) or `chat` |
 | `EVE_CORS_ORIGINS` | no | Extra comma-separated Origins appended to the allowlist |
 | `EVE_MAX_TOOL_ROUNDS` | no | Cap tool steps per turn |
 | `EVE_FINAL_MAX_OUTPUT_TOKENS` | no | Final-step output token cap |

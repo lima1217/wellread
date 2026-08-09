@@ -12,6 +12,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   normalizeApiMode,
   normalizeThinkingMode,
+  supportsNativeWebSearch,
   supportsThinkingExtension,
   THINK_MODE_REASONING_EFFORT,
   withModelFetchPatch,
@@ -26,7 +27,7 @@ const DEFAULT_MODEL = {
   baseURL: 'https://api.deepseek.com/v1',
   modelId: 'deepseek-v4-flash',
   contextWindowTokens: 1_000_000,
-  apiMode: /** @type {const} */ ('chat'),
+  apiMode: /** @type {const} */ ('responses'),
 };
 
 /** @type {AsyncLocalStorage<TurnFetchStore>} */
@@ -65,7 +66,15 @@ export function normalizeModelEnv(input = {}) {
   if (!Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) {
     contextWindowTokens = DEFAULT_MODEL.contextWindowTokens;
   }
-  const apiMode = normalizeApiMode(input.apiMode);
+  let apiMode =
+    input.apiMode === undefined || input.apiMode === null || input.apiMode === ''
+      ? DEFAULT_MODEL.apiMode
+      : normalizeApiMode(input.apiMode);
+  // Match FE: DeepSeek hosts always Responses so native web_search can attach
+  // even when Rust restarts from a stale settings.json still storing chat.
+  if (supportsNativeWebSearch(baseURL)) {
+    apiMode = 'responses';
+  }
   return { baseURL, apiKey, modelId, contextWindowTokens, apiMode };
 }
 

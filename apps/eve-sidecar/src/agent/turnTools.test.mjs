@@ -7,7 +7,7 @@ import {
   parallelGate,
 } from './toolParallelBudget.mjs';
 import { readingToolContextSchema } from './tools.mjs';
-import { bindTurnTools } from './turnTools.mjs';
+import { bindTurnTools, maybeAttachNativeWebSearch } from './turnTools.mjs';
 
 describe('bindTurnTools', () => {
   it('wraps bare injected tools so parallel budget still applies', async () => {
@@ -81,5 +81,36 @@ describe('bindTurnTools', () => {
     // reduced gateHits relative to invoke count.
     assert.equal(gateHits, MAX_PARALLEL_READ_TOOLS + 1);
     assert.equal(ran, MAX_PARALLEL_READ_TOOLS);
+  });
+});
+
+describe('maybeAttachNativeWebSearch', () => {
+  it('adds provider-executed web_search for DeepSeek responses without wrapping', () => {
+    const base = { read_file: { description: 'x' } };
+    const next = maybeAttachNativeWebSearch(base, {
+      baseURL: 'https://api.deepseek.com/v1',
+      apiMode: 'responses',
+    });
+    assert.ok(next.web_search);
+    assert.equal(next.read_file, base.read_file);
+    assert.equal(next.web_search.id, 'openai.web_search');
+  });
+
+  it('leaves tools unchanged for chat mode or non-DeepSeek hosts', () => {
+    const base = { read_file: { description: 'x' } };
+    assert.equal(
+      maybeAttachNativeWebSearch(base, {
+        baseURL: 'https://api.deepseek.com/v1',
+        apiMode: 'chat',
+      }),
+      base,
+    );
+    assert.equal(
+      maybeAttachNativeWebSearch(base, {
+        baseURL: 'https://api.openai.com/v1',
+        apiMode: 'responses',
+      }),
+      base,
+    );
   });
 });

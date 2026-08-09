@@ -3,7 +3,10 @@
  * apiKey lives in OS keychain per profile id, never on these types.
  */
 
+import { isDeepSeekApiHost } from '@wellread/eve-message';
 import { v4 as uuidv4 } from 'uuid';
+
+export { isDeepSeekApiHost };
 
 /** Which OpenAI-style endpoint family the sidecar should call. */
 export type ModelApiMode = 'chat' | 'responses';
@@ -17,8 +20,8 @@ export type ModelProfile = {
   /**
    * `chat` → Chat Completions (`provider.chat`, /v1/chat/completions).
    * `responses` → OpenAI/DeepSeek Responses API (`provider.responses`, /v1/responses).
-   * Default `chat` for broad OpenAI-compatible hosts; DeepSeek Flash also
-   * supports `responses` (stateless — no store / previous_response_id).
+   * DeepSeek hosts are forced to `responses` (native web_search). Other hosts
+   * default to `chat` for broad OpenAI-compatible support.
    */
   apiMode: ModelApiMode;
 };
@@ -42,7 +45,8 @@ const DEFAULT_PROFILE_FIELDS = {
   baseURL: 'https://api.deepseek.com/v1',
   modelId: 'deepseek-v4-flash',
   contextWindowTokens: 1_000_000,
-  apiMode: 'chat' as ModelApiMode,
+  // Responses unlocks DeepSeek server-side web_search for Reading Assistant.
+  apiMode: 'responses' as ModelApiMode,
 };
 
 export function modelApiKeySecureItem(profileId: string): string {
@@ -87,13 +91,16 @@ function normalizeProfile(
   partial: Partial<ModelProfile> & { id: string },
   fallbackName = DEFAULT_PROFILE_NAME,
 ): ModelProfile {
+  const baseURL = partial.baseURL?.trim() || DEFAULT_PROFILE_FIELDS.baseURL;
+  // DeepSeek Reading Assistant always uses Responses so native web_search works.
+  const apiMode = isDeepSeekApiHost(baseURL) ? 'responses' : normalizeModelApiMode(partial.apiMode);
   return {
     id: partial.id,
     name: partial.name?.trim() || fallbackName,
-    baseURL: partial.baseURL?.trim() || DEFAULT_PROFILE_FIELDS.baseURL,
+    baseURL,
     modelId: partial.modelId?.trim() || DEFAULT_PROFILE_FIELDS.modelId,
     contextWindowTokens: normalizeContextWindowTokens(partial.contextWindowTokens),
-    apiMode: normalizeModelApiMode(partial.apiMode),
+    apiMode,
   };
 }
 

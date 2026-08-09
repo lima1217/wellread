@@ -7,6 +7,7 @@ import {
   normalizeThinkingMode,
   resolveTurnModelPresentation,
 } from '../createModel.mjs';
+import { shouldAttachNativeWebSearch } from '../createModel.adapters.mjs';
 import { readExtractStatus } from './extractMeta.mjs';
 import { listNotesIndex } from './notesIndex.mjs';
 import {
@@ -26,7 +27,7 @@ import {
   resolveMaxToolRounds,
 } from './toolRounds.mjs';
 import { logTurnContract } from './turnLog.mjs';
-import { bindTurnTools } from './turnTools.mjs';
+import { bindTurnTools, maybeAttachNativeWebSearch } from './turnTools.mjs';
 import { prepareUserTurn } from './userTurn.mjs';
 
 /**
@@ -36,6 +37,7 @@ import { prepareUserTurn } from './userTurn.mjs';
  *   getBooksRoot: () => string,
  *   thinkingMode?: 'think' | 'fast',
  *   apiMode?: 'chat' | 'responses',
+ *   baseURL?: string | null,
  *   readerState?: { chapter?: string | null, cfi?: string | null, sectionIndex?: number | null } | null,
  *   maxToolRounds?: number,
  *   finalMaxOutputTokens?: number,
@@ -49,6 +51,10 @@ export function prepareTurnContext(input) {
   const thinkingMode = normalizeThinkingMode(input.thinkingMode);
   const prepared = prepareUserTurn(input.userMessage, input.getBooksRoot);
   const { session } = input;
+  const webSearchEnabled = shouldAttachNativeWebSearch({
+    baseURL: input.baseURL,
+    apiMode: input.apiMode,
+  });
 
   let skills = [];
   let booksRoot = '';
@@ -96,6 +102,7 @@ export function prepareTurnContext(input) {
     bookId: session.bookId,
     bookTitle: session.bookTitle,
     skills,
+    webSearchEnabled,
   });
   const system = appendReadingContext(instructions, envelope);
   const { toolSystem, streamTextOptions } = resolveTurnModelPresentation({
@@ -118,7 +125,7 @@ export function prepareTurnContext(input) {
     quoteCount: Array.isArray(prepared.quotes) ? prepared.quotes.length : 0,
   });
 
-  const { tools, toolsContext, runtimeContext, parallelBudget } = bindTurnTools({
+  const bound = bindTurnTools({
     bookId: session.bookId,
     booksRoot,
     tools: input.tools,
@@ -126,6 +133,11 @@ export function prepareTurnContext(input) {
     composeGenerateTextFn: input.composeGenerateTextFn,
     abortSignal: input.abortSignal,
   });
+  const tools = maybeAttachNativeWebSearch(bound.tools, {
+    baseURL: input.baseURL,
+    apiMode: input.apiMode,
+  });
+  const { toolsContext, runtimeContext, parallelBudget } = bound;
 
   const maxToolRounds = resolveMaxToolRounds(
     input.maxToolRounds ?? process.env.EVE_MAX_TOOL_ROUNDS,

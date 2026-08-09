@@ -7,6 +7,9 @@
  * `reasoning_summary_text`) and plaintext reasoning `content` (not `summary`).
  */
 
+import { isDeepSeekApiHost } from '@wellread/eve-message';
+import { injectWebSearchCallsIntoInput } from './agent/webSearchReplay.mjs';
+
 /** @typedef {'think' | 'fast'} ThinkingMode */
 
 /**
@@ -17,6 +20,7 @@
  * @typedef {{
  *   thinkingMode?: ThinkingMode,
  *   onReasoningDelta?: (delta: string) => void,
+ *   webSearchCallsToReplay?: Array<{ type: 'web_search_call', id: string, status: string }>,
  * }} TurnFetchStore
  */
 
@@ -40,6 +44,19 @@ export function normalizeApiMode(value) {
 }
 
 /**
+ * @param {string | undefined | null} baseURL
+ * @returns {string | null}
+ */
+function hostnameOf(baseURL) {
+  if (!baseURL || typeof baseURL !== 'string') return null;
+  try {
+    return new URL(baseURL).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * DeepSeek / BigModel (GLM) accept the proprietary `thinking` request field.
  * OpenAI official and many other OpenAI-compatible hosts 400 on it
  * ("Unrecognized request argument").
@@ -48,18 +65,38 @@ export function normalizeApiMode(value) {
  * @returns {boolean}
  */
 export function supportsThinkingExtension(baseURL) {
-  if (!baseURL || typeof baseURL !== 'string') return false;
-  try {
-    const host = new URL(baseURL).hostname.toLowerCase();
-    return (
-      host === 'api.deepseek.com' ||
-      host.endsWith('.deepseek.com') ||
-      host === 'open.bigmodel.cn' ||
-      host.endsWith('.bigmodel.cn')
-    );
-  } catch {
-    return false;
-  }
+  const host = hostnameOf(baseURL);
+  if (!host) return false;
+  return (
+    isDeepSeekApiHost(baseURL) ||
+    host === 'open.bigmodel.cn' ||
+    host.endsWith('.bigmodel.cn')
+  );
+}
+
+/**
+ * DeepSeek Responses API runs `web_search` server-side. Other hosts must not
+ * receive that tool type (Chat Completions / non-DeepSeek → 400 or ignore).
+ *
+ * @param {string | undefined | null} baseURL
+ * @returns {boolean}
+ */
+export function supportsNativeWebSearch(baseURL) {
+  return isDeepSeekApiHost(baseURL);
+}
+
+/**
+ * @param {{
+ *   baseURL?: string | null,
+ *   apiMode?: string | null,
+ * }} input
+ * @returns {boolean}
+ */
+export function shouldAttachNativeWebSearch(input) {
+  return (
+    supportsNativeWebSearch(input?.baseURL) &&
+    normalizeApiMode(input?.apiMode) === 'responses'
+  );
 }
 
 /**
@@ -127,6 +164,7 @@ export function withModelFetchPatch(
     const store = getStore();
     const thinkingMode = normalizeThinkingMode(store?.thinkingMode);
     const onReasoningDelta = store?.onReasoningDelta;
+    const webSearchCallsToReplay = store?.webSearchCallsToReplay;
     let nextInit = init;
     const body = init?.body;
     const url = requestUrlString(input);
@@ -156,6 +194,7 @@ export function withModelFetchPatch(
             ? patchResponsesBody(parsedBody, thinkingMode, {
                 injectThinking,
                 adaptDeepSeekReasoning,
+                webSearchCallsToReplay,
               })
             : patchChatCompletionBody(parsedBody, thinkingMode, {
                 injectThinking,
@@ -220,6 +259,7 @@ export function patchChatCompletionBody(parsed, thinkingMode = 'fast', options =
  * @param {{
  *   injectThinking?: boolean,
  *   adaptDeepSeekReasoning?: boolean,
+ *   webSearchCallsToReplay?: Array<{ type: 'web_search_call', id: string, status: string }>,
  * }} [options]
  * @returns {Record<string, unknown>}
  */
@@ -227,6 +267,7 @@ export function patchResponsesBody(parsed, thinkingMode = 'fast', options = {}) 
   const mode = normalizeThinkingMode(thinkingMode);
   const injectThinking = options.injectThinking !== false;
   const adaptDeepSeekReasoning = options.adaptDeepSeekReasoning === true;
+  const webSearchCallsToReplay = options.webSearchCallsToReplay;
   const next = { ...parsed };
 
   // Client owns history; DeepSeek ignores store and item_reference.
@@ -245,8 +286,14 @@ export function patchResponsesBody(parsed, thinkingMode = 'fast', options = {}) 
     };
   }
 
-  if (adaptDeepSeekReasoning && Array.isArray(parsed.input)) {
-    next.input = parsed.input.map((item) => adaptResponsesInputItem(item));
+  if (Array.isArray(parsed.input)) {
+    let input = adaptDeepSeekReasoning
+      ? parsed.input.map((item) => adaptResponsesInputItem(item))
+      : parsed.input;
+    if (webSearchCallsToReplay?.length) {
+      input = injectWebSearchCallsIntoInput(input, webSearchCallsToReplay);
+    }
+    next.input = input;
   }
 
   return next;

@@ -51,6 +51,7 @@ describe('buildSystemPrompt', () => {
     assert.match(prompt, /epubcfi/i);
     assert.match(prompt, /write_file/);
     assert.match(prompt, /unavailable until mounted/);
+    assert.doesNotMatch(prompt, /\bweb_search\b/);
     assert.match(prompt, /no emoji/i);
     assert.match(prompt, /Final answer only/i);
     assert.match(prompt, /asserts directly/i);
@@ -65,6 +66,17 @@ describe('buildSystemPrompt', () => {
   it('falls back to bookId when title is empty', () => {
     const prompt = buildSystemPrompt({ bookId: 'bk1', bookTitle: '  ' });
     assert.match(prompt, /Current book: "bk1"/);
+  });
+
+  it('mentions web_search when native web search is enabled', () => {
+    const prompt = buildSystemPrompt({
+      bookId: 'bk1',
+      bookTitle: 'Book',
+      webSearchEnabled: true,
+    });
+    assert.match(prompt, /\bweb_search\b/);
+    assert.match(prompt, /external|web|timely|outside the book/i);
+    assert.doesNotMatch(prompt, /unavailable until mounted/);
   });
 
   it('appends skills catalog when skills are provided', () => {

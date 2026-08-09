@@ -113,3 +113,8 @@ export declare function reasoningFromUIMessage(msg: {
 export declare function toolsFromUIMessage(msg: {
   parts?: unknown[] | null;
 } | null | undefined): SessionToolTrace[];
+
+/** DeepSeek API hostname gate shared by FE ModelProfile + eve-sidecar. */
+export declare function isDeepSeekApiHost(
+  baseURL: string | null | undefined,
+): boolean;

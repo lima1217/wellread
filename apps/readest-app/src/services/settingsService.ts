@@ -170,7 +170,11 @@ export async function loadSettings(ctx: Context): Promise<SystemSettings> {
     ...getDefaultViewSettings(ctx),
     ...settings.globalViewSettings,
   };
+  const modelConfigBefore = JSON.stringify(settings.modelConfig ?? null);
   settings.modelConfig = mergeModelConfig(settings.modelConfig);
+  // Persist DeepSeek chat→responses promotion so Rust sidecar restarts
+  // read the same apiMode the in-memory UI already uses.
+  const modelConfigPromoted = JSON.stringify(settings.modelConfig) !== modelConfigBefore;
 
   settings.localBooksDir = await ctx.fs.getPrefix('Books');
 
@@ -185,7 +189,7 @@ export async function loadSettings(ctx: Context): Promise<SystemSettings> {
   if (!settings.replicaDeviceId) {
     settings.replicaDeviceId = uuidv4();
     await saveSettings(ctx.fs, settings);
-  } else if (assistantPanelMigrated) {
+  } else if (assistantPanelMigrated || modelConfigPromoted) {
     await saveSettings(ctx.fs, settings);
   }
 

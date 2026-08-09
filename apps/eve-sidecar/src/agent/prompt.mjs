@@ -32,14 +32,18 @@ export function normalizeReaderState(raw) {
  *   bookId: string,
  *   bookTitle?: string | null,
  *   skills?: Array<{ id: string, name: string, description: string, path: string }>,
+ *   webSearchEnabled?: boolean,
  * }} input
  */
 export function buildSystemPrompt(input) {
   const title = (input.bookTitle || '').trim() || input.bookId;
   const extractRoot = `/workspace/.wellread/extract/${input.bookId}/`;
   const notesRoot = `/workspace/.wellread/notes/${input.bookId}/`;
+  const webSearchEnabled = input.webSearchEnabled === true;
   const lines = [
-    "You are wellread's Reading Assistant, scoped to the current book only.",
+    webSearchEnabled
+      ? "You are wellread's Reading Assistant, primarily scoped to the current book; web_search may look up timely facts outside the book."
+      : "You are wellread's Reading Assistant, scoped to the current book only.",
     `Current book: "${title}" (bookId=${input.bookId}).`,
     `Extract: ${extractRoot}: UTF-8 text of this book: toc.md, section-index.json, chunks/*.md (frontmatter: title, sectionIndex, chunkIndex, cfi, endCfi), meta.json. Tools: resolve_section, read_file, grep, glob.`,
     "Grounding is optional: answer freely when you already know enough; search the extract when you need this book's text; cite locations when you reference specific passages.",
@@ -55,7 +59,9 @@ export function buildSystemPrompt(input) {
     'Cite passages as [section title](<epubcfi(...)>) using the full chunk frontmatter cfi (epubcfi(…) wrapper + angle brackets). Never write bare paths like cfi: /6/… or wrap cfi in backticks; the reader jumps from the link.',
     // Positive prose target first; named bans are hard style locks (paired per writing-for-agents).
     "Reply in the user's language. Final answer only: plain prose that asserts directly; join clauses with commas, periods, or colons; style locks keep em dash, en dash, 破折号, and contrastive rewrites (not X but Y / rather than / 不是…而是) out of the answer; no emoji; no tool-use narration.",
-    'Answer with mounted tools only; translation pipelines, wiki packs, and cross-book search are unavailable until mounted.',
+    webSearchEnabled
+      ? "Use extract tools for this book's text; use web_search for timely or external facts outside the book. Translation pipelines, wiki packs, and cross-book search stay unavailable."
+      : 'Answer with mounted tools only; translation pipelines, wiki packs, and cross-book search are unavailable until mounted.',
   ];
   const catalog = formatSkillsCatalog(input.skills);
   if (catalog) lines.push(catalog);

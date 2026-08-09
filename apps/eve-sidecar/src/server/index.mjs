@@ -288,6 +288,7 @@ const server = http.createServer(async (req, res) => {
             contextWindowTokens: modelContextWindowTokens,
             thinkingMode,
             apiMode: modelConfig.apiMode,
+            baseURL: modelConfig.baseURL,
             readerState,
             // runTurn owns mid-turn + onFinish persistence via this callback.
             persistSession: (s) => sessions.save(s),

@@ -16,6 +16,8 @@ import {
   patchChatCompletionBody,
   patchResponsesBody,
   THINK_MODE_REASONING_EFFORT,
+  shouldAttachNativeWebSearch,
+  supportsNativeWebSearch,
   supportsThinkingExtension,
   transformCompletionPayload,
   transformResponsesPayload,
@@ -23,13 +25,13 @@ import {
 } from './createModel.adapters.mjs';
 
 describe('normalizeModelEnv', () => {
-  it('defaults to DeepSeek chat completions', () => {
+  it('defaults to DeepSeek Responses (native web_search)', () => {
     assert.deepEqual(normalizeModelEnv({}), {
       baseURL: 'https://api.deepseek.com/v1',
       apiKey: '',
       modelId: 'deepseek-v4-flash',
       contextWindowTokens: 1_000_000,
-      apiMode: 'chat',
+      apiMode: 'responses',
     });
   });
 
@@ -41,7 +43,23 @@ describe('normalizeModelEnv', () => {
     assert.equal(normalizeApiMode('responses'), 'responses');
     assert.equal(normalizeApiMode('chat'), 'chat');
     assert.equal(normalizeApiMode('nope'), 'chat');
-    assert.equal(normalizeModelEnv({ apiMode: 'responses' }).apiMode, 'responses');
+  });
+
+  it('forces DeepSeek hosts to responses even when chat is requested', () => {
+    assert.equal(
+      normalizeModelEnv({
+        baseURL: 'https://api.deepseek.com/v1',
+        apiMode: 'chat',
+      }).apiMode,
+      'responses',
+    );
+    assert.equal(
+      normalizeModelEnv({
+        baseURL: 'https://api.openai.com/v1',
+        apiMode: 'chat',
+      }).apiMode,
+      'chat',
+    );
   });
 });
 
@@ -66,6 +84,40 @@ describe('supportsThinkingExtension', () => {
     assert.equal(supportsThinkingExtension('https://api.openai.com'), false);
     assert.equal(supportsThinkingExtension('https://api.example.com/v1'), false);
     assert.equal(supportsThinkingExtension('not-a-url'), false);
+  });
+});
+
+describe('supportsNativeWebSearch / shouldAttachNativeWebSearch', () => {
+  it('is DeepSeek-only (not BigModel / OpenAI)', () => {
+    assert.equal(supportsNativeWebSearch('https://api.deepseek.com/v1'), true);
+    assert.equal(supportsNativeWebSearch('https://api.deepseek.com'), true);
+    assert.equal(supportsNativeWebSearch('https://open.bigmodel.cn/api/paas/v4'), false);
+    assert.equal(supportsNativeWebSearch('https://api.openai.com/v1'), false);
+    assert.equal(supportsNativeWebSearch('not-a-url'), false);
+  });
+
+  it('attaches only when DeepSeek host and responses apiMode', () => {
+    assert.equal(
+      shouldAttachNativeWebSearch({
+        baseURL: 'https://api.deepseek.com/v1',
+        apiMode: 'responses',
+      }),
+      true,
+    );
+    assert.equal(
+      shouldAttachNativeWebSearch({
+        baseURL: 'https://api.deepseek.com/v1',
+        apiMode: 'chat',
+      }),
+      false,
+    );
+    assert.equal(
+      shouldAttachNativeWebSearch({
+        baseURL: 'https://api.openai.com/v1',
+        apiMode: 'responses',
+      }),
+      false,
+    );
   });
 });
 
@@ -162,6 +214,31 @@ describe('patchResponsesBody', () => {
 
     const fast = patchResponsesBody({ model: 'deepseek-v4-flash', input: 'hi' }, 'fast');
     assert.deepEqual(fast.reasoning, { effort: 'none' });
+  });
+
+  it('re-injects web_search_call items dropped by the SDK under store:false', () => {
+    const patched = patchResponsesBody(
+      {
+        model: 'deepseek-v4-flash',
+        input: [
+          { type: 'message', role: 'user', content: 'q1' },
+          { type: 'message', role: 'assistant', content: 'a1' },
+          { type: 'message', role: 'user', content: 'q2' },
+        ],
+      },
+      'fast',
+      {
+        webSearchCallsToReplay: [
+          { type: 'web_search_call', id: 'ws_1', status: 'completed' },
+        ],
+      },
+    );
+    assert.deepEqual(patched.input, [
+      { type: 'message', role: 'user', content: 'q1' },
+      { type: 'message', role: 'assistant', content: 'a1' },
+      { type: 'web_search_call', id: 'ws_1', status: 'completed' },
+      { type: 'message', role: 'user', content: 'q2' },
+    ]);
   });
 
   it('rewrites OpenAI summary reasoning items to DeepSeek content when opted in', () => {
@@ -415,11 +492,37 @@ describe('withModelFetchPatch', () => {
 });
 
 describe('createLanguageModel', () => {
-  it('uses provider.chat for the default apiMode', () => {
-    const fakeChat = { provider: 'openai.chat', modelId: 'deepseek-v4-flash' };
+  it('uses provider.responses for the default apiMode', () => {
+    const fakeResponses = {
+      provider: 'openai.responses',
+      modelId: 'deepseek-v4-flash',
+    };
+    const createOpenAI = () => {
+      const provider = () => {
+        throw new Error('prefer provider.responses when available');
+      };
+      provider.chat = () => {
+        throw new Error('should not use chat for default responses mode');
+      };
+      provider.responses = (modelId) => {
+        assert.equal(modelId, 'deepseek-v4-flash');
+        return fakeResponses;
+      };
+      return provider;
+    };
+    const result = createLanguageModel(normalizeModelEnv({ apiKey: 'sk-test' }), {
+      createOpenAI,
+    });
+    assert.equal(result.model, fakeResponses);
+    assert.equal(result.modelContextWindowTokens, 1_000_000);
+    assert.equal(result.apiMode, 'responses');
+  });
+
+  it('uses provider.chat when apiMode is chat', () => {
+    const fakeChat = { provider: 'openai.chat', modelId: 'gpt-4.1' };
     const createOpenAI = () => {
       const chat = (modelId) => {
-        assert.equal(modelId, 'deepseek-v4-flash');
+        assert.equal(modelId, 'gpt-4.1');
         return fakeChat;
       };
       const provider = () => {
@@ -431,33 +534,16 @@ describe('createLanguageModel', () => {
       };
       return provider;
     };
-    const result = createLanguageModel(normalizeModelEnv({ apiKey: 'sk-test' }), {
-      createOpenAI,
-    });
-    assert.equal(result.model, fakeChat);
-    assert.equal(result.modelContextWindowTokens, 1_000_000);
-  });
-
-  it('uses provider.responses when apiMode is responses', () => {
-    const fakeResponses = { provider: 'openai.responses', modelId: 'gpt-4.1' };
-    const createOpenAI = () => {
-      const provider = () => {
-        throw new Error('prefer provider.responses when available');
-      };
-      provider.chat = () => {
-        throw new Error('should not use chat for responses mode');
-      };
-      provider.responses = (modelId) => {
-        assert.equal(modelId, 'gpt-4.1');
-        return fakeResponses;
-      };
-      return provider;
-    };
     const result = createLanguageModel(
-      normalizeModelEnv({ apiKey: 'sk-test', modelId: 'gpt-4.1', apiMode: 'responses' }),
+      normalizeModelEnv({
+        apiKey: 'sk-test',
+        modelId: 'gpt-4.1',
+        apiMode: 'chat',
+        baseURL: 'https://api.openai.com/v1',
+      }),
       { createOpenAI },
     );
-    assert.equal(result.model, fakeResponses);
+    assert.equal(result.model, fakeChat);
   });
 
   it('wires fetch that omits thinking for OpenAI hosts', async () => {
@@ -496,7 +582,7 @@ describe('createLanguageModel', () => {
     assert.equal('thinking' in JSON.parse(sentBody), false);
   });
 
-  it('wires fetch that still injects thinking for DeepSeek hosts', async () => {
+  it('wires fetch that still injects thinking for thinking-extension hosts on chat', async () => {
     /** @type {string | undefined} */
     let sentBody;
     /** @type {typeof fetch | undefined} */
@@ -507,18 +593,27 @@ describe('createLanguageModel', () => {
       provider.chat = () => ({});
       return provider;
     };
-    createLanguageModel(normalizeModelEnv({ apiKey: 'sk-test' }), {
-      createOpenAI,
-      baseFetch: async (_url, init) => {
-        sentBody = typeof init?.body === 'string' ? init.body : undefined;
-        return new Response('{}', { status: 200 });
+    // BigModel keeps chat mode; DeepSeek is forced to responses.
+    createLanguageModel(
+      normalizeModelEnv({
+        apiKey: 'sk-test',
+        apiMode: 'chat',
+        baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+        modelId: 'glm-5.2',
+      }),
+      {
+        createOpenAI,
+        baseFetch: async (_url, init) => {
+          sentBody = typeof init?.body === 'string' ? init.body : undefined;
+          return new Response('{}', { status: 200 });
+        },
       },
-    });
+    );
     assert.ok(patchedFetch);
     await turnFetchContext.run({ thinkingMode: 'fast' }, () =>
-      patchedFetch('https://api.deepseek.com/v1/chat/completions', {
+      patchedFetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
         method: 'POST',
-        body: JSON.stringify({ model: 'deepseek-v4-flash', messages: [] }),
+        body: JSON.stringify({ model: 'glm-5.2', messages: [] }),
       }),
     );
     assert.deepEqual(JSON.parse(/** @type {string} */ (sentBody)).thinking, {

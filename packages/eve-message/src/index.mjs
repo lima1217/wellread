@@ -10,6 +10,8 @@ export {
   EVE_CONTEXT_COMPRESS_FAILED_CHUNK,
 } from './sideEvents.mjs';
 
+export { isDeepSeekApiHost } from './modelHost.mjs';
+
 /**
  * @typedef {{
  *   id: string,

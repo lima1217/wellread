@@ -3,11 +3,32 @@
  * One path: toolsContext always carries bookId/booksRoot/parallelBudget.
  */
 
+import { openai } from '@ai-sdk/openai';
+import { shouldAttachNativeWebSearch } from '../createModel.adapters.mjs';
 import {
   createToolParallelBudget,
   wrapToolsWithParallelBudget,
 } from './toolParallelBudget.mjs';
 import { createReadingTools, readingToolsContext } from './tools.mjs';
+
+/**
+ * Attach DeepSeek Responses server-side web_search when the host supports it.
+ * Provider-executed — must not go through parallel-budget wrapping.
+ *
+ * @param {import('ai').ToolSet} tools
+ * @param {{
+ *   baseURL?: string | null,
+ *   apiMode?: string | null,
+ * }} gate
+ * @returns {import('ai').ToolSet}
+ */
+export function maybeAttachNativeWebSearch(tools, gate) {
+  if (!shouldAttachNativeWebSearch(gate)) return tools;
+  return {
+    ...tools,
+    web_search: openai.tools.webSearch(),
+  };
+}
 
 /**
  * @param {unknown} def

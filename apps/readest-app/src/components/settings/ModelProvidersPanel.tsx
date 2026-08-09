@@ -11,6 +11,7 @@ import {
   DEFAULT_MODEL_CONFIG,
   addProfile,
   getActiveProfile,
+  isDeepSeekApiHost,
   mergeModelConfig,
   removeProfile,
   setActiveProfile,
@@ -282,7 +283,15 @@ const ModelProvidersPanel: React.FC<ModelProvidersPanelProps> = ({ onBack }) => 
               spellCheck={false}
               value={draft.baseURL}
               placeholder={defaultProfile.baseURL}
-              onChange={(e) => setDraft({ ...draft, baseURL: e.target.value })}
+              onChange={(e) => {
+                const baseURL = e.target.value;
+                setDraft({
+                  ...draft,
+                  baseURL,
+                  // DeepSeek native web_search requires Responses.
+                  ...(isDeepSeekApiHost(baseURL) ? { apiMode: 'responses' as const } : {}),
+                });
+              }}
               className={fieldInputClass}
             />
           </div>
@@ -291,20 +300,26 @@ const ModelProvidersPanel: React.FC<ModelProvidersPanelProps> = ({ onBack }) => 
             <SectionTitle as='label' htmlFor={`${baseId}-api-mode`} className='!ps-0 block'>
               {_('API Mode')}
             </SectionTitle>
-            <select
-              id={`${baseId}-api-mode`}
-              value={draft.apiMode}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  apiMode: e.target.value === 'responses' ? 'responses' : 'chat',
-                })
-              }
-              className={fieldSelectClass}
-            >
-              <option value='chat'>{_('Chat Completions')}</option>
-              <option value='responses'>{_('Responses API')}</option>
-            </select>
+            {isDeepSeekApiHost(draft.baseURL) ? (
+              <p id={`${baseId}-api-mode`} className='text-base-content/70 text-sm leading-snug'>
+                {_('Responses API (required for DeepSeek web search)')}
+              </p>
+            ) : (
+              <select
+                id={`${baseId}-api-mode`}
+                value={draft.apiMode}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    apiMode: e.target.value === 'responses' ? 'responses' : 'chat',
+                  })
+                }
+                className={fieldSelectClass}
+              >
+                <option value='chat'>{_('Chat Completions')}</option>
+                <option value='responses'>{_('Responses API')}</option>
+              </select>
+            )}
           </div>
 
           <div className='space-y-1.5' data-setting-id='settings.ai.apiKey'>

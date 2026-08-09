@@ -39,6 +39,11 @@ import {
   toolsFromUIMessage,
   uiMessageToSession,
 } from '@wellread/eve-message';
+import {
+  collectWebSearchCallsForReplay,
+  collectWebSearchCallsFromToolTraces,
+  mergeWebSearchCalls,
+} from './webSearchReplay.mjs';
 
 /** Fallback when caller omits contextWindowTokens (matches createModel default). */
 const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
@@ -55,6 +60,7 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   contextWindowTokens?: number,
  *   thinkingMode?: 'think' | 'fast',
  *   apiMode?: 'chat' | 'responses',
+ *   baseURL?: string | null,
  *   readerState?: { chapter?: string | null, cfi?: string | null, sectionIndex?: number | null } | null,
  *   generateTextFn?: import('ai').generateText, // context compression only
  *   composeGenerateTextFn?: import('ai').generateText, // write_file(draft) only
@@ -76,6 +82,7 @@ export function runTurn(input) {
     getBooksRoot,
     thinkingMode: input.thinkingMode,
     apiMode: input.apiMode,
+    baseURL: input.baseURL,
     readerState: input.readerState,
     maxToolRounds: input.maxToolRounds,
     finalMaxOutputTokens: input.finalMaxOutputTokens,
@@ -235,6 +242,15 @@ export function runTurn(input) {
         baseId: `reasoning_${assistantId}`,
       });
 
+      // Mutable list shared with fetch patch via ALS. Must stay the same array
+      // so prepareStep can append same-turn provider web_search ids before the
+      // next Responses request (SDK drops providerExecuted under store:false).
+      const webSearchCallsToReplay = collectWebSearchCallsForReplay(historyMessages);
+      mergeWebSearchCalls(
+        webSearchCallsToReplay,
+        collectWebSearchCallsFromToolTraces(session.messages),
+      );
+
       try {
         await turnFetchContext.run(
           {
@@ -246,6 +262,7 @@ export function runTurn(input) {
                     reasoning.writeDelta(delta);
                   }
                 : undefined,
+            webSearchCallsToReplay,
           },
           async () => {
             const result = streamText(
@@ -259,7 +276,11 @@ export function runTurn(input) {
                 stopWhen: isStepCount(maxToolRounds + 1),
                 ...streamTextOptions,
                 // After streamTextOptions so presentation cannot clobber loop control.
-                prepareStep: ({ stepNumber, runtimeContext: stepRuntime }) => {
+                prepareStep: ({ stepNumber, runtimeContext: stepRuntime, messages }) => {
+                  mergeWebSearchCalls(
+                    webSearchCallsToReplay,
+                    collectWebSearchCallsForReplay(messages),
+                  );
                   const budget =
                     stepRuntime &&
                     typeof stepRuntime === 'object' &&
