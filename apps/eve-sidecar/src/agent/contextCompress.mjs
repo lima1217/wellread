@@ -14,12 +14,32 @@ export const COMPRESS_TARGET_RATIO = 0.2;
 const MSG_OVERHEAD_TOKENS = 4;
 
 /**
+ * Conservative rough token estimate for compression triggers.
+ * ASCII ≈ chars/4; CJK / fullwidth ≈ 1.5 tokens/char (Chinese underestimates
+ * of chars/4 leave long sessions unable to compress before the model rejects).
  * @param {string | undefined | null} text
  * @returns {number}
  */
 export function estimateTokens(text) {
   if (!text) return 0;
-  return Math.ceil(String(text).length / 4);
+  let cjk = 0;
+  let other = 0;
+  for (const ch of String(text)) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (
+      (code >= 0x3000 && code <= 0x303f) || // CJK punctuation
+      (code >= 0x3040 && code <= 0x30ff) || // Hiragana / Katakana
+      (code >= 0x3400 && code <= 0x9fff) || // CJK Unified (+ Ext A)
+      (code >= 0xac00 && code <= 0xd7af) || // Hangul
+      (code >= 0xf900 && code <= 0xfaff) || // CJK Compatibility Ideographs
+      (code >= 0xff00 && code <= 0xffef) // Fullwidth forms
+    ) {
+      cjk += 1;
+    } else {
+      other += 1;
+    }
+  }
+  return Math.ceil(cjk * 1.5 + other / 4);
 }
 
 /**

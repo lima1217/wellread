@@ -44,6 +44,38 @@ function resolveSearchRoot(patternOrPath, booksRoot) {
   return auth.realPath;
 }
 
+/**
+ * @param {unknown} under
+ * @param {string} booksRoot
+ * @returns {string[] | null} normalized workspace prefixes, or null when unconstrained
+ */
+function normalizeUnderPrefixes(under, booksRoot) {
+  if (!Array.isArray(under) || under.length === 0) return null;
+  const lookup = createNodeRealpathLookup();
+  const out = [];
+  for (const raw of under) {
+    if (typeof raw !== 'string' || !raw) continue;
+    let ws;
+    try {
+      ws = normalizeAbsolute(raw.startsWith('/') ? raw : `${WORKSPACE_ROOT}/${WRITABLE_DIR}/${raw}`);
+    } catch {
+      continue;
+    }
+    const auth = authorizeWellreadSearch(ws, booksRoot, lookup);
+    if (!auth.ok) continue;
+    out.push(ws);
+  }
+  return out;
+}
+
+/**
+ * @param {string} wsPath
+ * @param {string[]} prefixes
+ */
+function isUnderPrefixes(wsPath, prefixes) {
+  return prefixes.some((p) => wsPath === p || wsPath.startsWith(`${p}/`));
+}
+
 /** Very small glob: `*` (segment), `**` (recursive), `?` (one char). */
 function globToRegExp(pattern) {
   let i = 0;
@@ -100,8 +132,11 @@ function walkFiles(dir, files = []) {
 /**
  * Glob under `.wellread/`. `pattern` is matched against workspace paths
  * (`/workspace/.wellread/...`) or relative to that root.
+ * @param {string} booksRoot
+ * @param {string} pattern
+ * @param {{ under?: string[] }} [options] when set, only walk those workspace prefixes
  */
-export function globWellread(booksRoot, pattern) {
+export function globWellread(booksRoot, pattern, options = {}) {
   const root = normalizeAbsolute(booksRoot);
   const wr = wellreadRoot(root);
   // Reject patterns that clearly target outside .wellread (e.g. /workspace/*.epub).
@@ -120,33 +155,48 @@ export function globWellread(booksRoot, pattern) {
     root,
   );
 
+  const under = normalizeUnderPrefixes(options.under, root);
+  const lookup = createNodeRealpathLookup();
+  /** @type {string[]} */
+  let walkRoots;
+  if (under) {
+    walkRoots = [];
+    for (const ws of under) {
+      const auth = authorizeWellreadSearch(ws, root, lookup);
+      if (auth.ok) walkRoots.push(auth.realPath);
+    }
+  } else {
+    walkRoots = [wr];
+  }
+
   const re = globToRegExp(normalizedPattern);
   const hits = [];
-  for (const hostPath of walkFiles(wr)) {
-    const ws = toWorkspacePath(hostPath, root);
-    if (re.test(ws)) hits.push({ path: ws });
+  for (const walkRoot of walkRoots) {
+    for (const hostPath of walkFiles(walkRoot)) {
+      const ws = toWorkspacePath(hostPath, root);
+      if (under && !isUnderPrefixes(ws, under)) continue;
+      if (re.test(ws)) hits.push({ path: ws });
+    }
   }
   return hits.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /**
  * Grep file contents under `.wellread/`. Returns path + 1-based line + text.
+ * @param {string} booksRoot
+ * @param {string} pattern
+ * @param {{
+ *   path?: string,
+ *   regex?: boolean,
+ *   maxHits?: number,
+ *   under?: string[],
+ * }} [options]
  */
 export function grepWellread(booksRoot, pattern, options = {}) {
   const root = normalizeAbsolute(booksRoot);
   const lookup = createNodeRealpathLookup();
-  const searchWs =
-    options.path === undefined
-      ? `${WORKSPACE_ROOT}/${WRITABLE_DIR}`
-      : options.path.startsWith('/')
-        ? options.path
-        : `${WORKSPACE_ROOT}/${WRITABLE_DIR}/${options.path}`;
-
-  const auth = authorizeWellreadSearch(searchWs, root, lookup);
-  if (!auth.ok) throw new Error(auth.reason);
-
-  const mapped = workspaceToHost(searchWs, root);
-  if (!mapped.ok) throw new Error(mapped.reason);
+  const under = normalizeUnderPrefixes(options.under, root);
+  const maxHits = options.maxHits ?? 200;
 
   const MAX_PATTERN_LENGTH = 256;
   if (typeof pattern !== 'string' || pattern.length === 0) {
@@ -160,46 +210,111 @@ export function grepWellread(booksRoot, pattern, options = {}) {
 
   let re;
   try {
-    re =
-      options.regex === false
-        ? new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-        : new RegExp(pattern);
+    if (options.regex === false) {
+      re = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    } else {
+      assertSafeGrepRegex(pattern);
+      re = new RegExp(pattern);
+    }
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    throw new Error(`invalid_grep_pattern: ${detail}`);
+    throw new Error(
+      detail.startsWith('invalid_grep_pattern:')
+        ? detail
+        : `invalid_grep_pattern: ${detail}`,
+    );
   }
 
-  const maxHits = options.maxHits ?? 200;
-  const hits = [];
-  const files = (() => {
+  /** @type {string[]} */
+  let searchWsList;
+  if (options.path === undefined) {
+    searchWsList = under ?? [`${WORKSPACE_ROOT}/${WRITABLE_DIR}`];
+  } else {
+    const searchWs =
+      options.path.startsWith('/')
+        ? options.path
+        : `${WORKSPACE_ROOT}/${WRITABLE_DIR}/${options.path}`;
+    let normalized;
     try {
-      const st = statSync(auth.realPath);
-      if (st.isFile()) return [auth.realPath];
-    } catch {
-      return [];
+      normalized = normalizeAbsolute(searchWs);
+    } catch (err) {
+      throw new Error(err instanceof Error ? err.message : String(err));
     }
-    return walkFiles(auth.realPath);
-  })();
+    if (under && !isUnderPrefixes(normalized, under)) {
+      throw new Error('search scoped to the current book extract/notes package');
+    }
+    searchWsList = [normalized];
+  }
 
-  for (const hostPath of files) {
-    let text;
-    try {
-      text = readFileSync(hostPath, 'utf8');
-    } catch {
+  const hits = [];
+  for (const searchWs of searchWsList) {
+    const auth = authorizeWellreadSearch(searchWs, root, lookup);
+    if (!auth.ok) {
+      // Explicit path must exist under .wellread; default multi-root book
+      // scopes treat a missing notes/extract package as an empty hit set.
+      if (options.path !== undefined) throw new Error(auth.reason);
       continue;
     }
-    const lines = text.split(/\r?\n/);
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (!re.test(line)) continue;
-      hits.push({
-        path: toWorkspacePath(hostPath, root),
-        line: i + 1,
-        text: line,
-      });
-      if (hits.length >= maxHits) return hits;
-      re.lastIndex = 0;
+
+    const mapped = workspaceToHost(searchWs, root);
+    if (!mapped.ok) {
+      if (options.path !== undefined) throw new Error(mapped.reason);
+      continue;
+    }
+
+    const files = (() => {
+      try {
+        const st = statSync(auth.realPath);
+        if (st.isFile()) return [auth.realPath];
+      } catch {
+        return [];
+      }
+      return walkFiles(auth.realPath);
+    })();
+
+    for (const hostPath of files) {
+      let text;
+      try {
+        text = readFileSync(hostPath, 'utf8');
+      } catch {
+        continue;
+      }
+      const lines = text.split(/\r?\n/);
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!re.test(line)) continue;
+        const ws = toWorkspacePath(hostPath, root);
+        if (under && !isUnderPrefixes(ws, under)) continue;
+        hits.push({
+          path: ws,
+          line: i + 1,
+          text: line,
+        });
+        if (hits.length >= maxHits) return hits;
+      }
     }
   }
   return hits;
+}
+
+/**
+ * Reject regex shapes that commonly cause catastrophic backtracking (ReDoS).
+ * Literal mode bypasses this (pattern is escaped).
+ * @param {string} pattern
+ */
+export function assertSafeGrepRegex(pattern) {
+  // Nested quantifiers on a group: (a+)+, (a*)*, (a+){2,}, etc.
+  if (/\((?:[^)\\]|\\.)*[+*](?:[^)\\]|\\.)*\)[+*{]/.test(pattern)) {
+    throw new Error('invalid_grep_pattern: nested quantifiers are not allowed');
+  }
+  // Quantified groups that contain alternation: (a|aa)+, (?:x|xx)*.
+  if (/\((?:\?:)?(?:[^)\\]|\\.)*\|(?:[^)\\]|\\.)*\)[+*{]/.test(pattern)) {
+    throw new Error('invalid_grep_pattern: quantified alternation is not allowed');
+  }
+  // Adjacent overlapping quantifiers outside groups: a++ / a** (invalid in JS
+  // anyway) and classic (x+)+ already covered; also reject possessive-looking
+  // backreferences which amplify ReDoS.
+  if (/\\[1-9]/.test(pattern)) {
+    throw new Error('invalid_grep_pattern: backreferences are not allowed');
+  }
 }

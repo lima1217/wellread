@@ -7,11 +7,32 @@ import {
   createSessionStore,
   isSafeSessionId,
   maybeApplyFirstTurnTitle,
+  normalizeSession,
 } from './sessionStore.mjs';
 import {
   collectSourcesFromTools,
   extractSourcesFromChunkMarkdown,
 } from './extractChunk.mjs';
+
+describe('normalizeSession', () => {
+  it('drops corrupt messages and keeps the minimum valid shape', () => {
+    const session = normalizeSession({
+      id: 'ses_0123456789abcdef',
+      bookId: 'book-a',
+      messages: [
+        { id: 'm1', role: 'user', content: 'hi', createdAt: 1 },
+        { id: 'bad', role: 'tool', content: 'nope', createdAt: 2 },
+        { role: 'assistant', content: 'missing id', createdAt: 3 },
+        null,
+        { id: 'm2', role: 'assistant', content: 'ok', createdAt: 4, compacted: true },
+      ],
+    });
+    assert.ok(session);
+    assert.equal(session.messages.length, 2);
+    assert.equal(session.messages[0].id, 'm1');
+    assert.equal(session.messages[1].compacted, true);
+  });
+});
 
 describe('isSafeSessionId', () => {
   it('accepts create()-shaped ids', () => {

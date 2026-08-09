@@ -46,6 +46,37 @@ export const EVE_CONTEXT_COMPRESS_FAILED_CHUNK = 'data-eve-context-compress-fail
  */
 
 /**
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+function asFiniteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * @param {unknown} summary
+ * @returns {EveContextCompressedEvent['summary'] | null}
+ */
+function parseCompressedSummary(summary) {
+  if (!summary || typeof summary !== 'object') return null;
+  const s = /** @type {Record<string, unknown>} */ (summary);
+  if (typeof s.id !== 'string' || !s.id) return null;
+  if (s.role !== 'assistant' && s.role !== 'user' && s.role !== 'system') return null;
+  if (typeof s.content !== 'string') return null;
+  const createdAt = asFiniteNumber(s.createdAt);
+  if (createdAt == null) return null;
+  /** @type {EveContextCompressedEvent['summary']} */
+  const out = {
+    id: s.id,
+    role: s.role,
+    content: s.content,
+    createdAt,
+  };
+  if (s.compacted === true) out.compacted = true;
+  return out;
+}
+
+/**
  * Encode a logical context side event into a UIMessage data chunk for the stream writer.
  * @param {EveContextSideEvent} event
  * @returns {EveSideChunk | null}
@@ -92,7 +123,24 @@ export function decodeEveSideChunk(chunk) {
   if (chunk.type === EVE_CONTEXT_COMPRESSED_CHUNK) {
     const data = chunk.data && typeof chunk.data === 'object' ? chunk.data : null;
     if (!data) return null;
-    return { type: 'context.compressed', ...data };
+    const d = /** @type {Record<string, unknown>} */ (data);
+    const beforeTokens = asFiniteNumber(d.beforeTokens);
+    const afterTokens = asFiniteNumber(d.afterTokens);
+    const targetTokens = asFiniteNumber(d.targetTokens);
+    if (beforeTokens == null || afterTokens == null || targetTokens == null) return null;
+    if (!Array.isArray(d.removedIds) || !d.removedIds.every((id) => typeof id === 'string')) {
+      return null;
+    }
+    const summary = parseCompressedSummary(d.summary);
+    if (!summary) return null;
+    return {
+      type: 'context.compressed',
+      beforeTokens,
+      afterTokens,
+      targetTokens,
+      removedIds: /** @type {string[]} */ (d.removedIds),
+      summary,
+    };
   }
   if (chunk.type === EVE_CONTEXT_COMPRESS_FAILED_CHUNK) {
     const data = chunk.data && typeof chunk.data === 'object' ? chunk.data : {};

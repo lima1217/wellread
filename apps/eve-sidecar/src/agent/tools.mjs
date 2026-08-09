@@ -44,6 +44,82 @@ function isExtractWorkspacePath(path) {
 }
 
 /**
+ * Soft gate: read_file may touch skills + the current book's .wellread tree,
+ * not other books' extract/notes packages.
+ * Lexically normalizes first (same as authorizeOkfNotesWrite) so `..` cannot
+ * skip the cross-book deny via raw string prefixes.
+ * @param {string} path
+ * @param {string} bookId
+ */
+export function authorizeReadFilePath(path, bookId) {
+  if (!isSafeBookIdSegment(bookId)) {
+    return {
+      ok: false,
+      error: 'denied',
+      message: 'read_file requires a valid session bookId',
+    };
+  }
+
+  let ws;
+  try {
+    ws = normalizeAbsolute(
+      typeof path === 'string' && path.startsWith('/')
+        ? path
+        : `/workspace/${path ?? ''}`,
+    );
+  } catch {
+    return {
+      ok: false,
+      error: 'denied',
+      message: 'path must be under /workspace',
+      path: typeof path === 'string' ? path : undefined,
+    };
+  }
+
+  if (ws !== '/workspace' && !ws.startsWith('/workspace/')) {
+    return {
+      ok: false,
+      error: 'denied',
+      message: 'path must be under /workspace',
+      path: ws,
+    };
+  }
+  if (ws === '/workspace/skills' || ws.startsWith('/workspace/skills/')) return { ok: true };
+  const notesPrefix = `/workspace/.wellread/notes/${bookId}`;
+  const extractPrefix = `/workspace/.wellread/extract/${bookId}`;
+  if (ws === notesPrefix || ws.startsWith(`${notesPrefix}/`)) return { ok: true };
+  if (ws === extractPrefix || ws.startsWith(`${extractPrefix}/`)) return { ok: true };
+  if (
+    ws === '/workspace/.wellread/notes' ||
+    ws === '/workspace/.wellread/extract' ||
+    ws.startsWith('/workspace/.wellread/notes/') ||
+    ws.startsWith('/workspace/.wellread/extract/')
+  ) {
+    return {
+      ok: false,
+      error: 'denied',
+      message: 'read_file is scoped to the current book extract/notes package',
+      path: ws,
+    };
+  }
+  // Other Books paths: allow read of non-.wellread library files.
+  return { ok: true };
+}
+
+/**
+ * Workspace prefixes glob/grep may walk for the current book (notes + extract).
+ * @param {string} bookId
+ * @returns {string[] | null}
+ */
+export function wellreadBookSearchRoots(bookId) {
+  if (!isSafeBookIdSegment(bookId)) return null;
+  return [
+    `/workspace/.wellread/notes/${bookId}`,
+    `/workspace/.wellread/extract/${bookId}`,
+  ];
+}
+
+/**
  * @param {() => string} getBooksRoot
  * @param {string} bookId
  */
@@ -66,6 +142,9 @@ export const GREP_MODEL_HIT_MAX = 40;
 
 /** Truncate each grep line text for token density. */
 export const GREP_LINE_TEXT_MAX = 160;
+
+/** Soft cap for read_file payload size (bytes before UTF-8 decode). */
+export const READ_FILE_MAX_BYTES = 256 * 1024;
 
 /**
  * @param {{ path: string, line: number, text: string }} hit
@@ -256,6 +335,8 @@ export function createReadingTools() {
         const blocked = parallelGate(context.parallelBudget, 'read_file');
         if (blocked) return blocked;
         const { bookId, booksRoot } = context;
+        const scope = authorizeReadFilePath(path, bookId);
+        if (!scope.ok) return { ...scope, path };
         if (isExtractWorkspacePath(path)) {
           const gate = booksExtractGate(() => booksRoot, bookId);
           if (gate) return { ...gate, path };
@@ -269,6 +350,14 @@ export function createReadingTools() {
               path,
               error: 'not_found',
               message: `file not found: ${path}`,
+            };
+          }
+          if (bytes.byteLength > READ_FILE_MAX_BYTES) {
+            return {
+              ok: false,
+              path,
+              error: 'too_large',
+              message: `file exceeds ${READ_FILE_MAX_BYTES} byte read_file limit`,
             };
           }
           const raw = new TextDecoder('utf-8').decode(bytes);
@@ -470,7 +559,7 @@ export function createReadingTools() {
 
     glob: tool({
       description:
-        'List file paths under /workspace/.wellread/ that match a glob pattern. For a book section/chapter, use resolve_section instead of globbing extract chunks/*. Counts toward the ≤8 parallel read/search tools per step.',
+        'List file paths under the current book extract/notes packages in /workspace/.wellread/ that match a glob pattern. For a book section/chapter, use resolve_section instead of globbing extract chunks/*. Counts toward the ≤8 parallel read/search tools per step.',
       inputSchema: z.object({
         pattern: z.string().describe('Glob path pattern under /workspace/.wellread/'),
       }),
@@ -478,8 +567,17 @@ export function createReadingTools() {
       execute: async ({ pattern }, { context }) => {
         const blocked = parallelGate(context.parallelBudget, 'glob', { hits: [] });
         if (blocked) return blocked;
+        const under = wellreadBookSearchRoots(context.bookId);
+        if (!under) {
+          return {
+            ok: false,
+            error: 'denied',
+            message: 'glob requires a valid session bookId',
+            hits: [],
+          };
+        }
         try {
-          const hits = globWellread(context.booksRoot, pattern);
+          const hits = globWellread(context.booksRoot, pattern, { under });
           return { ok: true, hits };
         } catch (err) {
           return {
@@ -494,13 +592,15 @@ export function createReadingTools() {
 
     grep: tool({
       description:
-        'Search file contents under /workspace/.wellread/ (returns path, line, matching text). Counts toward the ≤8 parallel read/search tools per step.',
+        'Search file contents under the current book extract/notes packages in /workspace/.wellread/ (returns path, line, matching text). Counts toward the ≤8 parallel read/search tools per step.',
       inputSchema: z.object({
         pattern: z.string().describe('Substring or regex to match against file lines'),
         path: z
           .string()
           .optional()
-          .describe('Optional directory or file prefix under /workspace/.wellread/ to scope the search'),
+          .describe(
+            'Optional directory or file prefix under the current book extract/notes package',
+          ),
         regex: z
           .boolean()
           .optional()
@@ -511,6 +611,15 @@ export function createReadingTools() {
         const blocked = parallelGate(context.parallelBudget, 'grep', { hits: [] });
         if (blocked) return blocked;
         const { bookId, booksRoot } = context;
+        const under = wellreadBookSearchRoots(bookId);
+        if (!under) {
+          return {
+            ok: false,
+            error: 'denied',
+            message: 'grep requires a valid session bookId',
+            hits: [],
+          };
+        }
         if (typeof path === 'string' && isExtractWorkspacePath(path.trim())) {
           const gate = booksExtractGate(() => booksRoot, bookId);
           if (gate) return { ...gate, hits: [] };
@@ -518,6 +627,7 @@ export function createReadingTools() {
         try {
           const hits = grepWellread(booksRoot, pattern, {
             path,
+            under,
             regex: regex !== false,
             maxHits: GREP_MODEL_HIT_MAX,
           });

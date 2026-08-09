@@ -17,12 +17,12 @@ export function QuoteStack({ quotes }: { quotes: PendingQuoteForTurn[] }) {
   if (!quotes.length) return null;
   return (
     <div className='mb-1.5 flex flex-col gap-1 pb-0.5'>
-      {quotes.map((q) => {
+      {quotes.map((q, index) => {
         const chapter = q.chapterTitle?.trim();
         const full = chapter ? `${q.text} — 《${chapter}》` : q.text;
         return (
           <div
-            key={`${chapter ?? ''}:${q.text}`}
+            key={q.id ?? `q-${index}`}
             title={full}
             className='border-base-content/25 text-base-content/70 line-clamp-2 border-s-2 ps-1.5 text-[0.85em] leading-snug'
           >

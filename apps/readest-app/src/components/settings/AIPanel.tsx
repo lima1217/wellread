@@ -10,6 +10,7 @@ import {
   type ModelConfig,
 } from '@/services/wellread/modelConfig';
 import { reloadEveIfNeeded } from '@/services/wellread/assistant/reloadEveIfNeeded';
+import { eventDispatcher } from '@/utils/event';
 import BoxedList from './primitives/BoxedList';
 import NavigationRow from './primitives/NavigationRow';
 import SettingsSwitchRow from './primitives/SettingsSwitchRow';
@@ -56,11 +57,16 @@ const AIPanel: React.FC = () => {
           previousActiveId: options.previousActiveId,
           force: enabledChanged,
         });
+      } catch (err) {
+        eventDispatcher.dispatch('toast', {
+          type: 'error',
+          message: err instanceof Error ? err.message : _('Failed to save AI settings'),
+        });
       } finally {
         setSaving(false);
       }
     },
-    [envConfig, saveSettings, setSettings, settings],
+    [_, envConfig, saveSettings, setSettings, settings],
   );
 
   const handleToggleEnabled = async () => {

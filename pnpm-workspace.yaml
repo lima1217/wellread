@@ -6,6 +6,7 @@ packages:
   - packages/extract-contract
   - packages/quote-wire
   - packages/reading-context
+  - packages/skill-contract
 
 allowBuilds:
   core-js: true

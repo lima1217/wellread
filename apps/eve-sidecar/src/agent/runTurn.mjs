@@ -67,7 +67,7 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
  *   tools?: import('ai').ToolSet, // prefer readingToolContextSchema (+ parallelGate); bare tools get wrap fallback
  * }} input
- * @returns {ReadableStream<import('ai').UIMessageChunk>}
+ * @returns {ReadableStream<import('ai').UIMessageChunk> & { finished: Promise<void> }}
  */
 export function runTurn(input) {
   const { model, session, userMessage, getBooksRoot, abortSignal } = input;
@@ -147,10 +147,17 @@ export function runTurn(input) {
   // clones its parts into this turn's responseMessage (first reply + second).
   const originalMessages = session.messages.map(sessionToUIMessage);
 
-  return createUIMessageStream({
+  /** Resolves after onFinish persist/dropUser — HTTP layer awaits before turnGate.release. */
+  let resolveFinished = () => {};
+  const finished = new Promise((resolve) => {
+    resolveFinished = resolve;
+  });
+
+  const stream = createUIMessageStream({
     originalMessages,
     generateId: () => assistantId,
     onFinish: async ({ responseMessage, isAborted }) => {
+      try {
       if (persisted) return;
       if (skipPersist || isAborted || abortSignal?.aborted) {
         if (!skipPersist) dropUser();
@@ -202,6 +209,9 @@ export function runTurn(input) {
       maybeApplyFirstTurnTitle(session, userMessage);
       persistSession?.(session);
       persisted = true;
+      } finally {
+        resolveFinished();
+      }
     },
     execute: async ({ writer }) => {
       if (failure.failIfAborted(writer)) return;
@@ -378,6 +388,11 @@ export function runTurn(input) {
       }
     },
   });
+  Object.defineProperty(stream, 'finished', {
+    value: finished,
+    enumerable: false,
+  });
+  return stream;
 }
 
 /**

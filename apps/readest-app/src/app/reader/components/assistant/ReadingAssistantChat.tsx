@@ -63,7 +63,9 @@ export const ReadingAssistantChat = ({
 }) => {
   const _ = useTranslation();
   const { envConfig } = useEnv();
-  const { settings, setSettings, saveSettings } = useSettingsStore();
+  const settings = useSettingsStore((s) => s.settings);
+  const setSettings = useSettingsStore((s) => s.setSettings);
+  const saveSettings = useSettingsStore((s) => s.saveSettings);
   const activeSessionId = useReadingAssistantStore((s) => s.activeSessionId);
   const activeBookId = useReadingAssistantStore((s) => s.activeBookId);
   const pendingQuotes = useReadingAssistantStore((s) => s.pendingQuotes);
@@ -170,6 +172,14 @@ export const ReadingAssistantChat = ({
     [busy, envConfig, modelConfig, saveSettings, setSettings, settings],
   );
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !stickToBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [agent.messages, showPendingReply, agent.error]);
+
   return (
     <div className='flex h-full min-h-0 flex-col overscroll-contain'>
       <PendingQuoteBar
@@ -177,7 +187,14 @@ export const ReadingAssistantChat = ({
         onRemove={removePendingQuote}
         onClear={clearPendingQuotes}
       />
-      <div className='min-h-0 flex-1 space-y-8 overflow-y-auto overscroll-contain px-4 py-5 touch-pan-y'>
+      <div
+        ref={scrollRef}
+        className='min-h-0 flex-1 space-y-8 overflow-y-auto overscroll-contain px-4 py-5 touch-pan-y'
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        }}
+      >
         {agent.messages.map((msg, index) => {
           const isLiveAssistant =
             busy && msg.role === 'assistant' && index === agent.messages.length - 1;

@@ -107,9 +107,22 @@ export function useEveAgent(options: UseEveAgentOptions) {
   const loadedSessionIdRef = useRef<string | null | undefined>(undefined);
   /** Always call latest getReaderState without putting it in sendTurn deps. */
   const getReaderStateRef = useRef(getReaderState);
+  const bookIdRef = useRef(bookId);
+  const bookTitleRef = useRef(bookTitle);
   useEffect(() => {
     getReaderStateRef.current = getReaderState;
+    bookIdRef.current = bookId;
+    bookTitleRef.current = bookTitle;
   });
+
+  // Abort in-flight HTTP when the chat tree unmounts (book switch / keepMounted miss).
+  useEffect(() => {
+    return () => {
+      stoppingRef.current = true;
+      abortRef.current?.abort();
+      abortRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +132,12 @@ export function useEveAgent(options: UseEveAgentOptions) {
     // against New chat / History (sessionId → null or another id).
     if (sessionChanged) {
       activeSessionIdRef.current = sessionId ?? null;
+    } else {
+      // bookId/bookTitle may change without a session switch — do not reload disk
+      // (that would clobber an in-flight optimistic stream).
+      return () => {
+        cancelled = true;
+      };
     }
 
     (async () => {
@@ -127,14 +146,12 @@ export function useEveAgent(options: UseEveAgentOptions) {
       // Chat History clears the active session and the chat pane remounts.
       if (!sessionId) {
         createdSessionIdRef.current = null;
-        if (sessionChanged) {
-          stoppingRef.current = true;
-          abortRef.current?.abort();
-          abortRef.current = null;
-          setInFlightTools([]);
-          setError(null);
-          setStatus('ready');
-        }
+        stoppingRef.current = true;
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setInFlightTools([]);
+        setError(null);
+        setStatus('ready');
         setActiveSessionId(null);
         setMessages([]);
         return;
@@ -147,21 +164,20 @@ export function useEveAgent(options: UseEveAgentOptions) {
       }
       // History / New chat: drop any in-flight turn so its deltas cannot
       // overwrite the session we are about to load.
-      if (sessionChanged) {
-        createdSessionIdRef.current = null;
-        stoppingRef.current = true;
-        abortRef.current?.abort();
-        abortRef.current = null;
-        setInFlightTools([]);
-        setError(null);
-        setStatus('ready');
-      }
+      createdSessionIdRef.current = null;
+      stoppingRef.current = true;
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setInFlightTools([]);
+      setError(null);
+      setStatus('ready');
       try {
         const session = await getEveSession(sessionId);
         if (cancelled) return;
+        const msgs = Array.isArray(session.messages) ? session.messages : [];
         activeSessionIdRef.current = session.id;
         setActiveSessionId(session.id);
-        setMessages(hydrateMessages(session.messages));
+        setMessages(hydrateMessages(msgs));
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -171,7 +187,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
     return () => {
       cancelled = true;
     };
-  }, [bookId, bookTitle, sessionId]);
+  }, [sessionId]);
 
   const stop = useCallback(() => {
     if (!turnPromiseRef.current) {
@@ -194,7 +210,8 @@ export function useEveAgent(options: UseEveAgentOptions) {
       const session = await getEveSession(id);
       // History / New chat may have moved on while this fetch was in flight.
       if (activeSessionIdRef.current !== id) return;
-      setMessages(hydrateMessages(session.messages));
+      const msgs = Array.isArray(session.messages) ? session.messages : [];
+      setMessages(hydrateMessages(msgs));
     } catch {
       // Keep local messages if refetch fails; disk remains source of truth on reopen.
     }
@@ -212,28 +229,42 @@ export function useEveAgent(options: UseEveAgentOptions) {
       const wireText = formatPendingQuotesForTurn(quotes, text);
       const displayContent = text;
 
+      // This send is intentional (incl. Stop → resend). Clear the prior Stop latch
+      // now; re-check after awaits so a Stop during teardown still cancels us.
+      stoppingRef.current = false;
+
       const prior = turnPromiseRef.current;
       const turn = (async () => {
         if (prior) await prior.catch(() => {});
-        stoppingRef.current = false;
+        if (stoppingRef.current) {
+          setComposer(text);
+          input?.onSendFailed?.(quotes);
+          return;
+        }
 
         let sessionIdForTurn = activeSessionIdRef.current;
         if (!sessionIdForTurn) {
           try {
             const session = await createEveSession({
-              bookId,
-              bookTitle,
-              title: bookTitle ? `Chat about ${bookTitle}` : undefined,
+              bookId: bookIdRef.current,
+              bookTitle: bookTitleRef.current,
+              title: bookTitleRef.current ? `Chat about ${bookTitleRef.current}` : undefined,
             });
+            if (stoppingRef.current) {
+              setComposer(text);
+              input?.onSendFailed?.(quotes);
+              return;
+            }
             sessionIdForTurn = session.id;
             createdSessionIdRef.current = session.id;
             activeSessionIdRef.current = session.id;
             setActiveSessionId(session.id);
-            setMessages(session.messages);
+            setMessages(Array.isArray(session.messages) ? session.messages : []);
             setStatus('ready');
           } catch (err) {
             setError(err instanceof Error ? err : new Error(String(err)));
             setStatus('error');
+            setComposer(text);
             input?.onSendFailed?.(quotes);
             return;
           }
@@ -242,6 +273,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
         const optimisticUserId = `optimistic-user-${Date.now()}`;
         const optimisticQuotes = quotes.length
           ? quotes.map((q) => ({
+              id: q.id,
               text: q.text,
               chapterTitle: q.chapterTitle,
             }))
@@ -356,6 +388,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
           setStatus('error');
           // Only restore the live bar if the user turn never landed (AC1.5).
           if (!userCommitted) {
+            setComposer(text);
             input?.onSendFailed?.(quotes);
           }
           await reconcileFromDisk(sessionIdForTurn);
@@ -377,7 +410,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
         }
       }
     },
-    [bookId, bookTitle, composer, reconcileFromDisk, thinkingMode],
+    [composer, reconcileFromDisk, thinkingMode],
   );
 
   const reset = useCallback(() => {

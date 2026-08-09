@@ -44,6 +44,82 @@ describe('grepWellread pattern safety', () => {
       rmSync(booksRoot, { recursive: true, force: true });
     }
   });
+
+  it('rejects nested-quantifier regex patterns (ReDoS)', () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-grep-')));
+    try {
+      mkdirSync(join(booksRoot, '.wellread'), { recursive: true });
+      writeFileSync(join(booksRoot, '.wellread', 'a.md'), 'aaaaaaaa!\n');
+      assert.throws(
+        () => grepWellread(booksRoot, '(a+)+$'),
+        (err) =>
+          err instanceof Error &&
+          err.message.startsWith('invalid_grep_pattern:') &&
+          /nested quantifiers/i.test(err.message),
+      );
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects quantified-alternation regex patterns (ReDoS)', () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-grep-')));
+    try {
+      mkdirSync(join(booksRoot, '.wellread'), { recursive: true });
+      writeFileSync(join(booksRoot, '.wellread', 'a.md'), 'aaaaaaaa!\n');
+      assert.throws(
+        () => grepWellread(booksRoot, '(a|aa)+$'),
+        (err) =>
+          err instanceof Error &&
+          err.message.startsWith('invalid_grep_pattern:') &&
+          /quantified alternation/i.test(err.message),
+      );
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('wellreadSearch book scope', () => {
+  it('glob/grep with under stay inside the current book packages', () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-scope-')));
+    try {
+      mkdirSync(join(booksRoot, '.wellread', 'notes', 'bk1'), { recursive: true });
+      mkdirSync(join(booksRoot, '.wellread', 'extract', 'bk1'), { recursive: true });
+      mkdirSync(join(booksRoot, '.wellread', 'notes', 'other'), { recursive: true });
+      writeFileSync(join(booksRoot, '.wellread', 'notes', 'bk1', 'index.md'), 'MINE\n');
+      writeFileSync(join(booksRoot, '.wellread', 'extract', 'bk1', 'meta.json'), '{"ok":1}\n');
+      writeFileSync(join(booksRoot, '.wellread', 'notes', 'other', 'secret.md'), 'SECRET\n');
+
+      const under = [
+        '/workspace/.wellread/notes/bk1',
+        '/workspace/.wellread/extract/bk1',
+      ];
+      const globHits = globWellread(booksRoot, '/workspace/.wellread/**/*', { under });
+      assert.deepEqual(
+        globHits.map((h) => h.path).sort(),
+        [
+          '/workspace/.wellread/extract/bk1/meta.json',
+          '/workspace/.wellread/notes/bk1/index.md',
+        ],
+      );
+
+      const grepHits = grepWellread(booksRoot, 'SECRET|MINE', { under, regex: true });
+      assert.equal(grepHits.length, 1);
+      assert.equal(grepHits[0].path, '/workspace/.wellread/notes/bk1/index.md');
+
+      assert.throws(
+        () =>
+          grepWellread(booksRoot, 'SECRET', {
+            under,
+            path: '/workspace/.wellread/notes/other',
+          }),
+        /scoped to the current book/i,
+      );
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('wellreadSearch symlink confinement', () => {

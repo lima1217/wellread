@@ -14,7 +14,7 @@ import { afterEach, describe, it } from 'node:test';
 import { setBundledSkillsRootForTests } from '../agent/skills/bundledRoot.mjs';
 import { createBooksFsSession } from './booksFsSession.mjs';
 import { createNodeRealpathLookup } from './nodeLookup.mjs';
-import { WORKSPACE_ROOT, authorizeWrite } from './scopedFs.mjs';
+import { WORKSPACE_ROOT, authorizeWrite, normalizeAbsolute } from './scopedFs.mjs';
 
 afterEach(() => {
   setBundledSkillsRootForTests(undefined);
@@ -23,6 +23,11 @@ afterEach(() => {
 describe('scopedFs', () => {
   it('WORKSPACE_ROOT is /workspace', () => {
     assert.equal(WORKSPACE_ROOT, '/workspace');
+  });
+
+  it('normalizeAbsolute rejects backslash and NUL path characters', () => {
+    assert.throws(() => normalizeAbsolute('/workspace/.wellread\\..\\x'), /invalid path characters/);
+    assert.throws(() => normalizeAbsolute('/workspace/\0evil'), /invalid path characters/);
   });
 
   it('authorizeWrite rejects paths outside .wellread', () => {
@@ -141,6 +146,44 @@ describe('createBooksFsSession', () => {
       const text = new TextDecoder().decode(bytes);
       assert.match(text, /Bundled tree/);
       assert.doesNotMatch(text, /POISON/);
+
+      // Case-insensitive FS bypass: request lowercase package.md
+      const lower = await session.readFile({ path: '/workspace/skills/note/package.md' });
+      assert.ok(lower);
+      const lowerText = new TextDecoder().decode(lower);
+      assert.match(lowerText, /Bundled tree/);
+      assert.doesNotMatch(lowerText, /POISON/);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+      rmSync(bundledRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('readFile never serves user PACKAGE.md when bundled skill is disabled', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-books-')));
+    const bundledRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-bundled-')));
+    try {
+      setBundledSkillsRootForTests(bundledRoot);
+      mkdirSync(join(bundledRoot, 'note'), { recursive: true });
+      writeFileSync(
+        join(bundledRoot, 'note', 'SKILL.md'),
+        '---\nname: note\ndescription: OKF notes\n---\nBody.\n',
+      );
+      writeFileSync(join(bundledRoot, 'note', 'PACKAGE.md'), '# PACKAGE\nBundled tree.\n');
+      mkdirSync(join(booksRoot, 'skills', 'note'), { recursive: true });
+      writeFileSync(
+        join(booksRoot, 'skills', 'note', 'SKILL.md'),
+        '---\nname: note\ndescription: user\n---\nUser skill.\n',
+      );
+      writeFileSync(join(booksRoot, 'skills', 'note', 'PACKAGE.md'), '# PACKAGE\nPOISON\n');
+      mkdirSync(join(booksRoot, '.wellread'), { recursive: true });
+      writeFileSync(
+        join(booksRoot, '.wellread', 'disabled-bundled-skills.json'),
+        JSON.stringify(['note']),
+      );
+      const session = createBooksFsSession({ getBooksRoot: () => booksRoot });
+      const bytes = await session.readFile({ path: '/workspace/skills/note/PACKAGE.md' });
+      assert.equal(bytes, null);
     } finally {
       rmSync(booksRoot, { recursive: true, force: true });
       rmSync(bundledRoot, { recursive: true, force: true });

@@ -18,6 +18,7 @@ import {
 import {
   GREP_LINE_TEXT_MAX,
   authorizeOkfNotesWrite,
+  authorizeReadFilePath,
   createReadingTools,
   projectGrepHitForModel,
 } from './tools.mjs';
@@ -108,6 +109,33 @@ describe('projectGrepHitForModel', () => {
   });
 });
 
+describe('authorizeReadFilePath', () => {
+  const bookId = 'bk1';
+
+  it('allows skills, current-book notes/extract, and non-.wellread library paths', () => {
+    assert.equal(authorizeReadFilePath(`/workspace/skills/note/SKILL.md`, bookId).ok, true);
+    assert.equal(authorizeReadFilePath(`/workspace/.wellread/notes/${bookId}/index.md`, bookId).ok, true);
+    assert.equal(authorizeReadFilePath(`/workspace/.wellread/extract/${bookId}/meta.json`, bookId).ok, true);
+    assert.equal(authorizeReadFilePath('/workspace/Some Book.epub', bookId).ok, true);
+  });
+
+  it('denies other books even when raw path starts with current-book or skills prefixes', () => {
+    assert.equal(
+      authorizeReadFilePath(`/workspace/.wellread/notes/${bookId}/../../extract/other/a.md`, bookId)
+        .ok,
+      false,
+    );
+    assert.equal(
+      authorizeReadFilePath('/workspace/skills/../.wellread/extract/other/a.md', bookId).ok,
+      false,
+    );
+    assert.equal(
+      authorizeReadFilePath('/workspace/.wellread/extract/other/a.md', bookId).ok,
+      false,
+    );
+  });
+});
+
 describe('authorizeOkfNotesWrite', () => {
   const bookId = 'bk1';
 
@@ -183,8 +211,10 @@ describe('createReadingTools envelopes', () => {
   it('describes glob/grep by role without wide-path examples', () => {
     const tools = createReadingTools();
     assert.match(tools.glob.description, /List file paths/i);
+    assert.match(tools.glob.description, /current book/i);
     assert.match(tools.glob.description, /resolve_section/);
     assert.match(tools.grep.description, /file contents/i);
+    assert.match(tools.grep.description, /current book/i);
     assert.match(tools.resolve_section.description, /sectionIndex/i);
     assert.equal(
       tools.glob.inputSchema.shape.pattern.description,
@@ -195,6 +225,42 @@ describe('createReadingTools envelopes', () => {
       tools.glob.inputSchema.shape.pattern.description ?? '',
       /\*\*\/\*\*/,
     );
+  });
+
+  it('glob and grep stay inside the current book extract/notes packages', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'eve-tools-scope-')));
+    const bookId = 'bk1';
+    try {
+      mkdirSync(join(booksRoot, '.wellread', 'notes', bookId), { recursive: true });
+      mkdirSync(join(booksRoot, '.wellread', 'notes', 'other'), { recursive: true });
+      writeFileSync(join(booksRoot, '.wellread', 'notes', bookId, 'index.md'), 'MINE\n');
+      writeFileSync(join(booksRoot, '.wellread', 'notes', 'other', 'secret.md'), 'SECRET\n');
+      const tools = createReadingTools();
+      const glob = await tools.glob.execute(
+        { pattern: '/workspace/.wellread/**/*' },
+        execOpts(booksRoot, 'g1', bookId),
+      );
+      assert.equal(glob.ok, true);
+      assert.deepEqual(
+        glob.hits.map((h) => h.path),
+        [`/workspace/.wellread/notes/${bookId}/index.md`],
+      );
+      const grep = await tools.grep.execute(
+        { pattern: 'SECRET|MINE', regex: true },
+        execOpts(booksRoot, 'g2', bookId),
+      );
+      assert.equal(grep.ok, true);
+      assert.equal(grep.hits.length, 1);
+      assert.equal(grep.hits[0].path, `/workspace/.wellread/notes/${bookId}/index.md`);
+      const denied = await tools.grep.execute(
+        { pattern: 'SECRET', path: '/workspace/.wellread/notes/other' },
+        execOpts(booksRoot, 'g3', bookId),
+      );
+      assert.equal(denied.ok, false);
+      assert.equal(denied.error, 'denied');
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
   });
 
   it('resolve_section returns ordered chunk paths for a sectionIndex', async () => {

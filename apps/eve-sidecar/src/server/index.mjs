@@ -44,6 +44,15 @@ import { waitForResponseEnd } from './waitForResponseEnd.mjs';
 
 const HOST = '127.0.0.1';
 
+/** decodeURIComponent that returns null on malformed % sequences (no 500). */
+function decodePathParam(raw) {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+}
+
 const tokenResult = resolveLoopbackToken(process.env);
 if (!tokenResult.ok) {
   console.error(tokenResult.reason);
@@ -210,8 +219,8 @@ const server = http.createServer(async (req, res) => {
 
     const sessionMatch = path.match(/^\/eve\/v1\/sessions\/([^/]+)$/);
     if (sessionMatch) {
-      const id = decodeURIComponent(sessionMatch[1]);
-      if (!isSafeSessionId(id)) {
+      const id = decodePathParam(sessionMatch[1]);
+      if (!id || !isSafeSessionId(id)) {
         sendJson(res, 400, { error: 'session_id_invalid' }, req);
         return;
       }
@@ -247,8 +256,8 @@ const server = http.createServer(async (req, res) => {
 
     const turnMatch = path.match(/^\/eve\/v1\/sessions\/([^/]+)\/turns$/);
     if (req.method === 'POST' && turnMatch) {
-      const id = decodeURIComponent(turnMatch[1]);
-      if (!isSafeSessionId(id)) {
+      const id = decodePathParam(turnMatch[1]);
+      if (!id || !isSafeSessionId(id)) {
         sendJson(res, 400, { error: 'session_id_invalid' }, req);
         return;
       }
@@ -298,8 +307,16 @@ const server = http.createServer(async (req, res) => {
             stream,
             headers: corsHeaders(req),
           });
-          // Hold the turn gate until the response ends (or abort/timeout).
+          // Hold the turn gate until the response ends AND onFinish persist/
+          // dropUser settles — releasing on HTTP close alone races abort cleanup.
+          // Cap finished wait so a missing/hung onFinish cannot pin turnGate forever
+          // (waitForResponseEnd already has its own backstop).
           await waitForResponseEnd(res);
+          const FINISHED_BACKSTOP_MS = 60_000;
+          await Promise.race([
+            Promise.resolve(stream.finished).catch(() => {}),
+            new Promise((resolve) => setTimeout(resolve, FINISHED_BACKSTOP_MS)),
+          ]);
           // No success-path re-save: onFinish / compress / dropUser already
           // persisted through persistSession.
         } catch (error) {
@@ -314,8 +331,13 @@ const server = http.createServer(async (req, res) => {
               req,
             );
           }
-          // Crash belt when the stream throws before onFinish.
-          sessions.save(session);
+          // Crash belt when the stream throws before onFinish — only if the
+          // session still looks like a valid container.
+          try {
+            sessions.save(session);
+          } catch {
+            // ignore corrupt in-memory session
+          }
         } finally {
           settleAbort();
         }

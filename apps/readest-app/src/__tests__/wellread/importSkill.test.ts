@@ -118,6 +118,18 @@ describe('planSkillImportFromFolder', () => {
     if (!plan.ok) expect(plan.error).toMatch(/\.\./);
   });
 
+  it('rejects PACKAGE.md / AGENTS.md / tools/ (bundled-only surfaces)', () => {
+    for (const rel of ['PACKAGE.md', 'package.md', 'AGENTS.md', 'tools/validate.py']) {
+      const plan = planSkillImportFromFolder({
+        folderPath: '/tmp/summarize',
+        relativePaths: ['SKILL.md', rel],
+        skillMd,
+      });
+      expect(plan.ok).toBe(false);
+      if (!plan.ok) expect(plan.error).toMatch(/bundled-only/i);
+    }
+  });
+
   it('rejects invalid SKILL.md content', () => {
     const plan = planSkillImportFromFolder({
       folderPath: '/tmp/summarize',
@@ -147,8 +159,13 @@ describe('importSkillFromFolder', () => {
     return {
       books,
       async readDirectory(path: string, base: BaseDir): Promise<FileItem[]> {
-        if (base !== 'None') return [];
         const prefix = path.replace(/\/+$/, '') + '/';
+        if (base === 'Books') {
+          return [...books.keys()]
+            .filter((p) => p.startsWith(prefix))
+            .map((p) => ({ path: p.slice(prefix.length), size: books.get(p)!.length }));
+        }
+        if (base !== 'None') return [];
         return Object.keys(opts.files)
           .filter((p) => p.startsWith(prefix))
           .map((p) => ({ path: p.slice(prefix.length), size: opts.files[p]!.length }));
@@ -171,7 +188,9 @@ describe('importSkillFromFolder', () => {
           );
         return path in opts.files;
       },
-      async createDir() {},
+      async createDir(path: string, base: BaseDir) {
+        if (base === 'Books') existing.add(path);
+      },
       async deleteDir(path: string, base: BaseDir) {
         if (base !== 'Books') return;
         for (const key of [...books.keys()]) {
@@ -180,10 +199,20 @@ describe('importSkillFromFolder', () => {
         existing.delete(path);
       },
       async copyFile(srcPath: string, srcBase: BaseDir, dstPath: string, dstBase: BaseDir) {
-        if (srcBase !== 'None' || dstBase !== 'Books') throw new Error('unexpected bases');
-        const raw = opts.files[srcPath];
-        if (raw == null) throw new Error(`missing src ${srcPath}`);
-        books.set(dstPath, raw);
+        if (dstBase !== 'Books') throw new Error('unexpected bases');
+        if (srcBase === 'None') {
+          const raw = opts.files[srcPath];
+          if (raw == null) throw new Error(`missing src ${srcPath}`);
+          books.set(dstPath, raw);
+          return;
+        }
+        if (srcBase === 'Books') {
+          const raw = books.get(srcPath);
+          if (raw == null) throw new Error(`missing src ${srcPath}`);
+          books.set(dstPath, raw);
+          return;
+        }
+        throw new Error('unexpected bases');
       },
       joinPath(...parts: string[]) {
         return parts.join('/');

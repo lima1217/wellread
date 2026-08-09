@@ -82,6 +82,9 @@ importers:
       '@wellread/reading-context':
         specifier: workspace:*
         version: link:../../packages/reading-context
+      '@wellread/skill-contract':
+        specifier: workspace:*
+        version: link:../../packages/skill-contract
       ai:
         specifier: ^7.0.48
         version: 7.0.48(zod@3.25.76)
@@ -202,6 +205,9 @@ importers:
       '@wellread/reading-context':
         specifier: workspace:*
         version: link:../../packages/reading-context
+      '@wellread/skill-contract':
+        specifier: workspace:*
+        version: link:../../packages/skill-contract
       '@zip.js/zip.js':
         specifier: ^2.8.16
         version: 2.8.26
@@ -569,6 +575,8 @@ importers:
   packages/quote-wire: {}
 
   packages/reading-context: {}
+
+  packages/skill-contract: {}
 
 packages:
 

@@ -5,6 +5,11 @@
 
 import { readFileSync } from 'node:fs';
 import {
+  canonicalBundledSkillRel,
+  isBundledOnlySkillRel,
+  normalizeSkillRel,
+} from '@wellread/skill-contract';
+import {
   parseSkillMd,
   parseSkillPackagePath,
   readBundledSkillFile,
@@ -14,16 +19,12 @@ import { authorizeRead, normalizeAbsolute } from './scopedFs.mjs';
 
 const SKILL_MD = 'SKILL.md';
 
-/**
- * Skill package paths that must not be overridden by Books/skills user files
- * (instruction / validator surface — always prefer bundled).
- * @param {string} relPath
- */
-function preferBundledSkillRel(relPath) {
-  if (relPath === 'PACKAGE.md' || relPath === 'AGENTS.md') return true;
-  if (relPath === 'tools' || relPath.startsWith('tools/')) return true;
-  return false;
-}
+export {
+  canonicalBundledSkillRel,
+  isBundledOnlySkillRel,
+  normalizeSkillRel,
+  preferBundledSkillRel,
+} from '@wellread/skill-contract';
 
 /**
  * Resolve `/workspace/skills/<id>/…` bytes (overlay + disable + bundled).
@@ -38,42 +39,55 @@ export function readWorkspaceSkillFile(workspacePath, booksRoot, lookup) {
   if (!skillRef) return { handled: false };
 
   const root = normalizeAbsolute(booksRoot);
-  const isSkillMd = skillRef.relPath === SKILL_MD;
-  const bundledOnly = preferBundledSkillRel(skillRef.relPath);
+  const isSkillMd = normalizeSkillRel(skillRef.relPath) === normalizeSkillRel(SKILL_MD);
+  const bundledOnly = isBundledOnlySkillRel(skillRef.relPath);
   const disabled = readDisabledBundledSkillIds(root).has(skillRef.id);
 
-  // PACKAGE.md / AGENTS.md / tools/* — never serve user overlay (instruction injection).
-  if (bundledOnly && !disabled) {
-    const bundled = readBundledSkillFile(skillRef.id, skillRef.relPath);
+  // PACKAGE.md / AGENTS.md / tools/* — never serve user overlay (instruction
+  // injection). Independent of disabled: a disabled bundled skill must not
+  // expose poison overlay copies of the pinned surfaces.
+  if (bundledOnly) {
+    if (disabled) {
+      return { handled: true, bytes: null };
+    }
+    const bundledRel = canonicalBundledSkillRel(skillRef.relPath);
+    const bundled = readBundledSkillFile(skillRef.id, bundledRel);
     if (bundled != null) {
       return { handled: true, bytes: new Uint8Array(Buffer.from(bundled, 'utf8')) };
     }
+    // Bundled skill lacks this pin — do not fall through to user overlay.
     return { handled: true, bytes: null };
   }
 
-  const auth = authorizeRead(workspacePath, root, lookup);
-  if (auth.ok) {
-    try {
-      const bytes = new Uint8Array(readFileSync(auth.realPath));
-      // Skill catalog SKILL.md: only a parseable package counts as user overlay
-      // (same gate as loadSkillPackage / discoverSkills). Broken user files
-      // fall through to the bundled copy instead of poisoning read_file.
-      if (!isSkillMd || parseSkillMd(new TextDecoder().decode(bytes))) {
-        return { handled: true, bytes };
-      }
-    } catch (err) {
-      if (err.code !== 'ENOENT') throw err;
-    }
-  }
-
-  // /workspace/skills/<id>/… — Books miss or bad SKILL.md → bundled package file.
   if (!disabled) {
-    const bundled = readBundledSkillFile(skillRef.id, skillRef.relPath);
-    if (bundled != null) {
-      return { handled: true, bytes: new Uint8Array(Buffer.from(bundled, 'utf8')) };
+    // Prefer valid user SKILL.md; invalid/missing falls through to bundled.
+    if (isSkillMd) {
+      const userAuth = authorizeRead(workspacePath, root, lookup);
+      if (userAuth.ok) {
+        try {
+          const raw = readFileSync(userAuth.realPath, 'utf8');
+          if (parseSkillMd(raw)) {
+            return { handled: true, bytes: new Uint8Array(Buffer.from(raw, 'utf8')) };
+          }
+        } catch {
+          // fall through to bundled
+        }
+      }
+    } else {
+      const userAuth = authorizeRead(workspacePath, root, lookup);
+      if (userAuth.ok) {
+        try {
+          return { handled: true, bytes: new Uint8Array(readFileSync(userAuth.realPath)) };
+        } catch {
+          // fall through to bundled
+        }
+      }
     }
   }
 
-  if (!auth.ok) throw new Error(auth.reason);
+  const bundled = readBundledSkillFile(skillRef.id, skillRef.relPath);
+  if (bundled != null) {
+    return { handled: true, bytes: new Uint8Array(Buffer.from(bundled, 'utf8')) };
+  }
   return { handled: true, bytes: null };
 }

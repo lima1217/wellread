@@ -8,13 +8,21 @@
  *   node scripts/vendor-node.mjs                 # host arch (default aarch64)
  *   node scripts/vendor-node.mjs --triple x86_64-apple-darwin
  */
-import { createWriteStream, chmodSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import {
+  createWriteStream,
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  mkdtempSync,
+} from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { mkdtempSync } from 'node:fs';
 
 const NODE_MAJOR = 24;
 
@@ -54,6 +62,29 @@ async function download(url, filePath) {
   await pipeline(res.body, createWriteStream(filePath));
 }
 
+/**
+ * Verify tarball against nodejs.org SHASUMS256.txt for the same version.
+ * @param {string} tarballPath
+ * @param {string} version e.g. v24.x.y
+ * @param {string} tarball file name
+ */
+async function verifyTarballSha256(tarballPath, version, tarball) {
+  const sumUrl = `https://nodejs.org/dist/${version}/SHASUMS256.txt`;
+  const res = await fetch(sumUrl);
+  if (!res.ok) throw new Error(`nodejs SHASUMS256: ${res.status}`);
+  const body = await res.text();
+  const line = body.split(/\r?\n/).find((row) => row.endsWith(`  ${tarball}`));
+  if (!line) throw new Error(`SHASUMS256 missing entry for ${tarball}`);
+  const expected = line.slice(0, 64).toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(expected)) {
+    throw new Error(`invalid SHASUMS256 line for ${tarball}`);
+  }
+  const actual = createHash('sha256').update(readFileSync(tarballPath)).digest('hex');
+  if (actual !== expected) {
+    throw new Error(`SHA-256 mismatch for ${tarball}: expected ${expected}, got ${actual}`);
+  }
+}
+
 export async function vendorNode({ force = false, triple } = {}) {
   const resolvedTriple = resolveTriple(triple);
   const platform = TRIPLE_TO_PLATFORM[resolvedTriple];
@@ -85,6 +116,7 @@ export async function vendorNode({ force = false, triple } = {}) {
 
   console.log(`vendoring ${url}`);
   await download(url, tarballPath);
+  await verifyTarballSha256(tarballPath, version, tarball);
   execFileSync('tar', ['-xzf', tarballPath, '-C', staging], { stdio: 'inherit' });
   const extracted = join(staging, `node-${version}-${platform}`, 'bin', 'node');
   if (!existsSync(extracted)) {

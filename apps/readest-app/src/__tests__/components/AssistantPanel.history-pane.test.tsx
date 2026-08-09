@@ -76,8 +76,10 @@ vi.mock('@/store/themeStore', () => ({
   }),
 }));
 
+const sidebarState = vi.hoisted(() => ({ sideBarBookKey: 'book-1' }));
+
 vi.mock('@/store/sidebarStore', () => ({
-  useSidebarStore: () => ({ sideBarBookKey: 'book-1' }),
+  useSidebarStore: () => ({ sideBarBookKey: sidebarState.sideBarBookKey }),
 }));
 
 vi.mock('@/store/bookDataStore', () => ({
@@ -121,6 +123,7 @@ vi.mock('@/store/assistantPanelStore', () => ({
     }),
     {
       getState: () => ({
+        isAssistantPanelVisible: assistantPanelState.isAssistantPanelVisible,
         isAssistantPanelPinned: assistantPanelState.isAssistantPanelPinned,
       }),
     },
@@ -170,6 +173,7 @@ describe('AssistantPanel chat↔history pane', () => {
   beforeEach(() => {
     chatLifecycle.mounts = 0;
     chatLifecycle.unmounts = 0;
+    sidebarState.sideBarBookKey = 'book-1';
     assistantPanelState.isAssistantPanelVisible = true;
     assistantPanelState.isAssistantPanelPinned = true;
     setActiveSession.mockReset();
@@ -205,6 +209,20 @@ describe('AssistantPanel chat↔history pane', () => {
     expect(screen.getByTestId('ai-assistant')).toBeTruthy();
     expect(chatLifecycle.unmounts).toBe(0);
     expect(chatLifecycle.mounts).toBe(1);
+  });
+
+  it('keeps AIAssistant mounted when closing after a book switch while panel stays open', () => {
+    const { rerender } = render(<AssistantPanel />);
+    expect(chatLifecycle.mounts).toBe(1);
+
+    sidebarState.sideBarBookKey = 'book-2';
+    rerender(<AssistantPanel />);
+
+    assistantPanelState.isAssistantPanelVisible = false;
+    rerender(<AssistantPanel />);
+
+    expect(screen.getByTestId('ai-assistant')).toBeTruthy();
+    expect(chatLifecycle.unmounts).toBe(0);
   });
 
   it('New chat clears the active session without creating an empty sidecar row', async () => {

@@ -15,22 +15,35 @@ describe('createHttpAbort', () => {
     settle();
   });
 
-  it('aborts when the response closes before settle', () => {
+  it('aborts when the response closes before settle (client disconnect)', () => {
     const req = new EventEmitter();
     const res = new EventEmitter();
+    res.writableEnded = false;
     const { signal } = createHttpAbort(req, res);
 
     res.emit('close');
     assert.equal(signal.aborted, true);
   });
 
-  it('aborts when the request closes before settle', () => {
+  it('aborts when the request closes before settle (client disconnect)', () => {
     const req = new EventEmitter();
     const res = new EventEmitter();
+    res.writableEnded = false;
     const { signal } = createHttpAbort(req, res);
 
     req.emit('close');
     assert.equal(signal.aborted, true);
+  });
+
+  it('does not abort on close after a successful response end', () => {
+    const req = new EventEmitter();
+    const res = new EventEmitter();
+    res.writableEnded = true;
+    const { signal } = createHttpAbort(req, res);
+
+    res.emit('close');
+    req.emit('close');
+    assert.equal(signal.aborted, false);
   });
 
   it('does not abort on response close after settle', () => {

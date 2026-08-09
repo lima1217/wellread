@@ -101,6 +101,7 @@ describe('extract format', () => {
         extractedAt: 1,
         chunkCount: 1,
         schemaVersion: EXTRACT_SCHEMA_VERSION,
+        status: 'ready',
       }),
     );
     expect(isMetaStale(meta, { sourceHash: 'abc', sourceMtimeMs: 10 })).toBe(false);

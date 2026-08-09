@@ -31,7 +31,10 @@ export async function readJson(req, { maxBytes = MAX_JSON_BODY_BYTES } = {}) {
     const buf = typeof chunk === 'string' ? Buffer.from(chunk) : Buffer.from(chunk);
     size += buf.length;
     if (size > maxBytes) {
-      if (typeof req.destroy === 'function') req.destroy();
+      // Drain the rest without destroy() so the handler can still send 413.
+      for await (const _ of req) {
+        // discard
+      }
       throw new RequestBodyTooLargeError();
     }
     chunks.push(buf);

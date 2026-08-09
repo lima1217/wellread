@@ -14,6 +14,7 @@ import {
 } from '@/services/wellread/assistant/eveClient';
 import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
 import { useEveConnectionStore } from '@/services/wellread/eveConnectionStore';
+import { eventDispatcher } from '@/utils/event';
 import { getLocale } from '@/utils/misc';
 
 interface ChatHistoryViewProps {
@@ -109,9 +110,16 @@ const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({ bookKey, onSessionOpe
       e.stopPropagation();
       if (!appService) return;
       if (await appService.ask(_('Delete this conversation?'))) {
-        await deleteEveSession(id);
-        if (activeSessionId === id) setActiveSession(null, bookId);
-        await reload();
+        try {
+          await deleteEveSession(id);
+          if (activeSessionId === id) setActiveSession(null, bookId);
+          await reload();
+        } catch (err) {
+          eventDispatcher.dispatch('toast', {
+            type: 'error',
+            message: err instanceof Error ? err.message : _('Failed to delete conversation'),
+          });
+        }
       }
     },
     [appService, _, activeSessionId, bookId, reload, setActiveSession],

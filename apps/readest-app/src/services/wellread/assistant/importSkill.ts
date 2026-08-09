@@ -3,6 +3,7 @@
  * Package shape matches eve-sidecar discover/invoke (Agent Skills frontmatter + SKILL.md).
  */
 
+import { isBundledOnlySkillRel } from '@wellread/skill-contract';
 import type { AppService, BaseDir, FileItem } from '@/types/system';
 import { getFilename } from '@/utils/path';
 
@@ -10,6 +11,8 @@ export const SKILLS_DIR = 'skills';
 export const SKILL_FILE = 'SKILL.md';
 /** Relative to Books root — hides bundled defaults without deleting user packages. */
 export const DISABLED_BUNDLED_SKILLS_REL = '.wellread/disabled-bundled-skills.json';
+
+export { isBundledOnlySkillRel };
 
 /** Slash token: letter/digit start; then alnum, underscore, hyphen. */
 export function isValidSkillId(id: string): boolean {
@@ -88,6 +91,12 @@ export function planSkillImportFromFolder(input: {
     if (rel.split('/').includes('..')) {
       return { ok: false, error: 'Skill package paths must not contain "..".' };
     }
+    if (isBundledOnlySkillRel(rel)) {
+      return {
+        ok: false,
+        error: `Skill packages must not include ${rel} (PACKAGE.md, AGENTS.md, and tools/ are bundled-only).`,
+      };
+    }
     files.push(rel);
   }
 
@@ -133,8 +142,35 @@ export type SkillImportResult =
   | { ok: true; id: string; name: string; description: string; replaced: boolean }
   | { ok: false; error: string };
 
+async function copyBooksTree(
+  fs: SkillImportFs,
+  fromRoot: string,
+  toRoot: string,
+  files: string[],
+): Promise<void> {
+  await fs.createDir(toRoot, 'Books', true);
+  for (const rel of files) {
+    await fs.copyFile(`${fromRoot}/${rel}`, 'Books', `${toRoot}/${rel}`, 'Books');
+  }
+}
+
+async function listBooksFilesUnder(fs: SkillImportFs, root: string): Promise<string[]> {
+  if (!(await fs.exists(root, 'Books'))) return [];
+  // Prefer tracking known files via readDirectory when the adapter supports Books.
+  try {
+    const entries = await fs.readDirectory(root, 'Books');
+    return entries
+      .map((e) => toBooksRelPath(e.path).replace(/^\/+/, ''))
+      .filter((rel) => rel && !rel.endsWith('/') && !rel.split('/').includes('..'));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Copy a validated skill folder into Books/skills/<id>/ (overwrites existing id).
+ * Stages under skills/.importing-<id>/ and backs up the prior package so a failed
+ * promote can restore the previous install.
  */
 export async function importSkillFromFolder(
   fs: SkillImportFs,
@@ -173,16 +209,71 @@ export async function importSkillFromFolder(
   if (!plan.ok) return plan;
 
   const destRoot = `${SKILLS_DIR}/${plan.id}`;
+  const stagingRoot = `${SKILLS_DIR}/.importing-${plan.id}`;
+  const backupRoot = `${SKILLS_DIR}/.backup-${plan.id}`;
   const replaced = await fs.exists(destRoot, 'Books');
-  if (replaced) {
-    await fs.deleteDir(destRoot, 'Books', true);
-  }
-  await fs.createDir(destRoot, 'Books', true);
 
-  for (const rel of plan.files) {
-    const src = await joinHostPath(fs, trimmed, ...rel.split('/'));
-    const dst = `${destRoot}/${rel}`;
-    await fs.copyFile(src, 'None', dst, 'Books');
+  try {
+    for (const root of [stagingRoot, backupRoot]) {
+      if (await fs.exists(root, 'Books')) {
+        await fs.deleteDir(root, 'Books', true);
+      }
+    }
+
+    await fs.createDir(stagingRoot, 'Books', true);
+    for (const rel of plan.files) {
+      const src = await joinHostPath(fs, trimmed, ...rel.split('/'));
+      await fs.copyFile(src, 'None', `${stagingRoot}/${rel}`, 'Books');
+    }
+
+    if (replaced) {
+      const priorFiles = await listBooksFilesUnder(fs, destRoot);
+      // Memory test adapters may not list Books dirs; fall back to SKILL.md.
+      const filesToBackup = priorFiles.length > 0 ? priorFiles : [SKILL_FILE];
+      await copyBooksTree(fs, destRoot, backupRoot, filesToBackup);
+      await fs.deleteDir(destRoot, 'Books', true);
+    }
+
+    await copyBooksTree(fs, stagingRoot, destRoot, plan.files);
+  } catch (error) {
+    try {
+      if (replaced && (await fs.exists(backupRoot, 'Books'))) {
+        if (await fs.exists(destRoot, 'Books')) {
+          await fs.deleteDir(destRoot, 'Books', true);
+        }
+        const backupFiles = await listBooksFilesUnder(fs, backupRoot);
+        const restoreFiles = backupFiles.length > 0 ? backupFiles : [SKILL_FILE];
+        await copyBooksTree(fs, backupRoot, destRoot, restoreFiles);
+      }
+    } catch {
+      // best-effort restore
+    }
+    try {
+      for (const root of [stagingRoot, backupRoot]) {
+        if (await fs.exists(root, 'Books')) {
+          await fs.deleteDir(root, 'Books', true);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to import skill package. The previous package was restored when possible.',
+    };
+  }
+
+  try {
+    for (const root of [stagingRoot, backupRoot]) {
+      if (await fs.exists(root, 'Books')) {
+        await fs.deleteDir(root, 'Books', true);
+      }
+    }
+  } catch {
+    // ignore cleanup failures
   }
 
   return {

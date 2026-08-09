@@ -60,5 +60,15 @@ export const useReadingAssistantStore = create<ReadingAssistantState>((set) => (
       pendingQuotes: state.pendingQuotes.filter((q) => q.id !== id),
     })),
   clearPendingQuotes: () => set({ pendingQuotes: [] }),
-  restorePendingQuotes: (quotes) => set({ pendingQuotes: quotes }),
+  restorePendingQuotes: (quotes) =>
+    set((state) => {
+      const seen = new Set(state.pendingQuotes.map((q) => q.id));
+      const merged = [...state.pendingQuotes];
+      for (const q of quotes) {
+        if (seen.has(q.id)) continue;
+        seen.add(q.id);
+        merged.push(q);
+      }
+      return { pendingQuotes: merged };
+    }),
 }));

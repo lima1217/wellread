@@ -113,6 +113,10 @@ export function build() {
     '@wellread/reading-context',
     join(root, '../../packages/reading-context'),
   );
+  vendorWorkspacePackage(
+    '@wellread/skill-contract',
+    join(root, '../../packages/skill-contract'),
+  );
 
   console.log('eve-sidecar build ok:', outServer);
 }

@@ -1,5 +1,6 @@
 import {
   EXTRACT_SCHEMA_VERSION,
+  isSafeChunkFileName,
   type ExtractMeta,
   type ExtractReadyStatus,
   type SectionIndexChunk,
@@ -37,8 +38,12 @@ export function slugifyTitle(title: string | null | undefined, fallback: string)
 }
 
 export function chunkFileName(chunkIndex: number, title: string | null): string {
-  const n = String(chunkIndex + 1).padStart(5, '0');
-  return `${n}-${slugifyTitle(title, 'chunk')}.md`;
+  const n = String(Math.max(0, Math.floor(chunkIndex)) + 1).padStart(5, '0');
+  const name = `${n}-${slugifyTitle(title, 'chunk')}.md`;
+  if (!isSafeChunkFileName(name)) {
+    throw new Error(`invalid extract chunk file name: ${name}`);
+  }
+  return name;
 }
 
 export function formatChunkMarkdown(chunk: ExtractChunkInput): string {
@@ -144,6 +149,7 @@ export function parseExtractMeta(json: string): ExtractMeta | null {
   try {
     const v = JSON.parse(json) as Partial<ExtractMeta>;
     if (typeof v.bookId !== 'string' || typeof v.sourceHash !== 'string') return null;
+    if (v.status !== 'ready') return null;
     return {
       bookId: v.bookId,
       sourceHash: v.sourceHash,

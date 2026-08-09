@@ -51,13 +51,15 @@ const AssistantPanel: React.FC = ({}) => {
   const isMobile = useMediaQuery({ maxWidth: 639 });
   const [isFullHeightInMobile, setIsFullHeightInMobile] = useState(isMobile);
   const [pane, setPane] = useState<AssistantPane>('chat');
-  // Keep chat mounted after the first open so closing the panel cannot abort an
-  // in-flight turn (unmount → HTTP cancel → sidecar dropUser → "history lost").
+  // Keep chat mounted after the first open so closing the panel does not tear
+  // down an in-flight turn's React tree (useEveAgent also aborts on unmount).
   const [keepMounted, setKeepMounted] = useState(false);
 
   useEffect(() => {
     setPane('chat');
-    setKeepMounted(false);
+    // Keep the chat tree alive across book switches when the panel stays open,
+    // so closing mid-stream cannot unmount an in-flight turn.
+    setKeepMounted(useAssistantPanelStore.getState().isAssistantPanelVisible);
   }, [sideBarBookKey]);
 
   useEffect(() => {

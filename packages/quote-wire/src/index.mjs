@@ -4,9 +4,11 @@
  */
 
 const CHAPTER_ATTR = /^— 《(.+)》$/;
+/** Keeps quote body lines / composer `>` lines from being peeled as chapter attrs. */
+const PROTECT_ZWSP = '\u200B';
 
 /**
- * @typedef {{ text: string, chapterTitle?: string | null }} PendingQuoteForTurn
+ * @typedef {{ text: string, chapterTitle?: string | null, id?: string }} PendingQuoteForTurn
  */
 
 /**
@@ -36,6 +38,18 @@ function sanitizeChapterTitle(chapter) {
 }
 
 /**
+ * Protect a wire line that would otherwise match CHAPTER_ATTR or look like a
+ * markdown quote when it is actually quote body / composer text.
+ * @param {string} line
+ */
+function protectAmbiguousLine(line) {
+  if (CHAPTER_ATTR.test(line) || line.startsWith('>')) {
+    return `${PROTECT_ZWSP}${line}`;
+  }
+  return line;
+}
+
+/**
  * Composer questions must not be peeled as Pending Quotes. A leading U+200B
  * keeps markdown-looking `>` lines in `content` instead of the envelope.
  * @param {string} question
@@ -44,7 +58,15 @@ function protectComposerQuestion(question) {
   const q = (question ?? '').trim();
   if (!q) return '';
   if (!q.startsWith('>')) return q;
-  return `\u200B${q}`;
+  return `${PROTECT_ZWSP}${q}`;
+}
+
+/**
+ * Strip the leading U+200B protection mark used by format/parse.
+ * @param {string} text
+ */
+export function stripQuoteWireProtection(text) {
+  return String(text ?? '').replace(/^\u200B/, '');
 }
 
 /**
@@ -56,7 +78,7 @@ export function formatPendingQuotesForTurn(quotes, userText) {
   const question = protectComposerQuestion(userText);
   const list = Array.isArray(quotes) ? quotes : [];
   const blocks = list.flatMap((q) => {
-    const lines = quoteTextLines(q?.text ?? '').map((line) => `> ${line}`);
+    const lines = quoteTextLines(q?.text ?? '').map((line) => `> ${protectAmbiguousLine(line)}`);
     if (!lines.length) return [];
     const chapter = sanitizeChapterTitle(q.chapterTitle ?? '');
     if (chapter) {
@@ -76,7 +98,7 @@ export function formatPendingQuotesForTurn(quotes, userText) {
 export function peelLeadingQuoteWire(wire) {
   const trimmed = typeof wire === 'string' ? wire.trim() : '';
   if (!trimmed) return { quoteParts: [], content: '' };
-  if (!trimmed.startsWith('>')) return { quoteParts: [], content: trimmed };
+  if (!trimmed.startsWith('>')) return { quoteParts: [], content: stripQuoteWireProtection(trimmed) };
 
   const parts = trimmed.split(/\n\n+/);
   /** @type {string[]} */
@@ -90,10 +112,10 @@ export function peelLeadingQuoteWire(wire) {
     quoteParts.push(parts[i]);
   }
 
-  const content = parts.slice(i).join('\n\n').trim();
+  const content = stripQuoteWireProtection(parts.slice(i).join('\n\n').trim());
   return {
     quoteParts,
-    content: content || (quoteParts.length ? '' : trimmed),
+    content: content || (quoteParts.length ? '' : stripQuoteWireProtection(trimmed)),
   };
 }
 
@@ -123,7 +145,7 @@ export function parsePendingQuotesFromWire(wire) {
       if (chapterMatch) {
         chapterTitle = chapterMatch[1] ?? null;
       } else {
-        textLines.push(body);
+        textLines.push(stripQuoteWireProtection(body));
       }
     }
     const text = textLines.join('\n').trim();

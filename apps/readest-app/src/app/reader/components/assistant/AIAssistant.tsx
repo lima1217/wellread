@@ -44,9 +44,13 @@ const AIAssistant = ({ bookKey, isActive = true }: AIAssistantProps) => {
       setHasKey(false);
       return;
     }
-    void getModelApiKey(activeProfileId).then((key) => {
-      if (!cancelled) setHasKey(Boolean(key?.trim()));
-    });
+    void getModelApiKey(activeProfileId)
+      .then((key) => {
+        if (!cancelled) setHasKey(Boolean(key?.trim()));
+      })
+      .catch(() => {
+        if (!cancelled) setHasKey(false);
+      });
     return () => {
       cancelled = true;
     };

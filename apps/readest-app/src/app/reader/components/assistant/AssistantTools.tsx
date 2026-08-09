@@ -8,6 +8,18 @@ import type { SessionToolTrace } from '@wellread/eve-message';
 import { summarizeToolTrace } from '@/services/wellread/assistant/displayParts';
 import { focusRing } from './AssistantMarkdown';
 
+const TOOL_JSON_MAX = 2048;
+
+function truncateJson(value: unknown): string {
+  try {
+    const raw = JSON.stringify(value);
+    if (raw.length <= TOOL_JSON_MAX) return raw;
+    return `${raw.slice(0, TOOL_JSON_MAX - 1)}…`;
+  } catch {
+    return String(value);
+  }
+}
+
 export function ToolStep({ tool }: { tool: SessionToolTrace }) {
   const _ = useTranslation();
   const [open, setOpen] = useState(false);
@@ -30,9 +42,9 @@ export function ToolStep({ tool }: { tool: SessionToolTrace }) {
       </button>
       {open && !pending ? (
         <div className='text-base-content/70 mt-1 space-y-0.5 break-words font-mono'>
-          {tool.args != null ? <div>{JSON.stringify(tool.args)}</div> : null}
+          {tool.args != null ? <div>{truncateJson(tool.args)}</div> : null}
           {tool.result != null ? (
-            <div className='text-base-content/50'>{JSON.stringify(tool.result)}</div>
+            <div className='text-base-content/50'>{truncateJson(tool.result)}</div>
           ) : null}
         </div>
       ) : null}

@@ -70,4 +70,27 @@ describe('encodeEveSideChunk / decodeEveSideChunk', () => {
       'targetTokens',
     ]);
   });
+
+  it('rejects malformed context.compressed payloads (incl. type spoof via spread)', () => {
+    assert.equal(
+      decodeEveSideChunk({
+        type: EVE_CONTEXT_COMPRESSED_CHUNK,
+        data: { type: 'error', beforeTokens: 1 },
+      }),
+      null,
+    );
+    assert.equal(
+      decodeEveSideChunk({
+        type: EVE_CONTEXT_COMPRESSED_CHUNK,
+        data: {
+          beforeTokens: 1,
+          afterTokens: 2,
+          targetTokens: 3,
+          removedIds: 'nope',
+          summary: { id: 's', role: 'assistant', content: 'x', createdAt: 0 },
+        },
+      }),
+      null,
+    );
+  });
 });

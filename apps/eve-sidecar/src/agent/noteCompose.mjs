@@ -7,6 +7,7 @@
 
 import { generateText, Output } from 'ai';
 import { z } from 'zod';
+import { turnFetchContext } from '../createModel.mjs';
 import { isAbortError } from './httpAbort.mjs';
 import { OKF_COMPOSE_PAGE_TYPES } from './notesOkf.mjs';
 
@@ -141,16 +142,20 @@ export async function composeOkfNotePage(input) {
         draft,
         priorError: attempt > 1 ? lastMessage : null,
       });
-      const result = await generate({
-        model: input.model,
-        output: Output.object({
-          schema: okfComposedPageSchema,
-          name: 'okf_note_page',
-          description: 'One OKF notes package content page with YAML frontmatter fields and body',
+      // Isolate from the parent turn's ALS fetch store so compose Responses
+      // calls do not inherit webSearchCallsToReplay / reasoning emitters.
+      const result = await turnFetchContext.run({ thinkingMode: 'fast' }, () =>
+        generate({
+          model: input.model,
+          output: Output.object({
+            schema: okfComposedPageSchema,
+            name: 'okf_note_page',
+            description: 'One OKF notes package content page with YAML frontmatter fields and body',
+          }),
+          prompt,
+          abortSignal: input.abortSignal,
         }),
-        prompt,
-        abortSignal: input.abortSignal,
-      });
+      );
       const page = okfComposedPageSchema.parse(result.output);
       // Lock identity fields from the draft so the model cannot rename the target.
       const locked = {

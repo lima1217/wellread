@@ -69,6 +69,7 @@ describe('eve-sidecar build (.output packaging)', () => {
       'extract-contract',
       'quote-wire',
       'reading-context',
+      'skill-contract',
     ]) {
       assert.ok(
         existsSync(join(nm, '@wellread', pkg, 'package.json')),

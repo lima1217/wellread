@@ -18,8 +18,13 @@ export function isWorkspacePath(workspacePath) {
 
 /** Join segments without following symlinks; collapses . and .. */
 export function normalizeAbsolute(path) {
-  if (!path.startsWith('/')) {
+  if (typeof path !== 'string' || !path.startsWith('/')) {
     throw new Error(`expected absolute path, got ${path}`);
+  }
+  // Reject Windows separators / NULs before split — otherwise `\..\` can slip
+  // past lexical clamps on Windows hosts when a single segment contains `\`.
+  if (path.includes('\\') || path.includes('\0')) {
+    throw new Error(`invalid path characters: ${path}`);
   }
   const parts = [];
   for (const seg of path.split('/')) {

@@ -38,7 +38,7 @@ describe('formatPendingQuotesForTurn / parsePendingQuotesFromWire', () => {
       wire,
       [
         '> line one',
-        '> > injected',
+        '> \u200B> injected',
         '> line two',
         '> — 《Ch A》',
         '',
@@ -56,7 +56,19 @@ describe('formatPendingQuotesForTurn / parsePendingQuotesFromWire', () => {
     assert.ok(wire.startsWith('\u200B>'));
     assert.deepEqual(parsePendingQuotesFromWire(wire), {
       quotes: [],
-      content: '\u200B> fake quote\n\nreal question',
+      content: '> fake quote\n\nreal question',
+    });
+  });
+
+  it('does not treat quote-body chapter-attr lookalikes as chapter titles', () => {
+    const wire = formatPendingQuotesForTurn(
+      [{ text: 'intro\n— 《Elsewhere》\noutro', chapterTitle: 'Real Ch' }],
+      'why?',
+    );
+    assert.match(wire, /> \u200B— 《Elsewhere》/);
+    assert.deepEqual(parsePendingQuotesFromWire(wire), {
+      quotes: [{ text: 'intro\n— 《Elsewhere》\noutro', chapterTitle: 'Real Ch' }],
+      content: 'why?',
     });
   });
 

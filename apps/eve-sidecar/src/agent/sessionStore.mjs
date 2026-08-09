@@ -6,7 +6,7 @@
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { stripLeadingQuoteBlocks } from '@wellread/quote-wire';
+import { stripLeadingQuoteBlocks, stripQuoteWireProtection } from '@wellread/quote-wire';
 
 /** create() stamps `ses_` + 16 hex chars; reject anything else before path join. */
 const SESSION_ID_RE = /^ses_[0-9a-f]{16}$/;
@@ -66,8 +66,70 @@ export function maybeApplyFirstTurnTitle(session, userMessage, maxLen = 40) {
  */
 function userQuestionForTitle(userMessage) {
   // Drop composer-question protection (U+200B) used by quote-wire format.
-  const question = stripLeadingQuoteBlocks(userMessage).replace(/^\u200B/, '').trim();
+  const question = stripQuoteWireProtection(stripLeadingQuoteBlocks(userMessage)).trim();
   return question || userMessage.trim();
+}
+
+/**
+ * Keep only messages with the minimum on-disk shape; drop corrupt entries.
+ * @param {unknown} raw
+ * @returns {SessionMessage | null}
+ */
+export function normalizeSessionMessage(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const m = /** @type {Record<string, unknown>} */ (raw);
+  if (typeof m.id !== 'string' || !m.id) return null;
+  if (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'system') return null;
+  if (typeof m.content !== 'string') return null;
+  const createdAt =
+    typeof m.createdAt === 'number' && Number.isFinite(m.createdAt) ? m.createdAt : Date.now();
+  /** @type {SessionMessage} */
+  const out = {
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    createdAt,
+  };
+  if (typeof m.modelContent === 'string') out.modelContent = m.modelContent;
+  if (typeof m.reasoning === 'string') out.reasoning = m.reasoning;
+  if (Array.isArray(m.sources)) out.sources = /** @type {SessionMessage['sources']} */ (m.sources);
+  if (Array.isArray(m.tools)) out.tools = /** @type {SessionMessage['tools']} */ (m.tools);
+  if (Array.isArray(m.modelMessages)) out.modelMessages = m.modelMessages;
+  if (m.compacted === true) out.compacted = true;
+  if (Array.isArray(m.parts)) out.parts = m.parts;
+  return out;
+}
+
+/**
+ * Normalize a session loaded from disk (or a cast JSON body).
+ * Missing/corrupt containers become safe empties so callers can .map without 500s.
+ * @param {unknown} raw
+ * @returns {Session | null}
+ */
+export function normalizeSession(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const s = /** @type {Record<string, unknown>} */ (raw);
+  if (typeof s.id !== 'string' || !isSafeSessionId(s.id)) return null;
+  if (typeof s.bookId !== 'string' || !s.bookId) return null;
+  const messages = Array.isArray(s.messages)
+    ? s.messages.map(normalizeSessionMessage).filter((m) => m != null)
+    : [];
+  const createdAt =
+    typeof s.createdAt === 'number' && Number.isFinite(s.createdAt) ? s.createdAt : Date.now();
+  const updatedAt =
+    typeof s.updatedAt === 'number' && Number.isFinite(s.updatedAt) ? s.updatedAt : createdAt;
+  return {
+    id: s.id,
+    bookId: s.bookId,
+    bookTitle: typeof s.bookTitle === 'string' ? s.bookTitle : undefined,
+    title: typeof s.title === 'string' && s.title.trim() ? s.title : defaultSessionTitle(
+      typeof s.bookTitle === 'string' ? s.bookTitle : undefined,
+      s.bookId,
+    ),
+    createdAt,
+    updatedAt,
+    messages,
+  };
 }
 
 /**
@@ -86,7 +148,9 @@ export function createSessionStore(dataDir) {
 
   function read(id) {
     const raw = readFileSync(pathFor(id), 'utf8');
-    return /** @type {Session} */ (JSON.parse(raw));
+    const normalized = normalizeSession(JSON.parse(raw));
+    if (!normalized) throw new Error(`corrupt session: ${id}`);
+    return normalized;
   }
 
   function writeAtomic(session) {
@@ -140,9 +204,10 @@ export function createSessionStore(dataDir) {
       for (const name of readdirSync(root)) {
         if (!name.endsWith('.json')) continue;
         try {
-          const session = /** @type {Session} */ (
-            JSON.parse(readFileSync(join(root, name), 'utf8'))
+          const session = normalizeSession(
+            JSON.parse(readFileSync(join(root, name), 'utf8')),
           );
+          if (!session) continue;
           if (bookId && session.bookId !== bookId) continue;
           out.push({
             id: session.id,

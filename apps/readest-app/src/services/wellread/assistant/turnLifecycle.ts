@@ -10,9 +10,9 @@
  * - Disk reconcile: after stream settles / session load — not during Stop.
  */
 
-/** Sidecar per-session mutex — brief race after Stop while the prior turn releases. */
-export const TURN_IN_FLIGHT_RETRIES = 3;
-export const TURN_IN_FLIGHT_RETRY_MS = 100;
+/** Sidecar per-session mutex — race after Stop / unmount while the prior turn releases. */
+export const TURN_IN_FLIGHT_RETRIES = 8;
+export const TURN_IN_FLIGHT_RETRY_MS = 150;
 
 export function isTurnInFlightError(err: unknown): boolean {
   return (
@@ -20,11 +20,6 @@ export function isTurnInFlightError(err: unknown): boolean {
     /turn failed:\s*409\b/.test(err.message) &&
     /turn_in_flight/.test(err.message)
   );
-}
-
-/** After user Stop, skip disk reconcile — the aborted turn may still be flushing. */
-export function shouldReconcileAfterStop(): boolean {
-  return false;
 }
 
 /** Remount chat when the open book changes; session switches stay mounted. */

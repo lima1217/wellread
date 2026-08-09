@@ -20,8 +20,18 @@ const contractDoc = join(
 describe('extract-contract SSOT', () => {
   it('pins schema version and embeds it in JSON Schemas', () => {
     assert.equal(EXTRACT_SCHEMA_VERSION, 2);
-    assert.equal(EXTRACT_META_JSON_SCHEMA.properties.schemaVersion.const, EXTRACT_SCHEMA_VERSION);
-    assert.equal(SECTION_INDEX_JSON_SCHEMA.properties.schemaVersion.const, EXTRACT_SCHEMA_VERSION);
+    assert.equal(
+      EXTRACT_META_JSON_SCHEMA.properties.schemaVersion.minimum,
+      EXTRACT_SCHEMA_VERSION,
+    );
+    assert.equal(
+      SECTION_INDEX_JSON_SCHEMA.properties.schemaVersion.minimum,
+      EXTRACT_SCHEMA_VERSION,
+    );
+  });
+
+  it('accepts chunk file names with more than five digits', () => {
+    assert.equal(isSafeChunkFileName('100000-chunk.md'), true);
   });
 
   it('points reading-assistant-contract.md at this package as schema SSOT', () => {

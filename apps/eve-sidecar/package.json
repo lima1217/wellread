@@ -17,6 +17,7 @@
     "@wellread/extract-contract": "workspace:*",
     "@wellread/quote-wire": "workspace:*",
     "@wellread/reading-context": "workspace:*",
+    "@wellread/skill-contract": "workspace:*",
     "ai": "^7.0.48",
     "zod": "^3.25.0"
   },

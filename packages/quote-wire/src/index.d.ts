@@ -1,6 +1,7 @@
 export type PendingQuoteForTurn = {
   text: string;
   chapterTitle?: string | null;
+  id?: string;
 };
 
 export type ParsedPendingQuote = {
@@ -24,3 +25,5 @@ export declare function parsePendingQuotesFromWire(wire: string): {
 };
 
 export declare function stripLeadingQuoteBlocks(message: string): string;
+
+export declare function stripQuoteWireProtection(text: string): string;

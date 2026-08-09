@@ -12,10 +12,15 @@ import {
 } from './contextCompress.mjs';
 
 describe('contextCompress estimates', () => {
-  it('estimates tokens as ceil(chars/4)', () => {
+  it('estimates ASCII tokens as ceil(chars/4)', () => {
     assert.equal(estimateTokens('abcd'), 1);
     assert.equal(estimateTokens('abcde'), 2);
     assert.equal(estimateTokens(''), 0);
+  });
+
+  it('weights CJK characters higher than ASCII (compression trigger safety)', () => {
+    assert.equal(estimateTokens('中文'), 3); // 2 * 1.5
+    assert.ok(estimateTokens('中'.repeat(40)) > estimateTokens('x'.repeat(40)));
   });
 
   it('sums message contents with small per-message overhead', () => {

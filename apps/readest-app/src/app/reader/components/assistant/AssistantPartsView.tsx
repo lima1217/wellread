@@ -1,5 +1,6 @@
 'use client';
 
+import { memo, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -13,7 +14,7 @@ import type { EveMessage } from '@/services/wellread/assistant/eveClient';
 import { ReasoningBlock, ToolsBlock } from './AssistantTools';
 import { createAssistantMarkdownComponents } from './AssistantMarkdown';
 
-export function AssistantPartsView({
+export const AssistantPartsView = memo(function AssistantPartsView({
   msg,
   bookKey,
   isLive,
@@ -23,13 +24,26 @@ export function AssistantPartsView({
   isLive: boolean;
 }) {
   const _ = useTranslation();
+  const passageLabel = _('Passage');
   const hasText = Boolean(msg.content.trim());
   const forceCollapsed = hasText && !isLive;
-  const inputs = assistantPartInputsFromMessage(msg);
+  const segments = useMemo(
+    () => coalesceAssistantParts(assistantPartInputsFromMessage(msg)),
+    [msg],
+  );
+  const components = useMemo(
+    () =>
+      createAssistantMarkdownComponents({
+        bookKey,
+        sources: msg.sources,
+        passageLabel,
+      }),
+    [bookKey, msg.sources, passageLabel],
+  );
 
   return (
     <>
-      {coalesceAssistantParts(inputs).map((segment, i) => {
+      {segments.map((segment, i) => {
         if (segment.kind === 'reasoning') {
           return (
             <ReasoningBlock
@@ -45,19 +59,37 @@ export function AssistantPartsView({
           );
         }
         return (
-          <ReactMarkdown
+          <MarkdownSegment
             key={`text-${i}`}
-            remarkPlugins={[remarkGfm]}
-            components={createAssistantMarkdownComponents({
-              bookKey,
-              sources: msg.sources,
-              passageLabel: _('Passage'),
-            })}
-          >
-            {linkifyBareEpubCfi(segment.text, msg.sources, _('Passage'))}
-          </ReactMarkdown>
+            text={segment.text}
+            sources={msg.sources}
+            passageLabel={passageLabel}
+            components={components}
+          />
         );
       })}
     </>
   );
-}
+});
+
+const MarkdownSegment = memo(function MarkdownSegment({
+  text,
+  sources,
+  passageLabel,
+  components,
+}: {
+  text: string;
+  sources: EveMessage['sources'];
+  passageLabel: string;
+  components: ReturnType<typeof createAssistantMarkdownComponents>;
+}) {
+  const linked = useMemo(
+    () => linkifyBareEpubCfi(text, sources, passageLabel),
+    [text, sources, passageLabel],
+  );
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      {linked}
+    </ReactMarkdown>
+  );
+});
