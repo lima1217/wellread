@@ -1,5 +1,12 @@
 {
   "releases": {
+    "1.2.3": {
+      "date": "2026-08-09",
+      "notes": [
+        "Assistant: Harden Reading Assistant trust boundaries and turn lifecycle",
+        "Assistant: Enable DeepSeek Responses native web_search"
+      ]
+    },
     "1.2.2": {
       "date": "2026-08-07",
       "notes": [

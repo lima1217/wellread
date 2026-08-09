@@ -1,6 +1,6 @@
 [package]
 name = "Wellread"
-version = "1.2.2"
+version = "1.2.3"
 description = "Your online library"
 authors = ["Bilingify LLC"]
 license = ""
