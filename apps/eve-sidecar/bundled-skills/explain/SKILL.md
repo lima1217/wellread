@@ -1,55 +1,55 @@
 ---
-name: 解释
-description: 解释 — 清除当前书中的卡点（词句、段落、概念）。划词后 /skill:explain，或用户说「解释这段」「什么意思」「读不懂」时使用。
+name: Explain
+description: Explain — clears the blocker in the current book (a word, passage, or concept). Use after highlighting text and running /skill:explain, or when the user says "explain this passage", "what does this mean", or "I can't understand this".
 ---
 
-# 解释
+# Explain
 
-用户被某处**卡住**了。任务：清除这个**卡点**，让他能接着往下读；读懂当前这句就够。
+The user is **stuck** somewhere. Task: clear this **blocker** so they can keep reading; understanding the current sentence is enough.
 
 ## Leitworter
 
-- **卡点** — 挡住往下读的那一处（生僻词、典故、论证跳跃、反讽、长句、术语、背景）。
-- **白话** — 读者立刻能懂的说法；一两句够用就停。
+- **Blocker** — the spot that blocks further reading (rare word, allusion, a leap in reasoning, irony, long sentence, jargon, background).
+- **Plain words** — wording the reader grasps instantly; one or two sentences if that is enough, then stop.
 
-## 解释对象（按优先级）
+## What to explain (by priority)
 
-1. **Pending Quote** — 划词后「问助手」附上的选段（默认目标）。
-2. **消息里的引文** — 用户粘贴或引用的句子。
-3. **点名的词句** — 如「解释一下『XX』」。
-4. **当前位置** — 无选区但问「这段什么意思」：只 `read_file` `focus_chunks`。
-5. 都没有：用一两句话问清目标，再开讲。
+1. **Pending Quote** — the passage attached via "ask assistant" after highlighting (default target).
+2. **Quoted text in the message** — a sentence the user pasted or quoted.
+3. **Named phrase** — e.g., "explain 'XX'".
+4. **Current position** — no selection but the user asks "what does this passage mean": only `read_file` `focus_chunks`.
+5. None of the above: ask what the target is in a sentence or two, then explain.
 
-`/skill:explain` 后的文字是补充问题；优先回答，仍围绕上面的目标文本。
+Text after `/skill:explain` is a follow-up question; answer it first, but still center on the target text above.
 
 ## Done when
 
-卡点已用白话说清；引用原文处有可点击 cfi；范围仍是当前句/段（未扩成整章翻译或 notes 写入）。
+The blocker has been explained in plain words; places citing the original text have a clickable cfi; the scope stays the current sentence/passage (not expanded into a whole-chapter translation or notes writing).
 
-## 怎么解释
+## How to explain
 
-- 先给**白话**，再点出**卡点**。
-- 只解释影响理解的词：每个词「含义 → 在本句里怎么用」。
-- 贴合本书（书名、作者、体裁、上下文）；只讲读懂当前句所需的信息。
-- 不确定就标明依据（原文措辞 vs 推断）。
-- 用用户提问的语言作答；专有名词可保留原文并附简短说明。
+- Give the **plain words** first, then point out the **blocker**.
+- Only explain words that affect understanding: for each word, "meaning → how it works in this sentence".
+- Stay grounded in this book (title, author, genre, context); only give the information needed to understand the current sentence.
+- When uncertain, label your basis (original wording vs. inference).
+- Reply in the language the user asked in; proper nouns may be kept in the original with a brief note.
 
-## 输出
+## Output
 
-默认结构（无内容的节可省）：
+Default structure (omit any section with no content):
 
 ```markdown
-**白话**
-（这段在说什么）
+**Plain words**
+(what this passage is saying)
 
-**卡在哪**
-（难点一句话）
+**Where they're stuck**
+(the difficulty in one sentence)
 
-**关键词**
-- 词/短语：含义；在本句中的作用
+**Key terms**
+- word/phrase: meaning; its role in this sentence
 
-**再读一遍**
-（可选：更顺的改写或拆句）
+**Read again**
+(optional: a smoother rewrite or sentence breakdown)
 ```
 
-用户只要「一句话解释」或目标是单个词时，压缩成两三句。整段对照翻译走 `translate`。
+When the user only wants "a one-sentence explanation" or the target is a single word, compress to two or three sentences. For a full side-by-side passage translation, use `translate`.

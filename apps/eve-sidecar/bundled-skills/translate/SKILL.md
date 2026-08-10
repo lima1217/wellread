@@ -1,41 +1,41 @@
 ---
-name: 翻译
-description: 翻译 — 将选区、引用或当前章节译为简体中文。/skill:translate，或用户要译选区/引用/本章、索取中文译文时使用。
+name: Translate
+description: Translate — render a selection, quote, or the current chapter into Simplified Chinese. Use with /skill:translate, or when the user wants to translate a selection/quote/this chapter, or asks for a Chinese translation.
 ---
 
-# 翻译
+# Translate
 
-把源文译成**简体中文**。
+Translate the source text into **Simplified Chinese**.
 
-## 源文与范围
+## Source Text and Scope
 
-按优先级选源，锁死范围后再译：
+Pick the source by priority, lock down the scope, then translate:
 
-1. **Pending Quote / 参数选区**（上方 `>` 引用块，和/或 `/skill:translate` 后参数）：只译这段。
-2. **「这一页 / 这段 / 当前位置」**：只 `read_file` `focus_chunks`（最多 2 条）。
-3. **「本章 / 这一节 / 翻译 〈章名〉」**：
-   - 直接 `read_section_text`（`sectionIndex` 和/或 `title`）一次读齐整章。
-   - 默认「本章」= 当前 spine 整节（同一 `sectionIndex`）。
-   - `count` **多于 64**（或 `section_chunks_note`）：节很大，`read_section_text` 仍一次读齐，直接译整章；只有用户给了更窄目标（如只译当前位置附近）才缩小范围。
+1. **Pending Quote / parameter selection** (the `>` blockquote above, and/or the argument after `/skill:translate`): translate only this passage.
+2. **"This page / this paragraph / current position"**: only `read_file` `focus_chunks` (at most 2).
+3. **"This chapter / this section / translate 〈chapter name〉"**:
+   - Use `read_section_text` (`sectionIndex` and/or `title`) to read the entire chapter in one go.
+   - "This chapter" = the current spine section (same `sectionIndex`) by default.
+   - When `count` is **greater than 64** (or `section_chunks_note`): the section is large; `read_section_text` still reads it all in one go, so translate the whole chapter directly. Only narrow the scope when the user gives a more specific target (e.g., only near the current position).
 
-定位不到时，说明缺什么，请用户划选或给一句定位原文。
+If the location cannot be determined, state what is missing and ask the user to select text or provide a snippet for locating.
 
 ## Done when
 
-源文范围已锁定且译文覆盖该范围每一句；章级超长节已用 `read_section_text` 读齐（或按用户更窄目标缩小）；译文无开场白、无概述残留。
+The source scope is locked and the translation covers every sentence in that scope; an overly long chapter-level section has been read in full with `read_section_text` (or narrowed per a more specific user target); the translation has no preamble and no leftover summary.
 
-## 准则
+## Principles
 
-1. **完整** — 每句、每个细节进译文。
-2. **忠实** — 语义与**语域**跟源文一致。
-3. **自然** — 地道简体中文；大数用万、亿。
+1. **Complete** — every sentence and every detail makes it into the translation.
+2. **Faithful** — meaning and **register** match the source text.
+3. **Natural** — idiomatic Simplified Chinese; large numbers use 万 and 亿 (Chinese number conventions).
 
-## 行文
+## Prose Style
 
-译文用**直述**：意思一次说清；停顿、补充、并列用逗号、句号、冒号或括号。
+Use **direct narration** in the translation: convey the meaning once; use commas, periods, colons, or parentheses for pauses, supplements, and parallel items.
 
-硬护栏（译文正文）：破折号（`—` `–` `―` `--`）与纠偏对举（`不是……而是……` 及同类）改写成等价肯定句或拆成两句。
+Hard guardrails (in the translation body): rewrite em dashes (`—` `–` `―` `--`) and contrastive pairs (`不是……而是……` and similar) into equivalent affirmative sentences or split them into two sentences.
 
-## 输出
+## Output
 
-直接给出译文。多 chunk 按原文顺序合并为一篇。确有必要时于译文后附短**译者注**（同样遵守行文）。
+Output the translation directly. Merge multiple chunks into one piece in original order. When truly necessary, append a short **translator's note** after the translation (which also follows the prose style).

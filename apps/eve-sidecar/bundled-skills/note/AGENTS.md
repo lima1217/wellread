@@ -1,17 +1,17 @@
-# AGENTS — wellread note skill（只读）
+# AGENTS — wellread note skill (read-only)
 
-本文件在 `/workspace/skills/note/AGENTS.md`。写盘只进 notes 包内容页，不进本文件或 `tools/**`。
+This file lives at `/workspace/skills/note/AGENTS.md`. Writing targets only notes package content pages, not this file or `tools/**`.
 
-## 读包
+## Reading the package
 
-1. 根 `index.md` → 相关目录 `index.md` → 内容页。
-2. 引用与命名：PACKAGE Citations / Naming。
-3. 有演进的目录记 `log.md`；未决进 `questions/待解决问题.md`。
+1. Root `index.md` → relevant directory `index.md` → content pages.
+2. Citations and naming: PACKAGE Citations / Naming.
+3. Directories with ongoing evolution record a `log.md`; unresolved items go into `questions/待解决问题.md`.
 
-## 写盘
+## Writing
 
-仅在用户明确要求保存 / ingest / bootstrap / lint-并-修时 `write_file`。
+`write_file` only when the user explicitly asks to save / ingest / bootstrap / lint-and-fix.
 
-可写：`index.md`、`log.md`，以及 `sources|chapters|concepts|frameworks|claims|glossary|questions/` 下的页。
+Writable: `index.md`, `log.md`, and pages under `sources|chapters|concepts|frameworks|claims|glossary|questions/`.
 
-内容页优先 `draft`（sidecar JSON-schema 合成）；`index.md` / `log.md` 用 `content`。写节奏（**budget** / **batch** / **handoff**）以 SKILL.md 为准。校验器只读：`/workspace/skills/note/tools/validate_okf_wiki.py`。
+Content pages prefer `draft` (sidecar JSON-schema synthesis); `index.md` / `log.md` use `content`. Write cadence (**budget** / **batch** / **handoff**) follows SKILL.md. Validator is read-only: `/workspace/skills/note/tools/validate_okf_wiki.py`.
