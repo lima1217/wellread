@@ -359,6 +359,10 @@ export async function importBook(
 
   let loadedBook: BookDoc | undefined;
   let fileobj: File | undefined;
+  // TXT conversion replaces `fileobj` with a plain in-memory EPUB File. Track
+  // the opened RemoteFile/NativeFile so we can close it right after convert
+  // (and still in outer `finally` for non-TXT ClosableFile paths).
+  let openedSource: ClosableFile | undefined;
   try {
     let format: BookFormat;
     let filename: string;
@@ -384,9 +388,25 @@ export async function importBook(
           fileobj = file;
           filename = file.name;
         }
+        const maybeClosable = fileobj as ClosableFile;
+        if (typeof maybeClosable.close === 'function') {
+          openedSource = maybeClosable;
+        }
         if (/\.txt$/i.test(filename)) {
           const txt2epub = new TxtToEpubConverter();
-          ({ file: fileobj } = await txt2epub.convert({ file: fileobj }));
+          try {
+            ({ file: fileobj } = await txt2epub.convert({ file: fileobj }));
+          } finally {
+            // Convert consumes the source; release RemoteFile/NativeFile
+            // immediately so DocumentLoader / cover / write do not keep the
+            // path handle pinned. Outer `finally` stays an idempotent net.
+            if (openedSource?.close) {
+              try {
+                await openedSource.close();
+              } catch {}
+            }
+            openedSource = undefined;
+          }
         }
         if (!fileobj || fileobj.size === 0) {
           throw new Error('Invalid or empty book file');
@@ -681,10 +701,12 @@ export async function importBook(
     } catch (error) {
       console.warn('Error destroying book document:', error);
     }
-    const f = fileobj as ClosableFile | undefined;
-    if (f?.close) {
+    // Prefer `openedSource` only: after TXT convert we clear it once the source
+    // is released early. Falling back to `fileobj` would double-close when
+    // convert failed and `fileobj` is still the original ClosableFile.
+    if (openedSource?.close) {
       try {
-        await f.close();
+        await openedSource.close();
       } catch {}
     }
   }
