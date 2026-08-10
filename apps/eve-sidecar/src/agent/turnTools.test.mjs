@@ -82,6 +82,79 @@ describe('bindTurnTools', () => {
     assert.equal(gateHits, MAX_PARALLEL_READ_TOOLS + 1);
     assert.equal(ran, MAX_PARALLEL_READ_TOOLS);
   });
+
+  it('propagates contextWindowTokens through the schema-validated context', async () => {
+    let seen = null;
+    const { tools, toolsContext } = bindTurnTools({
+      bookId: 'bk1',
+      booksRoot: '/tmp',
+      contextWindowTokens: 128_000,
+      tools: {
+        read_section_text: tool({
+          description: 'schema read section',
+          inputSchema: z.object({ sectionIndex: z.number().optional() }),
+          contextSchema: readingToolContextSchema,
+          execute: async (_input, opts) => {
+            seen = opts.context.contextWindowTokens;
+            return { ok: true };
+          },
+        }),
+      },
+    });
+    await tools.read_section_text.execute(
+      { sectionIndex: 3 },
+      {
+        toolCallId: 'tc_sec',
+        messages: [],
+        abortSignal: undefined,
+        context: toolsContext.read_section_text,
+      },
+    );
+    assert.equal(seen, 128_000);
+  });
+
+  it('counts read_section_text toward the parallel read budget', async () => {
+    const { tools, toolsContext, parallelBudget } = bindTurnTools({
+      bookId: 'bk1',
+      booksRoot: '/tmp',
+      tools: {
+        read_section_text: tool({
+          description: 'schema read section',
+          inputSchema: z.object({ sectionIndex: z.number().optional() }),
+          contextSchema: readingToolContextSchema,
+          execute: async (_input, opts) => {
+            const blocked = parallelGate(opts.context.parallelBudget, 'read_section_text');
+            if (blocked) return blocked;
+            return { ok: true };
+          },
+        }),
+      },
+    });
+    parallelBudget.beginStep();
+    for (let i = 0; i < MAX_PARALLEL_READ_TOOLS; i++) {
+      const out = await tools.read_section_text.execute(
+        { sectionIndex: i },
+        {
+          toolCallId: `tc_${i}`,
+          messages: [],
+          abortSignal: undefined,
+          context: toolsContext.read_section_text,
+        },
+      );
+      assert.equal(out.ok, true);
+    }
+    const blocked = await tools.read_section_text.execute(
+      { sectionIndex: MAX_PARALLEL_READ_TOOLS },
+      {
+        toolCallId: 'tc_over',
+        messages: [],
+        abortSignal: undefined,
+        context: toolsContext.read_section_text,
+      },
+    );
+    assert.equal(blocked.ok, false);
+    assert.equal(blocked.error, 'too_many_parallel_tools');
+  });
 });
 
 describe('maybeAttachNativeWebSearch', () => {

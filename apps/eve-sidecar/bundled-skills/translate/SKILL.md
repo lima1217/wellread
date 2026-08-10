@@ -14,16 +14,15 @@ description: 翻译 — 将选区、引用或当前章节译为简体中文。/s
 1. **Pending Quote / 参数选区**（上方 `>` 引用块，和/或 `/skill:translate` 后参数）：只译这段。
 2. **「这一页 / 这段 / 当前位置」**：只 `read_file` `focus_chunks`（最多 2 条）。
 3. **「本章 / 这一节 / 翻译 〈章名〉」**：
-   - `<reading_context>` 已有目标节的 `section_chunks` → 按序读那些路径。
-   - 否则 `resolve_section`（`sectionIndex` 和/或 `title`）再按返回 `paths` 升序读齐。
+   - 直接 `read_section_text`（`sectionIndex` 和/或 `title`）一次读齐整章。
    - 默认「本章」= 当前 spine 整节（同一 `sectionIndex`）。
-   - `count` **多于 64**（或 `section_chunks_note`）：先报章名、`sectionIndex`、chunk 数，问是否继续或只要当前位置附近。
+   - `count` **多于 64**（或 `section_chunks_note`）：节很大，`read_section_text` 仍一次读齐，直接译整章；只有用户给了更窄目标（如只译当前位置附近）才缩小范围。
 
 定位不到时，说明缺什么，请用户划选或给一句定位原文。
 
 ## Done when
 
-源文范围已锁定且译文覆盖该范围每一句；章级超长节已询问或已按用户选择缩小；译文无开场白、无概述残留。
+源文范围已锁定且译文覆盖该范围每一句；章级超长节已用 `read_section_text` 读齐（或按用户更窄目标缩小）；译文无开场白、无概述残留。
 
 ## 准则
 

@@ -11,7 +11,12 @@ import {
   resolveSectionChunksByIndex,
   resolveSectionChunksByTitle,
   resolveSectionChunksForReader,
+  contextWindowToMaxReadBytes,
+  readSectionText,
   resolveSectionQuery,
+  MIN_READ_SECTION_TEXT_BYTES,
+  MAX_READ_SECTION_TEXT_BYTES,
+  READ_SECTION_TEXT_MAX_BYTES,
 } from './resolveSectionChunks.mjs';
 
 function writeSectionIndex(root, bookId, index) {
@@ -481,5 +486,184 @@ describe('resolveFocusChunks', () => {
     });
     assert.equal(focus?.via, 'section_mid');
     assert.ok((focus?.count ?? 0) >= 1);
+  });
+});
+
+describe('readSectionText', () => {
+  it('requires sectionIndex or title', () => {
+    const root = mkdtempSync(join(tmpdir(), 'eve-read-sec-'));
+    const r = readSectionText({ booksRoot: root, bookId: 'bk1' });
+    assert.equal(r.ok, false);
+    assert.equal(r.error, 'invalid_args');
+  });
+
+  it('concatenates all chunks of a section by sectionIndex', () => {
+    const root = mkdtempSync(join(tmpdir(), 'eve-read-sec-idx-'));
+    const chunks = join(root, '.wellread', 'extract', 'bk1', 'chunks');
+    mkdirSync(chunks, { recursive: true });
+    writeChunk(chunks, '00001-a.md', {
+      sectionIndex: 3,
+      chunkIndex: 0,
+      title: '"Loomings"',
+      cfi: '"epubcfi(/6/2!)"',
+      endCfi: '"epubcfi(/6/2!/4)"',
+    }, 'First paragraph.');
+    writeChunk(chunks, '00002-b.md', {
+      sectionIndex: 3,
+      chunkIndex: 1,
+      title: '"Loomings"',
+      cfi: '"epubcfi(/6/2!/4)"',
+      endCfi: '"epubcfi(/6/2!/8)"',
+    }, 'Second paragraph.');
+
+    const r = readSectionText({ booksRoot: root, bookId: 'bk1', sectionIndex: 3 });
+    assert.equal(r.ok, true);
+    assert.equal(r.chunkCount, 2);
+    assert.equal(r.via, 'sectionIndex');
+    assert.equal(r.sectionIndex, 3);
+    assert.match(r.text, /First paragraph\./);
+    assert.match(r.text, /Second paragraph\./);
+  });
+
+  it('concatenates chunks by title match', () => {
+    const root = mkdtempSync(join(tmpdir(), 'eve-read-sec-title-'));
+    const chunks = join(root, '.wellread', 'extract', 'bk1', 'chunks');
+    mkdirSync(chunks, { recursive: true });
+    writeChunk(chunks, '00001-x.md', {
+      sectionIndex: 5,
+      chunkIndex: 0,
+      title: '"The Chase"',
+      cfi: '"epubcfi(/6/10!)"',
+    }, 'Body A');
+    writeChunk(chunks, '00002-y.md', {
+      sectionIndex: 6,
+      chunkIndex: 0,
+      title: '"Other"',
+      cfi: '"epubcfi(/6/12!)"',
+    }, 'Body B');
+
+    const r = readSectionText({ booksRoot: root, bookId: 'bk1', title: 'The Chase' });
+    assert.equal(r.ok, true);
+    assert.equal(r.chunkCount, 1);
+    assert.equal(r.via, 'title');
+    assert.match(r.text, /Body A/);
+    assert.doesNotMatch(r.text, /Body B/);
+  });
+
+  it('returns not_found for a missing section', () => {
+    const root = mkdtempSync(join(tmpdir(), 'eve-read-sec-miss-'));
+    const chunks = join(root, '.wellread', 'extract', 'bk1', 'chunks');
+    mkdirSync(chunks, { recursive: true });
+    writeChunk(chunks, '00001-z.md', {
+      sectionIndex: 0,
+      chunkIndex: 0,
+      title: '"Real"',
+      cfi: '"epubcfi(/6/2!)"',
+    }, 'body');
+
+    const r = readSectionText({ booksRoot: root, bookId: 'bk1', sectionIndex: 99 });
+    assert.equal(r.ok, false);
+    assert.equal(r.error, 'not_found');
+  });
+
+  it('strips frontmatter to compact projection', () => {
+    const root = mkdtempSync(join(tmpdir(), 'eve-read-sec-proj-'));
+    const chunks = join(root, '.wellread', 'extract', 'bk1', 'chunks');
+    mkdirSync(chunks, { recursive: true });
+    writeChunk(chunks, '00001-p.md', {
+      sectionIndex: 1,
+      chunkIndex: 0,
+      title: '"Proj"',
+      cfi: '"epubcfi(/6/2!)"',
+      endCfi: '"epubcfi(/6/2!/2)"',
+    }, 'Visible body.');
+
+    const r = readSectionText({ booksRoot: root, bookId: 'bk1', sectionIndex: 1 });
+    assert.equal(r.ok, true);
+    assert.match(r.text, /Visible body\./);
+    assert.doesNotMatch(r.text, /bookId/);
+    assert.match(r.text, /cfi:/);
+  });
+});
+
+describe('contextWindowToMaxReadBytes', () => {
+  it('returns the default for invalid / missing context window', () => {
+    assert.equal(contextWindowToMaxReadBytes(0), READ_SECTION_TEXT_MAX_BYTES);
+    assert.equal(contextWindowToMaxReadBytes(-1), READ_SECTION_TEXT_MAX_BYTES);
+    assert.equal(contextWindowToMaxReadBytes(NaN), READ_SECTION_TEXT_MAX_BYTES);
+    assert.equal(contextWindowToMaxReadBytes(undefined), READ_SECTION_TEXT_MAX_BYTES);
+  });
+
+  it('scales up with a large context window but caps at the hard ceiling', () => {
+    // DeepSeek 1M tokens -> 0.75 * 1_000_000 * 3.5 = 2_625_000, capped to 1MB
+    const val = contextWindowToMaxReadBytes(1_000_000);
+    assert.equal(val, MAX_READ_SECTION_TEXT_BYTES);
+  });
+
+  it('floors to the minimum for a tiny context window', () => {
+    // 128k tokens -> 0.75 * 128_000 * 3.5 = 336_000 (above 16KB min, below 1MB max)
+    const val128 = contextWindowToMaxReadBytes(128_000);
+    assert.ok(val128 > MIN_READ_SECTION_TEXT_BYTES);
+    assert.ok(val128 < MAX_READ_SECTION_TEXT_BYTES);
+
+    // 1k tokens -> 0.75 * 1000 * 3.5 = 2625, floored to 16KB
+    const tiny = contextWindowToMaxReadBytes(1000);
+    assert.equal(tiny, MIN_READ_SECTION_TEXT_BYTES);
+  });
+});
+
+describe('readSectionText maxBytes', () => {
+  it('respects a custom maxBytes and sets truncated', () => {
+    const root = mkdtempSync(join(tmpdir(), 'eve-read-sec-maxb-'));
+    const chunks = join(root, '.wellread', 'extract', 'bk1', 'chunks');
+    mkdirSync(chunks, { recursive: true });
+    // Write 3 chunks each with ~100 bytes of body
+    writeChunk(chunks, '00001-a.md', {
+      sectionIndex: 2,
+      chunkIndex: 0,
+      title: '"Cap"',
+      cfi: '"epubcfi(/6/2!)"',
+    }, 'AAAA '.repeat(30));
+    writeChunk(chunks, '00002-b.md', {
+      sectionIndex: 2,
+      chunkIndex: 1,
+      title: '"Cap"',
+      cfi: '"epubcfi(/6/2!/2)"',
+    }, 'BBBB '.repeat(30));
+    writeChunk(chunks, '00003-c.md', {
+      sectionIndex: 2,
+      chunkIndex: 2,
+      title: '"Cap"',
+      cfi: '"epubcfi(/6/2!/4)"',
+    }, 'CCCC '.repeat(30));
+
+    // Use a very small maxBytes so only the first chunk fits
+    const r = readSectionText({
+      booksRoot: root,
+      bookId: 'bk1',
+      sectionIndex: 2,
+      maxBytes: 200,
+    });
+    assert.equal(r.ok, true);
+    assert.equal(r.truncated, true);
+    assert.equal(r.chunkCount, 1);
+    assert.match(r.text, /AAAA/);
+  });
+
+  it('falls back to default constant when maxBytes is omitted', () => {
+    const root = mkdtempSync(join(tmpdir(), 'eve-read-sec-defb-'));
+    const chunks = join(root, '.wellread', 'extract', 'bk1', 'chunks');
+    mkdirSync(chunks, { recursive: true });
+    writeChunk(chunks, '00001-d.md', {
+      sectionIndex: 0,
+      chunkIndex: 0,
+      title: '"Def"',
+      cfi: '"epubcfi(/6/2!)"',
+    }, 'small body');
+
+    const r = readSectionText({ booksRoot: root, bookId: 'bk1', sectionIndex: 0 });
+    assert.equal(r.ok, true);
+    assert.equal(r.chunkCount, 1);
+    assert.equal(r.truncated, undefined);
   });
 });

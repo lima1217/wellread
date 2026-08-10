@@ -56,6 +56,7 @@ function hasReadingContextSchema(def) {
  *   model?: import('ai').LanguageModel,
  *   composeGenerateTextFn?: typeof import('ai').generateText,
  *   abortSignal?: AbortSignal,
+ *   contextWindowTokens?: number,
  * }} input
  * @returns {{
  *   tools: import('ai').ToolSet,
@@ -89,6 +90,9 @@ export function bindTurnTools(input) {
       ? { composeGenerateTextFn: input.composeGenerateTextFn }
       : {}),
     ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
+    ...(typeof input.contextWindowTokens === 'number'
+      ? { contextWindowTokens: input.contextWindowTokens }
+      : {}),
   };
   return {
     tools,

@@ -90,6 +90,7 @@ export function runTurn(input) {
     model,
     composeGenerateTextFn: input.composeGenerateTextFn,
     abortSignal,
+    contextWindowTokens: input.contextWindowTokens,
   });
 
   const userMsg = {

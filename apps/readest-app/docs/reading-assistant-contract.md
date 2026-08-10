@@ -23,6 +23,7 @@ Sidecar `extract_status`: `ready` | `stale` (usable via scan, missing index/sche
 | --- | --- | --- |
 | `resolve_section` | `{ ok, paths, count, via, … }` | `extract_not_ready` when meta missing |
 | `read_file` | `{ ok, path, content }` | `not_found` / `denied` / `extract_not_ready` on extract paths |
+| `read_section_text` | `{ ok, text, chunkCount, via, sectionIndex?, title? }` (+ `truncated` when byte-capped) | `not_found` / `invalid_args` / `extract_not_ready` when meta missing |
 | `grep` | `{ ok, hits }` | `invalid_grep_pattern` / `denied` / `extract_not_ready` when scoped to extract |
 | `glob` | `{ ok, hits }` | `denied` |
 | `write_file` | `{ ok, path }` (+ `composed: true` when `draft` used) | OKF gate / realpath deny; `compose_failed` / `compose_unavailable` / `invalid_args` / `too_many_parallel_compose` for `draft` |
@@ -38,10 +39,10 @@ Appended to the system prompt when any extra signal exists:
 - `extract_status`, `extract_chunk_count`
 - `position` (client-reported; may be stale): `chapter`, `cfi`, `sectionIndex`
 - `focus_chunks` / `focus_chunks_via` (`cfi` \| `section_mid`) — default read set for “this page”
-- `section_chunks` / `section_chunk_count` — whole spine section; ask before reading if count > 64
+- `section_chunks` / `section_chunk_count` — whole spine section; count > 64 marks a large section (`read_section_text` handles it in one call; ask only when the user gave a narrower target)
 - `quotes`, `prior_sources`, `notes_index`
 
-**Locate policy** (also in system prompt): quotes first; “current page” → `focus_chunks` only; “this chapter” → `section_chunks` / `resolve_section`; never glob extract chunks for discovery; `extract_status: missing` → explain and stop empty tool loops; `stale` → tools still work (prefer index, else scan).
+**Locate policy** (also in system prompt): quotes first; "current page" → `focus_chunks` only; "this chapter" / whole-chapter summary → `read_section_text` (returns full section text in one call; use over `resolve_section` + repeated `read_file` for whole-chapter tasks); never glob extract chunks for discovery; `extract_status: missing` → explain and stop empty tool loops; `stale` → tools still work (prefer index, else scan).
 
 ## Skills
 

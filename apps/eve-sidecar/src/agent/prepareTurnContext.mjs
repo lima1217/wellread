@@ -45,6 +45,7 @@ import { prepareUserTurn } from './userTurn.mjs';
  *   model?: import('ai').LanguageModel,
  *   composeGenerateTextFn?: typeof import('ai').generateText,
  *   abortSignal?: AbortSignal,
+ *   contextWindowTokens?: number,
  * }} input
  */
 export function prepareTurnContext(input) {
@@ -132,6 +133,7 @@ export function prepareTurnContext(input) {
     model: input.model,
     composeGenerateTextFn: input.composeGenerateTextFn,
     abortSignal: input.abortSignal,
+    contextWindowTokens: input.contextWindowTokens,
   });
   const tools = maybeAttachNativeWebSearch(bound.tools, {
     baseURL: input.baseURL,

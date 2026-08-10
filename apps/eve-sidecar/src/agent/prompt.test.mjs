@@ -40,6 +40,7 @@ describe('buildSystemPrompt', () => {
     assert.match(prompt, /Grounding is optional/i);
     assert.match(prompt, /section_chunks/i);
     assert.match(prompt, /resolve_section/);
+    assert.match(prompt, /read_section_text/);
     assert.match(prompt, /never glob/i);
     assert.doesNotMatch(prompt, /\*\*\/\*\*\.md/);
     assert.match(prompt, /answer freely/i);
@@ -278,6 +279,8 @@ describe('buildReadingContextEnvelope', () => {
     assert.match(env, /section_chunks_via: sectionIndex/);
     assert.match(env, new RegExp(`section_chunk_count: ${overThreshold}`));
     assert.match(env, /section_chunks_note:/);
+    assert.match(env, /read_section_text reads it in one call/);
+    assert.doesNotMatch(env, /ask before reading all/);
     assert.match(env, /section_chunks:/);
     assert.match(
       env,

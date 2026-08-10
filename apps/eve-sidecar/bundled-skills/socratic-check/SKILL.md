@@ -19,7 +19,7 @@ description: socratic-check — 苏格拉底式阅读教练：出运用题检验
 
 1. **Pending Quote** — 本章/本段焦点。
 2. **slash 参数** — 章节名、页码提示、或用户刚写的回答。
-3. **Extract** — 当前位置用 `focus_chunks`；某章/某节用 `section_chunks` 或 `resolve_section` 再 `read_file`；短语用 `grep`。
+3. **Extract** — 当前位置用 `focus_chunks`；某章/某节用 `read_section_text`（`sectionIndex` 和/或 `title`）一次读齐；短语用 `grep`。
 4. **Notes**（可选）— 已有 `index.md` / `chapters/` / `concepts/` 可作全书已建模型。
 
 引用用 `[小节标题](<epubcfi(...)>)`。用读者的语言、纯散文。未经要求不写文件。

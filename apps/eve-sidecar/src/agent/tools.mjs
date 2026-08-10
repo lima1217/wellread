@@ -27,7 +27,7 @@ import {
   okfComposeTypeForDir,
   okfDraftMatchesDir,
 } from './notesOkf.mjs';
-import { resolveSectionQuery } from './resolveSectionChunks.mjs';
+import { contextWindowToMaxReadBytes, readSectionText, resolveSectionQuery } from './resolveSectionChunks.mjs';
 import {
   MAX_PARALLEL_COMPOSE,
   composeGate,
@@ -305,6 +305,8 @@ export const readingToolContextSchema = z.object({
    */
   composeGenerateTextFn: z.custom((v) => typeof v === 'function').optional(),
   abortSignal: z.custom((v) => v == null || typeof v === 'object').optional(),
+  /** Optional: read_section_text byte budget scales with the model context window. */
+  contextWindowTokens: z.number().optional(),
 });
 
 /**
@@ -315,6 +317,7 @@ export const readingToolContextSchema = z.object({
  *   model?: import('ai').LanguageModel,
  *   composeGenerateTextFn?: typeof import('ai').generateText,
  *   abortSignal?: AbortSignal,
+ *   contextWindowTokens?: number,
  * }} ReadingToolContext
  */
 
@@ -552,6 +555,47 @@ export function createReadingTools() {
             message: errorMessage(err),
             count: 0,
             paths: [],
+          };
+        }
+      },
+    }),
+    read_section_text: tool({
+      description:
+        "Read the full concatenated text of one book section/chapter in a single call, so you can summarize or explain a whole chapter without hundreds of read_file round-trips. Prefer this over resolve_section + repeated read_file for whole-chapter tasks. Counts toward the ≤8 parallel read/search tools per step.",
+      inputSchema: z.object({
+        sectionIndex: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe('0-based spine sectionIndex from reading_context or toc/chunk frontmatter'),
+        title: z
+          .string()
+          .optional()
+          .describe('Chapter/section title to match against chunk frontmatter title'),
+      }),
+      contextSchema: readingToolContextSchema,
+      execute: async ({ sectionIndex, title }, { context }) => {
+        const blocked = parallelGate(context.parallelBudget, 'read_section_text');
+        if (blocked) return blocked;
+        const { bookId, booksRoot } = context;
+        try {
+          const gate = extractUnavailableEnvelope(
+            readExtractStatus(booksRoot, bookId).status,
+          );
+          if (gate) return gate;
+          return readSectionText({
+            booksRoot,
+            bookId,
+            sectionIndex,
+            title,
+            maxBytes: contextWindowToMaxReadBytes(context.contextWindowTokens),
+          });
+        } catch (err) {
+          return {
+            ok: false,
+            error: 'unavailable',
+            message: errorMessage(err),
           };
         }
       },

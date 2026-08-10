@@ -6,7 +6,10 @@
 import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CFI_COMPARE_MAX_LENGTH, cfiInRange } from './epubcfiCompare.mjs';
-import { parseExtractChunkFrontmatter } from './extractChunk.mjs';
+import {
+  parseExtractChunkFrontmatter,
+  projectExtractContentForModel,
+} from './extractChunk.mjs';
 import { isSafeBookIdSegment } from './notesOkf.mjs';
 import {
   chunkWorkspacePath as indexChunkWorkspacePath,
@@ -23,6 +26,37 @@ export const SECTION_CHUNKS_WALK_MAX = 2000;
 
 /** Max focus chunk paths listed in reading_context. */
 export const FOCUS_CHUNKS_MAX = 2;
+
+/** Soft cap for read_section_text output (bytes before UTF-8 decode). */
+export const READ_SECTION_TEXT_MAX_BYTES = 256 * 1024;
+
+/** Conservative floor so tiny / misconfigured context windows still get a usable chunk. */
+export const MIN_READ_SECTION_TEXT_BYTES = 16 * 1024;
+
+/** Hard ceiling regardless of context window (protects memory / latency). */
+export const MAX_READ_SECTION_TEXT_BYTES = 1024 * 1024;
+
+/**
+ * Derive a read_section_text byte budget from the active model's context
+ * window. Reserves headroom for the system prompt, conversation history,
+ * and output so the section text does not monopolize the context.
+ *
+ * Uses a coarse 3.5 bytes/token average (works for mixed CJK + Latin), and
+ * keeps 25% of the window free for everything else.
+ *
+ * @param {number} contextWindowTokens
+ * @returns {number} max bytes for read_section_text
+ */
+export function contextWindowToMaxReadBytes(contextWindowTokens) {
+  const tokens = Number(contextWindowTokens);
+  if (!Number.isFinite(tokens) || tokens <= 0) return READ_SECTION_TEXT_MAX_BYTES;
+  const usable = tokens * 0.75;
+  const bytes = Math.floor(usable * 3.5);
+  return Math.min(
+    MAX_READ_SECTION_TEXT_BYTES,
+    Math.max(MIN_READ_SECTION_TEXT_BYTES, bytes),
+  );
+}
 
 /**
  * @param {string} booksRoot
@@ -259,6 +293,138 @@ export function resolveSectionQuery(input) {
     count: resolved.count,
     paths: resolved.paths,
     askBeforeReadingAll: resolved.count > SECTION_CHUNKS_ASK_THRESHOLD,
+  };
+}
+
+/**
+ * Read and concatenate the full body text of one spine section, sorted by
+ * chunkIndex, with chunk frontmatter projected to the compact form used by
+ * read_file (cfi/title/endCfi/sectionIndex/chunkIndex + body). Returns a
+ * single text blob so the model can answer whole-chapter questions in one
+ * tool call instead of hundreds of read_file round-trips.
+ *
+ * @param {{
+ *   booksRoot: string,
+ *   bookId: string,
+ *   sectionIndex?: number | null,
+ *   title?: string | null,
+ *   maxBytes?: number,
+ * }} input
+ * @returns {{
+ *   ok: boolean,
+ *   text?: string,
+ *   sectionIndex?: number,
+ *   title?: string,
+ *   chunkCount?: number,
+ *   via?: 'sectionIndex' | 'title',
+ *   truncated?: boolean,
+ *   error?: string,
+ *   message?: string,
+ * }}
+ */
+export function readSectionText(input) {
+  const maxBytes =
+    typeof input.maxBytes === 'number' &&
+    Number.isFinite(input.maxBytes) &&
+    input.maxBytes > 0
+      ? Math.floor(input.maxBytes)
+      : READ_SECTION_TEXT_MAX_BYTES;
+  const booksRoot = input.booksRoot;
+  const bookId = input.bookId;
+  if (typeof booksRoot !== 'string' || !booksRoot.trim()) {
+    return { ok: false, error: 'unavailable', message: 'books root unavailable' };
+  }
+  if (!isSafeBookIdSegment(bookId)) {
+    return { ok: false, error: 'invalid_args', message: 'invalid bookId' };
+  }
+
+  const sectionRaw = input.sectionIndex;
+  const hasIndex =
+    typeof sectionRaw === 'number' &&
+    Number.isFinite(sectionRaw) &&
+    sectionRaw >= 0;
+  const title = typeof input.title === 'string' ? input.title.trim() : '';
+
+  if (!hasIndex && !title) {
+    return { ok: false, error: 'invalid_args', message: 'Provide sectionIndex and/or title' };
+  }
+
+  /** @type {{ paths: string[], count: number, sectionIndex?: number, title?: string }} */
+  let resolved;
+  if (hasIndex) {
+    const r = resolveSectionChunksByIndex(booksRoot, bookId, sectionRaw);
+    resolved = { paths: r.paths, count: r.count, sectionIndex: r.sectionIndex };
+  } else {
+    const r = resolveSectionChunksByTitle(booksRoot, bookId, title);
+    resolved = { paths: r.paths, count: r.count, title: r.title };
+  }
+
+  if (!resolved.count) {
+    return {
+      ok: false,
+      error: 'not_found',
+      message: hasIndex
+        ? `no chunks for sectionIndex ${sectionRaw}`
+        : `no chunks for title "${title}"`,
+      ...(hasIndex ? { sectionIndex: resolved.sectionIndex } : { title: resolved.title }),
+    };
+  }
+
+  const chunksDir = chunksHostDir(booksRoot, bookId);
+  if (!chunksDir) {
+    return { ok: false, error: 'unavailable', message: 'chunks directory unavailable' };
+  }
+
+  const parts = [];
+  let totalBytes = 0;
+  let truncated = false;
+  let chunkCount = 0;
+
+  for (const wsPath of resolved.paths) {
+    if (totalBytes >= maxBytes) {
+      truncated = true;
+      break;
+    }
+    const fileName = wsPath.split('/').pop();
+    if (!fileName) continue;
+    const full = join(chunksDir, fileName);
+    let st;
+    try {
+      st = lstatSync(full);
+    } catch {
+      continue;
+    }
+    if (st.isSymbolicLink() || !st.isFile()) continue;
+    let raw;
+    try {
+      raw = readFileSync(full, 'utf8');
+    } catch {
+      continue;
+    }
+    const projected = projectExtractContentForModel(raw);
+    if (parts.length > 0) parts.push('');
+    parts.push(projected);
+    totalBytes += Buffer.byteLength(projected, 'utf8');
+    chunkCount += 1;
+  }
+
+  if (chunkCount === 0) {
+    return {
+      ok: false,
+      error: 'not_found',
+      message: 'no readable chunks',
+      ...(hasIndex ? { sectionIndex: resolved.sectionIndex } : { title: resolved.title }),
+    };
+  }
+
+  return {
+    ok: true,
+    text: parts.join('\n'),
+    chunkCount,
+    ...(truncated ? { truncated: true } : {}),
+    ...(hasIndex
+      ? { sectionIndex: resolved.sectionIndex, via: 'sectionIndex' }
+      : { title: resolved.title, via: 'title' }),
   };
 }
 

@@ -45,13 +45,13 @@ export function buildSystemPrompt(input) {
       ? "You are wellread's Reading Assistant, primarily scoped to the current book; web_search may look up timely facts outside the book."
       : "You are wellread's Reading Assistant, scoped to the current book only.",
     `Current book: "${title}" (bookId=${input.bookId}).`,
-    `Extract: ${extractRoot}: UTF-8 text of this book: toc.md, section-index.json, chunks/*.md (frontmatter: title, sectionIndex, chunkIndex, cfi, endCfi), meta.json. Tools: resolve_section, read_file, grep, glob.`,
+    `Extract: ${extractRoot}: UTF-8 text of this book: toc.md, section-index.json, chunks/*.md (frontmatter: title, sectionIndex, chunkIndex, cfi, endCfi), meta.json. Tools: resolve_section, read_file, read_section_text, grep, glob.`,
     "Grounding is optional: answer freely when you already know enough; search the extract when you need this book's text; cite locations when you reference specific passages.",
     'Locate extract text without listing the whole tree:',
     '- Quotes in <reading_context> are the primary target when present.',
     '- "this page / current position / this passage": read_file focus_chunks only (leave section_chunks unread).',
-    '- "this chapter / whole section" or empty focus_chunks: section_chunks in order, or resolve_section(sectionIndex and/or title) then read_file; never glob extract/**/chunks/*.md to discover a section.',
-    `- section_chunk_count > ${SECTION_CHUNKS_ASK_THRESHOLD} (or section_chunks_note): report the count and ask before reading all.`,
+    '- "this chapter / whole section" or a summary/explain of a whole chapter: read_section_text(sectionIndex and/or title) returns the full concatenated section text in one call; never glob extract/**/chunks/*.md to discover a section.',
+    `- section_chunk_count > ${SECTION_CHUNKS_ASK_THRESHOLD} (or section_chunks_note): the section is large; read_section_text still reads it in one call (hundreds of chunks), so use it for whole-chapter tasks; ask only when the user gave a narrower target.`,
     '- extract_status missing: say extract is unavailable; stop empty glob/grep loops.',
     '- extract_status stale: tools still work (prefer resolve_section / scan paths).',
     '- grep for phrases; glob for notes paths (not section discovery).',
@@ -200,7 +200,7 @@ export function buildReadingContextEnvelope(input) {
     body.push(`${K.sectionChunkCount}: ${chunkCount}`);
     if (chunkCount > SECTION_CHUNKS_ASK_THRESHOLD) {
       body.push(
-        `${K.sectionChunksNote}: ${chunkCount} chunks (>${SECTION_CHUNKS_ASK_THRESHOLD}); report count and ask before reading all`,
+        `${K.sectionChunksNote}: ${chunkCount} chunks (>${SECTION_CHUNKS_ASK_THRESHOLD}); large section: read_section_text reads it in one call; ask only when the user gave a narrower target`,
       );
     }
     if (chunkPaths.length) {

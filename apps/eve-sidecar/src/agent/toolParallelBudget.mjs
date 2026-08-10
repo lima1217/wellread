@@ -18,6 +18,7 @@ export const READ_PARALLEL_TOOL_NAMES = new Set([
   'grep',
   'glob',
   'resolve_section',
+  'read_section_text',
 ]);
 
 /** @type {ReadonlySet<string>} */
@@ -71,7 +72,7 @@ export function createToolParallelBudget() {
           return {
             ok: false,
             error: 'too_many_parallel_tools',
-            message: `本 step 最多并行 ${MAX_PARALLEL_READ_TOOLS} 个读/检索工具（read_file / grep / glob / resolve_section）；超出的调用未执行，请分批读取。`,
+            message: `本 step 最多并行 ${MAX_PARALLEL_READ_TOOLS} 个读/检索工具（read_file / grep / glob / resolve_section / read_section_text）；超出的调用未执行，请分批读取。`,
             limit: MAX_PARALLEL_READ_TOOLS,
             toolName: name,
           };
