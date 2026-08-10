@@ -1,5 +1,13 @@
 {
   "releases": {
+    "1.2.4": {
+      "date": "2026-08-10",
+      "notes": [
+        "Assistant: Add read_section_text whole-chapter tool and align agent prompts",
+        "Assistant: Add rephrase bundled skill for Reading Assistant",
+        "Assistant: Translate bundled skill instructions to English"
+      ]
+    },
     "1.2.3": {
       "date": "2026-08-09",
       "notes": [
