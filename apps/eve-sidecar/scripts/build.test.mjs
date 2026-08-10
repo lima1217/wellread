@@ -85,7 +85,7 @@ describe('eve-sidecar build (.output packaging)', () => {
   it('copies bundled-skills next to the server package root', () => {
     const bundled = join(root, '.output', 'bundled-skills');
     const ids = readdirSync(bundled);
-    for (const id of ['explain', 'grill-me', 'note', 'socratic-check', 'translate']) {
+    for (const id of ['explain', 'grill-me', 'note', 'rephrase', 'socratic-check', 'translate']) {
       assert.ok(ids.includes(id), `expected bundled skill ${id}`);
       assert.ok(
         existsSync(join(bundled, id, 'SKILL.md')),

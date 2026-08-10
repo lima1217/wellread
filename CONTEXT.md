@@ -49,7 +49,7 @@ Canonical: ModelProfile（取代旧单轨 ModelConfig）。
 Reading Assistant 输入框 `/` 调用的扩展包。两层合并进 `/workspace/skills/<id>/`：
 
 - **user**：`Books/skills/<id>/`（可导入/删除）
-- **bundled**：`apps/eve-sidecar/bundled-skills/<id>/`（只读；默认 `explain`、`grill-me`、`note`、`socratic-check`、`translate`）
+- **bundled**：`apps/eve-sidecar/bundled-skills/<id>/`（只读；默认 `explain`、`grill-me`、`note`、`rephrase`、`socratic-check`、`translate`）
 
 同 id 时 **user 覆盖 bundled**（例外：`PACKAGE.md` / `AGENTS.md` / `tools/*` 始终 bundled，防指令注入）。隐藏无 user 覆盖的默认包：`Books/.wellread/disabled-bundled-skills.json`。
 
