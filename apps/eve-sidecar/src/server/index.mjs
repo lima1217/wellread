@@ -40,6 +40,7 @@ import {
   TURN_IN_FLIGHT_BODY,
   createTurnInFlightGate,
 } from './turnInFlight.mjs';
+import { testModelConnection } from './testModelConnection.mjs';
 import { waitForResponseEnd } from './waitForResponseEnd.mjs';
 
 const HOST = '127.0.0.1';
@@ -67,6 +68,11 @@ const dataDir = process.env.EVE_DATA_DIR || './.eve-data';
 const booksRootEnv = (process.env.EVE_BOOKS_ROOT || '').trim();
 
 mkdirSync(dataDir, { recursive: true });
+
+/** In-flight turn cancel handles per session — lets Stop release the turn gate
+ * without waiting for the client's socket close to propagate (plugin-http
+ * defers the close until the next SSE chunk, which can lag far behind Stop). */
+const turnAborters = new Map();
 
 const modelConfig = normalizeModelEnv({
   baseURL: process.env.EVE_MODEL_BASE_URL,
@@ -192,6 +198,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'POST' && path === '/eve/v1/test-model-connection') {
+      const body = await readJson(req);
+      const result = await testModelConnection({
+        baseURL: typeof body.baseURL === 'string' ? body.baseURL : '',
+        apiKey: typeof body.apiKey === 'string' ? body.apiKey : '',
+        apiMode: typeof body.apiMode === 'string' ? body.apiMode : undefined,
+      });
+      sendJson(res, 200, result, req);
+      return;
+    }
+
     if (req.method === 'GET' && path === '/eve/v1/sessions') {
       const bookId = url.searchParams.get('bookId') || undefined;
       sendJson(res, 200, { sessions: sessions.list(bookId) }, req);
@@ -255,6 +272,17 @@ const server = http.createServer(async (req, res) => {
     }
 
     const turnMatch = path.match(/^\/eve\/v1\/sessions\/([^/]+)\/turns$/);
+    const turnCancelMatch = path.match(/^\/eve\/v1\/sessions\/([^/]+)\/turns\/cancel$/);
+    if (req.method === 'POST' && turnCancelMatch) {
+      const id = decodePathParam(turnCancelMatch[1]);
+      if (!id || !isSafeSessionId(id)) {
+        sendJson(res, 400, { error: 'session_id_invalid' }, req);
+        return;
+      }
+      turnAborters.get(id)?.();
+      sendJson(res, 200, { ok: true }, req);
+      return;
+    }
     if (req.method === 'POST' && turnMatch) {
       const id = decodePathParam(turnMatch[1]);
       if (!id || !isSafeSessionId(id)) {
@@ -271,8 +299,15 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (!turnGate.tryAcquire(id)) {
+        if (process.env.EVE_GATE_LOG === '1') {
+          console.error(`[gate] 409 turn_in_flight for ${id}`);
+        }
         sendJson(res, 409, TURN_IN_FLIGHT_BODY, req);
         return;
+      }
+      const turnStartMs = Date.now();
+      if (process.env.EVE_GATE_LOG === '1') {
+        console.error(`[gate] turn acquired ${id}`);
       }
       try {
         const body = await readJson(req);
@@ -285,7 +320,9 @@ const server = http.createServer(async (req, res) => {
         const readerState = normalizeReaderState(body.readerState);
 
         // Client AbortController cancels the fetch; propagate into streamText.
-        const { signal: abortSignal, settle: settleAbort } = createHttpAbort(req, res);
+        const { signal: abortSignal, settle: settleAbort, cancel: cancelTurn } =
+          createHttpAbort(req, res);
+        turnAborters.set(id, cancelTurn);
 
         try {
           const stream = runTurn({
@@ -312,11 +349,19 @@ const server = http.createServer(async (req, res) => {
           // Cap finished wait so a missing/hung onFinish cannot pin turnGate forever
           // (waitForResponseEnd already has its own backstop).
           await waitForResponseEnd(res);
+          if (process.env.EVE_GATE_LOG === '1') {
+            console.error(
+              `[gate] response ended for ${id} writableEnded=${res.writableEnded} destroyed=${res.destroyed} after ${Date.now() - turnStartMs}ms`,
+            );
+          }
           const FINISHED_BACKSTOP_MS = 60_000;
           await Promise.race([
             Promise.resolve(stream.finished).catch(() => {}),
             new Promise((resolve) => setTimeout(resolve, FINISHED_BACKSTOP_MS)),
           ]);
+          if (process.env.EVE_GATE_LOG === '1') {
+            console.error(`[gate] finished settled for ${id} after ${Date.now() - turnStartMs}ms`);
+          }
           // No success-path re-save: onFinish / compress / dropUser already
           // persisted through persistSession.
         } catch (error) {
@@ -342,7 +387,11 @@ const server = http.createServer(async (req, res) => {
           settleAbort();
         }
       } finally {
+        turnAborters.delete(id);
         turnGate.release(id);
+        if (process.env.EVE_GATE_LOG === '1') {
+          console.error(`[gate] turn released ${id} after ${Date.now() - turnStartMs}ms`);
+        }
       }
       return;
     }

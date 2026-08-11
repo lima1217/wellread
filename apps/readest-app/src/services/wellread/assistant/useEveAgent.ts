@@ -7,6 +7,7 @@ import type { SessionToolTrace } from '@wellread/eve-message';
 import type { ReaderState } from '@wellread/reading-context';
 import { formatPendingQuotesForTurn } from '@wellread/quote-wire';
 import {
+  cancelEveTurn,
   createEveSession,
   getEveSession,
   normalizeEveMessage,
@@ -21,6 +22,7 @@ import type { PendingQuote } from './readingAssistantStore';
 import {
   isTurnInFlightError,
   TURN_IN_FLIGHT_RETRIES,
+  TURN_IN_FLIGHT_RETRY_CAP_MS,
   TURN_IN_FLIGHT_RETRY_MS,
 } from './turnLifecycle';
 
@@ -57,7 +59,12 @@ async function* streamEveTurnRetrying(
       if (!isTurnInFlightError(err) || attempt === TURN_IN_FLIGHT_RETRIES) {
         throw err;
       }
-      await new Promise((r) => setTimeout(r, TURN_IN_FLIGHT_RETRY_MS * (attempt + 1)));
+      await new Promise((r) =>
+        setTimeout(
+          r,
+          Math.min(TURN_IN_FLIGHT_RETRY_MS * (attempt + 1), TURN_IN_FLIGHT_RETRY_CAP_MS),
+        ),
+      );
     }
   }
   throw lastError;
@@ -199,6 +206,12 @@ export function useEveAgent(options: UseEveAgentOptions) {
     stoppingRef.current = true;
     abortRef.current?.abort();
     abortRef.current = null;
+    // Tell the sidecar to cancel the turn now: plugin-http defers the socket
+    // close until the next SSE chunk, so relying on the fetch abort alone can
+    // pin the per-session turn gate well past the next send's retry budget.
+    if (activeSessionIdRef.current) {
+      void cancelEveTurn(activeSessionIdRef.current);
+    }
     setInFlightTools([]);
     setError(null);
     // Keep UI composable; send() awaits turnPromiseRef before the next POST.

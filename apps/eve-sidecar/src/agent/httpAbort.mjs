@@ -6,7 +6,7 @@
 /**
  * @param {import('node:http').IncomingMessage} req
  * @param {import('node:http').ServerResponse} res
- * @returns {{ signal: AbortSignal, settle: () => void }}
+ * @returns {{ signal: AbortSignal, settle: () => void, cancel: () => void }}
  */
 export function createHttpAbort(req, res) {
   const ac = new AbortController();
@@ -14,6 +14,9 @@ export function createHttpAbort(req, res) {
 
   const trigger = () => {
     if (settled || ac.signal.aborted) return;
+    if (process.env.EVE_GATE_LOG === '1') {
+      console.error('[gate] abort trigger: client disconnected');
+    }
     ac.abort();
   };
 
@@ -36,7 +39,7 @@ export function createHttpAbort(req, res) {
     trigger();
   });
 
-  return { signal: ac.signal, settle };
+  return { signal: ac.signal, settle, cancel: () => ac.abort() };
 }
 
 /**

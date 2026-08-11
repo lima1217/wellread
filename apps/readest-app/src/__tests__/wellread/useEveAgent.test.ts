@@ -5,6 +5,7 @@ import { eventDispatcher } from '@/utils/event';
 const createEveSession = vi.fn();
 const getEveSession = vi.fn();
 const streamEveTurn = vi.fn();
+const cancelEveTurn = vi.fn();
 
 vi.mock('@/services/wellread/assistant/eveClient', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/wellread/assistant/eveClient')>();
@@ -13,6 +14,7 @@ vi.mock('@/services/wellread/assistant/eveClient', async (importOriginal) => {
     createEveSession: (...args: unknown[]) => createEveSession(...args),
     getEveSession: (...args: unknown[]) => getEveSession(...args),
     streamEveTurn: (...args: unknown[]) => streamEveTurn(...args),
+    cancelEveTurn: (...args: unknown[]) => cancelEveTurn(...args),
   };
 });
 
@@ -65,6 +67,7 @@ describe('useEveAgent', () => {
     createEveSession.mockReset();
     getEveSession.mockReset();
     streamEveTurn.mockReset();
+    cancelEveTurn.mockReset();
   });
 
   it('does not create a session on mount when sessionId is null', async () => {
@@ -955,6 +958,48 @@ describe('useEveAgent', () => {
     ]);
     expect(result.current.status).toBe('ready');
     expect(result.current.error).toBeNull();
+  });
+
+  it('asks the sidecar to cancel the active session turn on Stop', async () => {
+    getEveSession.mockResolvedValue({
+      id: 'ses_existing',
+      bookId: 'book-1',
+      title: 'Chat',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [{ id: 'kept', role: 'user', content: 'prior', createdAt: 1 }],
+    });
+
+    streamEveTurn.mockImplementation(async function* (_sid, _msg, signal: AbortSignal) {
+      await new Promise<never>((_resolve, reject) => {
+        const fail = () => reject(new Error('Request cancelled'));
+        if (signal.aborted) fail();
+        else signal.addEventListener('abort', fail, { once: true });
+      });
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1);
+    });
+
+    await act(async () => {
+      result.current.setComposer('stop me');
+    });
+    let sendPromise!: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.send();
+    });
+    await act(async () => {
+      result.current.stop();
+    });
+    await act(async () => {
+      await sendPromise;
+    });
+
+    expect(cancelEveTurn).toHaveBeenCalledWith('ses_existing');
   });
 
   it('does not surface empty-reply errors that arrive after Stop', async () => {

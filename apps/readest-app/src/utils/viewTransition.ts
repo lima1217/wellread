@@ -20,3 +20,42 @@ export const detectViewTransitionGroup = (): boolean =>
   typeof CSS !== 'undefined' &&
   typeof CSS.supports === 'function' &&
   CSS.supports('view-transition-group', 'nearest');
+
+/** Safari/WebKit throws when startViewTransition is called while one is active. */
+export const isViewTransitionAbortError = (error: unknown): boolean =>
+  typeof DOMException !== 'undefined' &&
+  error instanceof DOMException &&
+  error.name === 'AbortError' &&
+  /view transition/i.test(error.message);
+
+let viewTransitionAbortGuardInstalled = false;
+
+/**
+ * WebKit aborts the *previous* transition's `finished` promise when a new
+ * `startViewTransition` begins. next-view-transitions only awaits
+ * `transition.ready`, so that abort lands as an unhandled rejection that
+ * Next's dev overlay surfaces ("Old view transition aborted by new view
+ * transition"). Attach a handler to `finished` at creation so the AbortError
+ * is contained, while genuine (non-abort) failures stay loud and other
+ * consumers of `transition.finished` still observe the rejection.
+ */
+export const installViewTransitionAbortGuard = (): void => {
+  if (
+    viewTransitionAbortGuardInstalled ||
+    typeof document === 'undefined' ||
+    typeof document.startViewTransition !== 'function'
+  ) {
+    return;
+  }
+  viewTransitionAbortGuardInstalled = true;
+  const native = document.startViewTransition.bind(document);
+  document.startViewTransition = ((callback?: Parameters<typeof native>[0]) => {
+    const transition = native(callback);
+    void transition.finished.catch((error: unknown) => {
+      if (!isViewTransitionAbortError(error)) {
+        throw error;
+      }
+    });
+    return transition;
+  }) as typeof document.startViewTransition;
+};

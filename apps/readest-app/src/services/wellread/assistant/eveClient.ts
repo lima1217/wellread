@@ -234,6 +234,23 @@ export async function* streamEveTurn(
   }
 }
 
+/**
+ * Ask the sidecar to abort an in-flight turn for a session (Stop path).
+ * Fire-and-forget: the socket-close abort remains the fallback when this
+ * races the turn's start.
+ */
+export async function cancelEveTurn(sessionId: string): Promise<void> {
+  const { baseUrl, token } = base();
+  try {
+    await eveFetch(`${baseUrl}/eve/v1/sessions/${encodeURIComponent(sessionId)}/turns/cancel`, {
+      method: 'POST',
+      headers: authHeaders(token),
+    });
+  } catch {
+    // Ignore: the aborted fetch still closes the connection eventually.
+  }
+}
+
 /** Flatten UIMessage → EveMessage for store/render helpers (shared converter). */
 export function uiMessageToEveMessage(
   message: UIMessage,

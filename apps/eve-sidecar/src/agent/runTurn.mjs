@@ -170,6 +170,14 @@ export function runTurn(input) {
   const markFailed = () => {
     skipPersist = true;
     dropUser();
+    if (process.env.EVE_GATE_LOG === '1') {
+      console.error('[gate] markFailed: abort/error cleanup done, resolving finished');
+    }
+    // Cleanup is synchronous (dropUser + persistSession), so the turn is
+    // fully released here. Resolving finished now lets the HTTP layer drop the
+    // turn gate as soon as Stop's cleanup lands instead of waiting for the SDK
+    // stream to close (which lags when the client already disconnected).
+    resolveFinished();
   };
   const failure = createTurnFailure({ abortSignal, onFailed: markFailed });
 
@@ -178,7 +186,8 @@ export function runTurn(input) {
   // clones its parts into this turn's responseMessage (first reply + second).
   const originalMessages = session.messages.map(sessionToUIMessage);
 
-  /** Resolves after onFinish persist/dropUser — HTTP layer awaits before turnGate.release. */
+  /** Resolves after onFinish persist/dropUser, or immediately when markFailed
+   * completes its synchronous cleanup — HTTP layer awaits before turnGate.release. */
   let resolveFinished = () => {};
   const finished = new Promise((resolve) => {
     resolveFinished = resolve;

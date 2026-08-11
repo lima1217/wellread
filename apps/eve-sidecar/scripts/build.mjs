@@ -38,6 +38,23 @@ function copyRuntimeTree(fromDir, toDir) {
   }
 }
 
+/** server/ root modules ship flat next to createModel.mjs, so their
+ * `../createModel.mjs` / `../agent/` imports need the same rewrite as the
+ * entry. Subdirectories (agent/, books/) keep their relative depth. */
+function copyServerTree(fromDir, toDir) {
+  mkdirSync(toDir, { recursive: true });
+  for (const name of readdirSync(fromDir, { withFileTypes: true })) {
+    if (name.name.endsWith('.test.mjs')) continue;
+    const src = join(fromDir, name.name);
+    const dest = join(toDir, name.name);
+    if (name.isDirectory()) {
+      copyRuntimeTree(src, dest);
+    } else if (name.name.endsWith('.mjs')) {
+      rewriteServerEntry(src, dest);
+    }
+  }
+}
+
 /** Facade + host adapters: any `src/createModel*.mjs` (except tests) ships flat. */
 function copyCreateModelModules() {
   const srcDir = join(root, 'src');
@@ -98,8 +115,7 @@ export function build() {
   copyRuntimeTree(join(root, 'src', 'agent'), join(outServer, 'agent'));
   copyRuntimeTree(join(root, 'src', 'books'), join(outServer, 'books'));
   // Sibling modules under server/ (readJson, turnInFlight, …) must ship with the entry.
-  copyRuntimeTree(join(root, 'src', 'server'), outServer);
-  rewriteServerEntry(join(root, 'src', 'server', 'index.mjs'), join(outServer, 'index.mjs'));
+  copyServerTree(join(root, 'src', 'server'), outServer);
   // Read-only default skills: same relative path as repo (…/bundled-skills from agent/skills).
   cpSync(join(root, 'bundled-skills'), join(outRoot, 'bundled-skills'), { recursive: true });
   installProdNodeModules();

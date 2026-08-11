@@ -2,13 +2,9 @@ import { useMemo } from 'react';
 import { useEnv } from '@/context/EnvContext';
 import { useRouter } from 'next/navigation';
 import { useTransitionRouter } from 'next-view-transitions';
+import { isViewTransitionAbortError } from '@/utils/viewTransition';
 
-/** Safari/WebKit throws when startViewTransition is called while one is active. */
-export const isViewTransitionAbortError = (error: unknown): boolean =>
-  typeof DOMException !== 'undefined' &&
-  error instanceof DOMException &&
-  error.name === 'AbortError' &&
-  /view transition/i.test(error.message);
+export { isViewTransitionAbortError };
 
 export const useAppRouter = () => {
   const { appService } = useEnv();

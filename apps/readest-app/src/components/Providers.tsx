@@ -9,6 +9,7 @@ import { initSystemThemeListener, loadDataTheme } from '@/store/themeStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useCustomTextureStore } from '@/store/customTextureStore';
 import { useSafeAreaInsets } from '@/hooks/useSafeAreaInsets';
+import { installViewTransitionAbortGuard } from '@/utils/viewTransition';
 import { useSettingsSync } from '@/hooks/useSettingsSync';
 import { useDefaultIconSize } from '@/hooks/useResponsiveSize';
 import { useBackgroundTexture } from '@/hooks/useBackgroundTexture';
@@ -44,6 +45,8 @@ const Providers = ({ children }: { children: React.ReactNode }) => {
   useSettingsSync(); // Adopt global settings broadcast by other windows (#4580)
 
   useEffect(() => {
+    installViewTransitionAbortGuard();
+
     const handlerLanguageChanged = (lng: string) => {
       document.documentElement.lang = lng;
       // Set RTL class on document for targeted styling without affecting layout

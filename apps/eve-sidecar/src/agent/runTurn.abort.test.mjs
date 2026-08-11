@@ -123,6 +123,26 @@ describe('runTurn abort', () => {
     );
   });
 
+  it('resolves finished when the turn is aborted even if the stream is not drained', async () => {
+    const session = emptySession();
+    const ac = new AbortController();
+
+    const stream = runTurn({
+      model: /** @type {any} */ (abortableModel(ac)),
+      session,
+      userMessage: 'keep going',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      abortSignal: ac.signal,
+    });
+
+    const settled = await Promise.race([
+      stream.finished.then(() => 'finished'),
+      new Promise((resolve) => setTimeout(() => resolve('timeout'), 500)),
+    ]);
+    assert.equal(settled, 'finished');
+    assert.equal(session.messages.length, 0);
+  });
+
   it('rolls back the user message when the model returns an empty reply', async () => {
     const session = emptySession();
 

@@ -1,6 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { detectViewTransitionGroup, detectViewTransitionsAPI } from '@/utils/viewTransition';
+import {
+  detectViewTransitionGroup,
+  detectViewTransitionsAPI,
+  installViewTransitionAbortGuard,
+  isViewTransitionAbortError,
+} from '@/utils/viewTransition';
 
 // The DOM lib types startViewTransition as always present; go through a loose
 // shape so the stub can also remove it.
@@ -53,5 +58,51 @@ describe('detectViewTransitionGroup', () => {
   it('is false without the API even if the group query matches', () => {
     stubEngine({ startViewTransition: false, nestedGroups: true });
     expect(detectViewTransitionGroup()).toBe(false);
+  });
+});
+
+describe('installViewTransitionAbortGuard', () => {
+  type VTTransition = { finished: Promise<unknown>; ready: Promise<unknown> };
+  type VTNative = (cb?: () => void) => VTTransition;
+
+  let native: ReturnType<typeof vi.fn<VTNative>>;
+  let abortError: DOMException;
+
+  beforeEach(() => {
+    abortError = new DOMException(
+      'Old view transition aborted by new view transition.',
+      'AbortError',
+    );
+    native = vi.fn<VTNative>(() => ({
+      finished: Promise.reject(abortError),
+      ready: Promise.resolve(),
+    }));
+    (document as unknown as { startViewTransition: VTNative }).startViewTransition = native;
+  });
+
+  it('contains the abort rejection while consumers still observe finished', async () => {
+    installViewTransitionAbortGuard();
+    const transition = (document.startViewTransition as unknown as VTNative)(() => {});
+    await expect(transition.finished).rejects.toBe(abortError);
+    expect(native).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a no-op after the first install', () => {
+    installViewTransitionAbortGuard();
+    installViewTransitionAbortGuard();
+    expect(document.startViewTransition).toBe(native);
+  });
+
+  it('classifies view-transition AbortErrors and rejects other errors', () => {
+    expect(
+      isViewTransitionAbortError(
+        new DOMException('Old view transition aborted by new view transition.', 'AbortError'),
+      ),
+    ).toBe(true);
+    expect(
+      isViewTransitionAbortError(new DOMException('The operation was aborted.', 'AbortError')),
+    ).toBe(false);
+    expect(isViewTransitionAbortError(new Error('boom'))).toBe(false);
+    expect(isViewTransitionAbortError(null)).toBe(false);
   });
 });
