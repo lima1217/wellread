@@ -1,5 +1,13 @@
 {
   "releases": {
+    "1.2.5": {
+      "date": "2026-08-11",
+      "notes": [
+        "Assistant: Stop cancels Eve turns server-side, with a model connection test and view transition guard",
+        "Assistant: Reasoning fields follow upstream protocol standards and DeepSeek no longer auto-switches to Responses",
+        "Sidecar: Learned reasoning dialect scoped to the host with web_search_call replay across turns"
+      ]
+    },
     "1.2.4": {
       "date": "2026-08-10",
       "notes": [
