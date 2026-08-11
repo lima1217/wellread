@@ -5,7 +5,7 @@
  */
 
 /**
- * @typedef {{ type: 'web_search_call', id: string, status: string }} WebSearchCallItem
+ * @typedef {{ type: 'web_search_call', id: string, status?: string, action?: unknown }} WebSearchCallItem
  */
 
 /**
@@ -22,7 +22,11 @@ export function isWebSearchToolName(name) {
 }
 
 /**
- * Append incoming calls into `target` (mutates), skipping duplicate ids.
+ * Append incoming calls into `target` (mutates), deduping by id. When an
+ * incoming call carries the full server `action` shape and the target only
+ * holds a simplified placeholder with the same id, the placeholder is
+ * upgraded in place (strict gateways reject `web_search_call` without
+ * `action`, so the real item must win).
  *
  * @param {WebSearchCallItem[]} target
  * @param {WebSearchCallItem[]} incoming
@@ -32,13 +36,49 @@ export function mergeWebSearchCalls(target, incoming) {
   if (!Array.isArray(target) || !Array.isArray(incoming) || !incoming.length) {
     return target;
   }
-  const seen = new Set(target.map((c) => c.id));
   for (const call of incoming) {
-    if (!call?.id || seen.has(call.id)) continue;
-    seen.add(call.id);
+    if (!call || typeof call !== 'object' || typeof call.id !== 'string' || !call.id) {
+      continue;
+    }
+    const idx = target.findIndex((c) => c && c.id === call.id);
+    if (idx >= 0) {
+      const existing = target[idx];
+      if (existing && existing.action == null && call.action != null) {
+        target[idx] = call;
+      }
+      continue;
+    }
     target.push(call);
   }
   return target;
+}
+
+/**
+ * Capture a real server-emitted `web_search_call` item (with its `action`)
+ * so replay sends back exactly the shape the gateway accepted. Upgrades a
+ * simplified placeholder with the same id in place; items without `action`
+ * are ignored so hosts that emit action-less calls keep the fallback path.
+ *
+ * @param {WebSearchCallItem[] | undefined} target
+ * @param {unknown} item
+ * @returns {void}
+ */
+export function captureWebSearchCall(target, item) {
+  if (!Array.isArray(target) || !item || typeof item !== 'object') return;
+  const row = /** @type {Record<string, unknown>} */ (item);
+  if (row.type !== 'web_search_call') return;
+  const id = typeof row.id === 'string' ? row.id : '';
+  if (!id || row.action == null) return;
+  const call = /** @type {WebSearchCallItem} */ (row);
+  const idx = target.findIndex((c) => c && c.id === id);
+  if (idx >= 0) {
+    const existing = target[idx];
+    if (existing && existing.action == null) {
+      target[idx] = call;
+    }
+    return;
+  }
+  target.push(call);
 }
 
 /**

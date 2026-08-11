@@ -3,10 +3,7 @@
  * apiKey lives in OS keychain per profile id, never on these types.
  */
 
-import { isDeepSeekApiHost } from '@wellread/eve-message';
 import { v4 as uuidv4 } from 'uuid';
-
-export { isDeepSeekApiHost };
 
 /** Which OpenAI-style endpoint family the sidecar should call. */
 export type ModelApiMode = 'chat' | 'responses';
@@ -45,8 +42,9 @@ const DEFAULT_PROFILE_FIELDS = {
   baseURL: 'https://api.deepseek.com/v1',
   modelId: 'deepseek-v4-flash',
   contextWindowTokens: 1_000_000,
-  // Responses unlocks DeepSeek server-side web_search for Reading Assistant.
-  apiMode: 'responses' as ModelApiMode,
+  // Generic OpenAI-compatible default; users pick Responses per profile when
+  // their host supports it (e.g. server-side web_search).
+  apiMode: 'chat' as ModelApiMode,
 };
 
 export function modelApiKeySecureItem(profileId: string): string {
@@ -92,8 +90,7 @@ function normalizeProfile(
   fallbackName = DEFAULT_PROFILE_NAME,
 ): ModelProfile {
   const baseURL = partial.baseURL?.trim() || DEFAULT_PROFILE_FIELDS.baseURL;
-  // DeepSeek Reading Assistant always uses Responses so native web_search works.
-  const apiMode = isDeepSeekApiHost(baseURL) ? 'responses' : normalizeModelApiMode(partial.apiMode);
+  const apiMode = normalizeModelApiMode(partial.apiMode);
   return {
     id: partial.id,
     name: partial.name?.trim() || fallbackName,

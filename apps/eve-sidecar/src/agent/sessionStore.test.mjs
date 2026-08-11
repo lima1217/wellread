@@ -19,6 +19,7 @@ describe('normalizeSession', () => {
     const session = normalizeSession({
       id: 'ses_0123456789abcdef',
       bookId: 'book-a',
+      reasoningDialect: 'deepseek',
       messages: [
         { id: 'm1', role: 'user', content: 'hi', createdAt: 1 },
         { id: 'bad', role: 'tool', content: 'nope', createdAt: 2 },
@@ -31,6 +32,63 @@ describe('normalizeSession', () => {
     assert.equal(session.messages.length, 2);
     assert.equal(session.messages[0].id, 'm1');
     assert.equal(session.messages[1].compacted, true);
+    assert.equal(session.reasoningDialect, 'deepseek');
+  });
+
+  it('keeps only valid reasoningDialect values and drops the rest', () => {
+    assert.equal(normalizeSession({ id: 'ses_0123456789abcdef', bookId: 'a', messages: [], reasoningDialect: 'openai' }).reasoningDialect, 'openai');
+    assert.equal(normalizeSession({ id: 'ses_0123456789abcdef', bookId: 'a', messages: [], reasoningDialect: 'glm' }).reasoningDialect, undefined);
+  });
+
+  it('keeps the dialect host key when it is a string and drops it otherwise', () => {
+    const withHost = normalizeSession({
+      id: 'ses_0123456789abcdef',
+      bookId: 'a',
+      messages: [],
+      reasoningDialect: 'deepseek',
+      reasoningDialectBaseURL: 'https://api.deepseek.com/v1',
+    });
+    assert.equal(withHost.reasoningDialect, 'deepseek');
+    assert.equal(withHost.reasoningDialectBaseURL, 'https://api.deepseek.com/v1');
+
+    const badHost = normalizeSession({
+      id: 'ses_0123456789abcdef',
+      bookId: 'a',
+      messages: [],
+      reasoningDialect: 'deepseek',
+      reasoningDialectBaseURL: 42,
+    });
+    assert.equal(badHost.reasoningDialect, 'deepseek');
+    assert.equal(badHost.reasoningDialectBaseURL, undefined);
+  });
+
+  it('normalizes persisted web_search_call items and drops malformed ones', () => {
+    const session = normalizeSession({
+      id: 'ses_0123456789abcdef',
+      bookId: 'a',
+      messages: [],
+      webSearchCalls: [
+        {
+          type: 'web_search_call',
+          id: 'ws_1',
+          status: 'completed',
+          action: { type: 'search', query: 'q1', results: [] },
+        },
+        { type: 'web_search_call', id: 'ws_2', status: 'completed' },
+        { type: 'reasoning', id: 'rs_1' },
+        { id: 'ws_bad' },
+        null,
+      ],
+    });
+    assert.deepEqual(session.webSearchCalls, [
+      {
+        type: 'web_search_call',
+        id: 'ws_1',
+        status: 'completed',
+        action: { type: 'search', query: 'q1', results: [] },
+      },
+      { type: 'web_search_call', id: 'ws_2', status: 'completed' },
+    ]);
   });
 });
 

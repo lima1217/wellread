@@ -295,3 +295,51 @@ describe('runTurn model history', () => {
     assert.doesNotMatch(systemBlob, /Available skills/);
   });
 });
+
+describe('runTurn reasoningDialect host scoping', () => {
+  function sessionWithDialect() {
+    return {
+      ...emptySession(),
+      reasoningDialect: 'deepseek',
+      reasoningDialectBaseURL: 'https://api.deepseek.com/v1',
+    };
+  }
+
+  it('drops a dialect persisted from a different host', async () => {
+    const session = sessionWithDialect();
+    /** @type {any[]} */
+    const persisted = [];
+    await run({
+      model: /** @type {any} */ (answerModel('ok')),
+      session,
+      userMessage: 'hi',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools: {},
+      baseURL: 'https://api.openai.com/v1',
+      persistSession: (s) => persisted.push(s),
+      generateTextFn: async () => ({ text: '', usage: {} }),
+    });
+    assert.ok(persisted.length);
+    assert.equal('reasoningDialect' in persisted[0], false);
+    assert.equal('reasoningDialectBaseURL' in persisted[0], false);
+  });
+
+  it('keeps a dialect learned from the same host', async () => {
+    const session = sessionWithDialect();
+    /** @type {any[]} */
+    const persisted = [];
+    await run({
+      model: /** @type {any} */ (answerModel('ok')),
+      session,
+      userMessage: 'hi',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      tools: {},
+      baseURL: 'https://api.deepseek.com/v1/',
+      persistSession: (s) => persisted.push(s),
+      generateTextFn: async () => ({ text: '', usage: {} }),
+    });
+    assert.ok(persisted.length);
+    assert.equal(persisted[0].reasoningDialect, 'deepseek');
+    assert.equal(persisted[0].reasoningDialectBaseURL, 'api.deepseek.com');
+  });
+});

@@ -112,3 +112,7 @@ Every new UI widget must look right under `[data-eink='true']`. E-ink screens ha
 - **Don't rely on color/shadow alone for hierarchy.** Two same-tone buttons differ only by hover on color themes, and hover doesn't exist on e-ink touchscreens. Pair a borderless ghost (cancel) with a solid CTA (submit) so eink can invert one without flattening the difference.
 
 When in doubt, toggle E-ink in Settings → Misc and check. The rules in `globals.css` cover most cases automatically, but composite components (custom buttons, layered cards) often need `eink-bordered` on the right element to stay legible.
+
+### macOS Release
+
+To build and publish a new macOS release (Apple Silicon + Intel, DMG + updater bundles + `latest.json`), follow [docs/macos-release.md](docs/macos-release.md). It covers version bumping, dual-arch cross-compilation with `rustup`, updater signing (`.secrets/wellread.key`, empty password), the `hdiutil` DMG workaround for macOS 26, and the GitHub Release asset checklist.

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  captureWebSearchCall,
   collectWebSearchCallsForReplay,
   collectWebSearchCallsFromToolTraces,
   injectWebSearchCallsIntoInput,
@@ -111,6 +112,69 @@ describe('mergeWebSearchCalls', () => {
       { type: 'web_search_call', id: 'ws_2', status: 'completed' },
     ]);
   });
+
+  it('upgrades a simplified placeholder when a real item arrives', () => {
+    const target = collectWebSearchCallsForReplay([
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'ws_1',
+            toolName: 'web_search',
+            providerExecuted: true,
+            input: {},
+          },
+        ],
+      },
+    ]);
+    const real = {
+      type: 'web_search_call',
+      id: 'ws_1',
+      status: 'completed',
+      action: { type: 'search', query: 'q1', results: [] },
+    };
+    mergeWebSearchCalls(target, [real]);
+    assert.deepEqual(target, [real]);
+  });
+});
+
+describe('captureWebSearchCall', () => {
+  it('captures real server items with action', () => {
+    /** @type {Array<{ type: 'web_search_call', id: string, action?: unknown }>} */
+    const target = [];
+    captureWebSearchCall(target, {
+      type: 'web_search_call',
+      id: 'ws_1',
+      status: 'completed',
+      action: { type: 'search', query: 'q1', results: [] },
+    });
+    assert.equal(target.length, 1);
+    assert.equal(target[0].id, 'ws_1');
+    assert.deepEqual(target[0].action, { type: 'search', query: 'q1', results: [] });
+  });
+
+  it('ignores action-less items and non web_search_call types', () => {
+    /** @type {Array<{ type: 'web_search_call', id: string, action?: unknown }>} */
+    const target = [];
+    captureWebSearchCall(target, { type: 'web_search_call', id: 'ws_1', status: 'completed' });
+    captureWebSearchCall(target, { type: 'reasoning', id: 'rs_1' });
+    assert.deepEqual(target, []);
+  });
+
+  it('upgrades a placeholder with the same id in place', () => {
+    const target = [
+      { type: 'web_search_call', id: 'ws_1', status: 'completed' },
+    ];
+    const real = {
+      type: 'web_search_call',
+      id: 'ws_1',
+      status: 'completed',
+      action: { type: 'search', query: 'q1', results: [] },
+    };
+    captureWebSearchCall(target, real);
+    assert.deepEqual(target, [real]);
+  });
 });
 
 describe('injectWebSearchCallsIntoInput', () => {
@@ -145,5 +209,19 @@ describe('injectWebSearchCallsIntoInput', () => {
       { type: 'web_search_call', id: 'ws_2', status: 'completed' },
       { role: 'user', content: 'q' },
     ]);
+  });
+
+  it('injects real items with action verbatim', () => {
+    const real = {
+      type: 'web_search_call',
+      id: 'ws_1',
+      status: 'completed',
+      action: { type: 'search', query: 'q1', results: [{ title: 't' }] },
+    };
+    const next = injectWebSearchCallsIntoInput(
+      [{ type: 'message', role: 'user', content: 'q2' }],
+      [real],
+    );
+    assert.deepEqual(next, [real, { type: 'message', role: 'user', content: 'q2' }]);
   });
 });

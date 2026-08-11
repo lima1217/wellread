@@ -32,7 +32,12 @@ export function isSafeSessionId(id) {
  *
  * @typedef {import('@wellread/eve-message').SessionMessage} SessionMessage
  *
- * @typedef {SessionMeta & { messages: SessionMessage[] }} Session
+ * @typedef {SessionMeta & {
+ *   messages: SessionMessage[],
+ *   reasoningDialect?: 'deepseek' | 'openai',
+ *   reasoningDialectBaseURL?: string,
+ *   webSearchCalls?: Array<import('./webSearchReplay.mjs').WebSearchCallItem>,
+ * }} Session
  */
 
 /** Default title stamped at create time (History distinguishes after first turn). */
@@ -101,6 +106,32 @@ export function normalizeSessionMessage(raw) {
 }
 
 /**
+ * Keep only well-formed web_search_call items on the session. `action` is
+ * preserved verbatim (it can be large) because replay must send back the
+ * exact shape a strict gateway accepted.
+ *
+ * @param {unknown} raw
+ * @returns {Session['webSearchCalls']}
+ */
+function normalizeWebSearchCalls(raw) {
+  if (!Array.isArray(raw)) return undefined;
+  /** @type {NonNullable<Session['webSearchCalls']>} */
+  const out = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const row = /** @type {Record<string, unknown>} */ (item);
+    if (row.type !== 'web_search_call') continue;
+    if (typeof row.id !== 'string' || !row.id) continue;
+    /** @type {NonNullable<Session['webSearchCalls']>[number]} */
+    const normalized = { type: 'web_search_call', id: row.id };
+    if (typeof row.status === 'string' && row.status) normalized.status = row.status;
+    if (row.action != null) normalized.action = row.action;
+    out.push(normalized);
+  }
+  return out.length ? out : undefined;
+}
+
+/**
  * Normalize a session loaded from disk (or a cast JSON body).
  * Missing/corrupt containers become safe empties so callers can .map without 500s.
  * @param {unknown} raw
@@ -128,6 +159,15 @@ export function normalizeSession(raw) {
     ),
     createdAt,
     updatedAt,
+    reasoningDialect:
+      s.reasoningDialect === 'deepseek' || s.reasoningDialect === 'openai'
+        ? s.reasoningDialect
+        : undefined,
+    reasoningDialectBaseURL:
+      typeof s.reasoningDialectBaseURL === 'string' && s.reasoningDialectBaseURL
+        ? s.reasoningDialectBaseURL
+        : undefined,
+    webSearchCalls: normalizeWebSearchCalls(s.webSearchCalls),
     messages,
   };
 }

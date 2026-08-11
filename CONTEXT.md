@@ -36,7 +36,7 @@ Canonical: 选区进 Pending Quote，不进 composer 草稿。
 
 ## Thinking Mode（Think/Fast）
 
-Composer 二档：Think = 思考开，Fast = 思考关。默认 Fast；写入用户全局设置。sidecar 在支持扩展的主机上：Think → `thinking: enabled` + `reasoning_effort: high`；Fast → `thinking: disabled`。
+Composer 二档：Think = 思考开，Fast = 思考关。默认 Fast；写入用户全局设置。请求侧只发协议标准字段：Responses 模式 Think → `reasoning.effort: high`、Fast → `reasoning.effort: none`；chat 模式不注入厂商私有 `thinking` 字段（推理模型默认思考，显示与否由 sidecar 决定）。思考内容的展示按响应实际形状自适应：`reasoning_content`（chat）/ `response.reasoning_text.*`（DeepSeek 方言 Responses）转发给 UI，`reasoning_summary_text.*`（OpenAI 方言）原样放行；Fast 模式模型可能仍在思考，只是 UI 不显示。
 
 ## ModelProfile（模型配置档）
 

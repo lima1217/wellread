@@ -44,6 +44,7 @@ import {
   collectWebSearchCallsFromToolTraces,
   mergeWebSearchCalls,
 } from './webSearchReplay.mjs';
+import { normalizeHostKey } from '../createModel.adapters.mjs';
 
 /** Fallback when caller omits contextWindowTokens (matches createModel default). */
 const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
@@ -73,7 +74,36 @@ export function runTurn(input) {
   const { model, session, userMessage, getBooksRoot, abortSignal } = input;
   // Mid-turn + onFinish own durability via persistSession. Server catch-path
   // save is only a crash belt when the stream throws before onFinish.
-  const persistSession = input.persistSession;
+  /** @type {import('../createModel.adapters.mjs').TurnFetchStore | undefined} */
+  let turnStore;
+  // Persist the reasoning dialect learned from the upstream so the next turn
+  // replays history items in the shape that upstream accepts. Dialect is
+  // host-scoped: a model switch must not replay the old host's reasoning
+  // shape into the new gateway, so a mismatch drops the learned value.
+  const persistSession = (s) => {
+    if (s && turnStore) {
+      if (turnStore.reasoningDialect) {
+        s.reasoningDialect = turnStore.reasoningDialect;
+        s.reasoningDialectBaseURL = normalizeHostKey(input.baseURL);
+      } else {
+        delete s.reasoningDialect;
+        delete s.reasoningDialectBaseURL;
+      }
+    }
+    // Persist only the real server-emitted web_search_call items (with
+    // `action`): the next turn seeds replay from them so strict gateways
+    // receive the exact shape they accepted instead of a simplified stub.
+    if (s && Array.isArray(turnStore?.webSearchCallsToReplay)) {
+      const real = turnStore.webSearchCallsToReplay.filter(
+        (c) => c && typeof c === 'object' && c.action != null,
+      );
+      if (real.length) {
+        s.webSearchCalls =
+          /** @type {import('./sessionStore.mjs').Session['webSearchCalls']} */ (real);
+      }
+    }
+    input.persistSession?.(s);
+  };
   const userId = `msg_${randomBytes(6).toString('hex')}`;
 
   const ctx = prepareTurnContext({
@@ -256,25 +286,44 @@ export function runTurn(input) {
       // Mutable list shared with fetch patch via ALS. Must stay the same array
       // so prepareStep can append same-turn provider web_search ids before the
       // next Responses request (SDK drops providerExecuted under store:false).
-      const webSearchCallsToReplay = collectWebSearchCallsForReplay(historyMessages);
+      // Seed from the real items persisted after previous turns, then fill
+      // gaps with the SDK-derived simplified shapes (same ids are deduped).
+      const webSearchCallsToReplay = Array.isArray(session.webSearchCalls)
+        ? session.webSearchCalls
+            .filter(
+              (c) => c && typeof c === 'object' && c.type === 'web_search_call' && typeof c.id === 'string' && c.id,
+            )
+            .map((c) => ({ ...c }))
+        : [];
+      mergeWebSearchCalls(
+        webSearchCallsToReplay,
+        collectWebSearchCallsForReplay(historyMessages),
+      );
       mergeWebSearchCalls(
         webSearchCallsToReplay,
         collectWebSearchCallsFromToolTraces(session.messages),
       );
 
       try {
+        const hostKey = normalizeHostKey(input.baseURL);
+        turnStore = {
+          thinkingMode,
+          onReasoningDelta:
+            thinkingMode === 'think'
+              ? (delta) => {
+                  if (abortSignal?.aborted) return;
+                  reasoning.writeDelta(delta);
+                }
+              : undefined,
+          webSearchCallsToReplay,
+          reasoningDialect:
+            session.reasoningDialect &&
+            normalizeHostKey(session.reasoningDialectBaseURL) === hostKey
+              ? session.reasoningDialect
+              : undefined,
+        };
         await turnFetchContext.run(
-          {
-            thinkingMode,
-            onReasoningDelta:
-              thinkingMode === 'think'
-                ? (delta) => {
-                    if (abortSignal?.aborted) return;
-                    reasoning.writeDelta(delta);
-                  }
-                : undefined,
-            webSearchCallsToReplay,
-          },
+          turnStore,
           async () => {
             const result = streamText(
               /** @type {Parameters<typeof streamText>[0]} */ ({

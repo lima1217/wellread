@@ -166,7 +166,7 @@ describe('eval: reading contract', () => {
       root,
     );
     assert.match(modelMessage, /Call me Ishmael/);
-    assert.match(modelMessage, /解释|卡点|白话/i);
+    assert.match(modelMessage, /stuck|blocker|plain words/i);
     assert.doesNotMatch(modelMessage, /^\/skill:explain/m);
   });
 });

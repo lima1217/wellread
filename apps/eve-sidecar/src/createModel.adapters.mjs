@@ -8,19 +8,25 @@
  */
 
 import { isDeepSeekApiHost } from '@wellread/eve-message';
-import { injectWebSearchCallsIntoInput } from './agent/webSearchReplay.mjs';
+import {
+  captureWebSearchCall,
+  injectWebSearchCallsIntoInput,
+} from './agent/webSearchReplay.mjs';
 
 /** @typedef {'think' | 'fast'} ThinkingMode */
 
 /**
  * Per-turn fetch store. `thinkingMode` / `onReasoningDelta` are read at
  * fetch start and closed over into the response transform (TransformStream
- * may run after AsyncLocalStorage exits).
+ * may run after AsyncLocalStorage exits). `reasoningDialect` is mutable:
+ * the response transform records which reasoning shape the upstream used,
+ * and the next request within the turn reads it back for history replay.
  *
  * @typedef {{
  *   thinkingMode?: ThinkingMode,
  *   onReasoningDelta?: (delta: string) => void,
- *   webSearchCallsToReplay?: Array<{ type: 'web_search_call', id: string, status: string }>,
+ *   webSearchCallsToReplay?: Array<{ type: 'web_search_call', id: string, status?: string, action?: unknown }>,
+ *   reasoningDialect?: 'deepseek' | 'openai',
  * }} TurnFetchStore
  */
 
@@ -44,45 +50,48 @@ export function normalizeApiMode(value) {
 }
 
 /**
- * @param {string | undefined | null} baseURL
- * @returns {string | null}
- */
-function hostnameOf(baseURL) {
-  if (!baseURL || typeof baseURL !== 'string') return null;
-  try {
-    return new URL(baseURL).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * DeepSeek / BigModel (GLM) accept the proprietary `thinking` request field.
- * OpenAI official and many other OpenAI-compatible hosts 400 on it
- * ("Unrecognized request argument").
- *
- * @param {string | undefined | null} baseURL
- * @returns {boolean}
- */
-export function supportsThinkingExtension(baseURL) {
-  const host = hostnameOf(baseURL);
-  if (!host) return false;
-  return (
-    isDeepSeekApiHost(baseURL) ||
-    host === 'open.bigmodel.cn' ||
-    host.endsWith('.bigmodel.cn')
-  );
-}
-
-/**
- * DeepSeek Responses API runs `web_search` server-side. Other hosts must not
- * receive that tool type (Chat Completions / non-DeepSeek → 400 or ignore).
+ * Hosts that run `web_search` server-side on the Responses API. Chat
+ * Completions and hosts without the tool still get 400 if it is attached,
+ * so this gate also requires apiMode === 'responses' (see
+ * shouldAttachNativeWebSearch).
  *
  * @param {string | undefined | null} baseURL
  * @returns {boolean}
  */
 export function supportsNativeWebSearch(baseURL) {
-  return isDeepSeekApiHost(baseURL);
+  return isDeepSeekApiHost(baseURL) || isOpencodeHost(baseURL);
+}
+
+/**
+ * Canonical key for comparing which host a learned reasoning dialect came
+ * from. Dialect is a property of the host, not of the session: after a model
+ * switch the next turn must not replay the old host's reasoning shape into a
+ * strict gateway that may reject it.
+ *
+ * @param {string | undefined | null} baseURL
+ * @returns {string}
+ */
+export function normalizeHostKey(baseURL) {
+  if (!baseURL || typeof baseURL !== 'string') return '';
+  try {
+    return new URL(baseURL).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * @param {string | undefined | null} baseURL
+ * @returns {boolean}
+ */
+function isOpencodeHost(baseURL) {
+  if (!baseURL || typeof baseURL !== 'string') return false;
+  try {
+    const host = new URL(baseURL).hostname.toLowerCase();
+    return host === 'opencode.ai' || host.endsWith('.opencode.ai');
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -127,8 +136,8 @@ export function isResponsesRequest(url, parsed) {
 
 /**
  * OpenAI-compatible hosts (DeepSeek, GLM, …):
- * - Thinking controlled via `thinking: { type: 'enabled' | 'disabled' }`
- *   **only** on hosts that advertise the extension (see supportsThinkingExtension).
+ * - No proprietary `thinking` field is injected; reasoning models think by
+ *   default and the display layer decides whether to show it.
  * - CoT lands on `reasoning_content`; @ai-sdk/openai chat only reads `content`.
  * - Non-gpt* model ids are treated as OpenAI "reasoning" models, so `system` is
  *   rewritten to `role: developer`, which many hosts reject with HTTP 400.
@@ -137,11 +146,11 @@ export function isResponsesRequest(url, parsed) {
  * In Think mode, forward reasoning via the turn fetch store callback instead.
  *
  * Responses path: inject `reasoning.effort`, force `store: false`, and adapt
- * DeepSeek reasoning item/event shapes for @ai-sdk/openai.
+ * Responses reasoning item/event shapes by what the upstream
+ * actually emits (see transformResponsesPayload), not by host allowlist.
  *
  * @param {typeof fetch} [baseFetch]
  * @param {{
- *   injectThinking?: boolean,
  *   apiMode?: 'chat' | 'responses',
  * }} [options]
  * @param {{
@@ -157,7 +166,6 @@ export function withModelFetchPatch(
   if (!deps || typeof deps.getStore !== 'function') {
     throw new Error('withModelFetchPatch requires deps.getStore');
   }
-  const injectThinking = options.injectThinking !== false;
   const configuredApiMode = normalizeApiMode(options.apiMode);
   const { getStore } = deps;
   return async (input, init) => {
@@ -165,6 +173,7 @@ export function withModelFetchPatch(
     const thinkingMode = normalizeThinkingMode(store?.thinkingMode);
     const onReasoningDelta = store?.onReasoningDelta;
     const webSearchCallsToReplay = store?.webSearchCallsToReplay;
+    const reasoningDialect = store?.reasoningDialect;
     let nextInit = init;
     const body = init?.body;
     const url = requestUrlString(input);
@@ -183,22 +192,24 @@ export function withModelFetchPatch(
     const useResponses =
       configuredApiMode === 'responses' ||
       isResponsesRequest(url, parsedBody ?? undefined);
-    // DeepSeek/GLM hosts need reasoning shape adapters; OpenAI must keep
-    // summary + encrypted_content for store:false multi-turn continuity.
-    const adaptDeepSeekReasoning = injectThinking;
+    // Record which reasoning shape this upstream speaks. Mutable on the ALS
+    // store object so later requests in the turn (tool steps) reuse it; the
+    // turn loop persists it onto the session for the next turn.
+    const onDialect = (dialect) => {
+      if (store && store.reasoningDialect !== dialect) {
+        store.reasoningDialect = dialect;
+      }
+    };
     if (parsedBody) {
       nextInit = {
         ...init,
         body: JSON.stringify(
           useResponses
             ? patchResponsesBody(parsedBody, thinkingMode, {
-                injectThinking,
-                adaptDeepSeekReasoning,
+                reasoningDialect,
                 webSearchCallsToReplay,
               })
-            : patchChatCompletionBody(parsedBody, thinkingMode, {
-                injectThinking,
-              }),
+            : patchChatCompletionBody(parsedBody),
         ),
       };
     }
@@ -207,7 +218,8 @@ export function withModelFetchPatch(
       return transformResponsesModelResponse(response, {
         thinkingMode,
         onReasoningDelta,
-        adaptDeepSeekReasoning,
+        onDialect,
+        webSearchCallsToReplay,
       });
     }
     return transformModelResponse(response, { thinkingMode, onReasoningDelta });
@@ -216,26 +228,16 @@ export function withModelFetchPatch(
 
 /**
  * @param {Record<string, unknown>} parsed
- * @param {ThinkingMode} [thinkingMode]
- * @param {{ injectThinking?: boolean }} [options]
  * @returns {Record<string, unknown>}
  */
-export function patchChatCompletionBody(parsed, thinkingMode = 'fast', options = {}) {
-  const mode = normalizeThinkingMode(thinkingMode);
-  const injectThinking = options.injectThinking !== false;
+export function patchChatCompletionBody(parsed) {
   const next = { ...parsed };
-  if (injectThinking) {
-    if (mode === 'think') {
-      next.thinking = { type: 'enabled' };
-      next.reasoning_effort = THINK_MODE_REASONING_EFFORT;
-    } else {
-      next.thinking = { type: 'disabled' };
-      delete next.reasoning_effort;
-    }
-  } else {
-    delete next.thinking;
-    delete next.reasoning_effort;
-  }
+  // No proprietary thinking-field injection: reasoning models think by
+  // default, and the display layer decides whether to show it. Thinking
+  // control fields (thinking/reasoning_effort) are DeepSeek/GLM extensions
+  // that plain OpenAI-compatible hosts reject with HTTP 400.
+  delete next.thinking;
+  delete next.reasoning_effort;
   if (Array.isArray(parsed.messages)) {
     next.messages = parsed.messages.map((message) => {
       if (!message || typeof message !== 'object' || Array.isArray(message)) {
@@ -251,22 +253,24 @@ export function patchChatCompletionBody(parsed, thinkingMode = 'fast', options =
 
 /**
  * Adapt a Responses request for client-managed history.
- * DeepSeek reasoning item rewriting is opt-in via adaptDeepSeekReasoning
- * (tied to supportsThinkingExtension hosts in withModelFetchPatch).
+ *
+ * `reasoning.effort` is a standard Responses API field (OpenAI and DeepSeek
+ * both accept it), so it is always sent from Thinking Mode. History
+ * reasoning items are rewritten to DeepSeek plaintext only when the
+ * upstream is known to speak the DeepSeek dialect (learned from its
+ * responses); OpenAI-shaped hosts keep summary + encrypted_content.
  *
  * @param {Record<string, unknown>} parsed
  * @param {ThinkingMode} [thinkingMode]
  * @param {{
- *   injectThinking?: boolean,
- *   adaptDeepSeekReasoning?: boolean,
- *   webSearchCallsToReplay?: Array<{ type: 'web_search_call', id: string, status: string }>,
+ *   reasoningDialect?: 'deepseek' | 'openai',
+ *   webSearchCallsToReplay?: Array<{ type: 'web_search_call', id: string, status?: string, action?: unknown }>,
  * }} [options]
  * @returns {Record<string, unknown>}
  */
 export function patchResponsesBody(parsed, thinkingMode = 'fast', options = {}) {
   const mode = normalizeThinkingMode(thinkingMode);
-  const injectThinking = options.injectThinking !== false;
-  const adaptDeepSeekReasoning = options.adaptDeepSeekReasoning === true;
+  const reasoningDialect = options.reasoningDialect;
   const webSearchCallsToReplay = options.webSearchCallsToReplay;
   const next = { ...parsed };
 
@@ -280,14 +284,12 @@ export function patchResponsesBody(parsed, thinkingMode = 'fast', options = {}) 
   delete next.reasoning_effort;
   delete next.messages;
 
-  if (injectThinking) {
-    next.reasoning = {
-      effort: mode === 'think' ? THINK_MODE_REASONING_EFFORT : 'none',
-    };
-  }
+  next.reasoning = {
+    effort: mode === 'think' ? THINK_MODE_REASONING_EFFORT : 'none',
+  };
 
   if (Array.isArray(parsed.input)) {
-    let input = adaptDeepSeekReasoning
+    let input = reasoningDialect === 'deepseek'
       ? parsed.input.map((item) => adaptResponsesInputItem(item))
       : parsed.input;
     if (webSearchCallsToReplay?.length) {
@@ -403,13 +405,18 @@ export function transformCompletionPayload(payload, options = {}) {
 }
 
 /**
- * Map DeepSeek Responses payloads to the OpenAI shape @ai-sdk/openai expects.
+ * Map Responses payloads to the shape @ai-sdk/openai expects, deciding the
+ * dialect from the events/items the upstream actually emits:
+ * `response.reasoning_text.*` and plaintext reasoning content are DeepSeek
+ * dialect (rewritten to OpenAI summary shape); `reasoning_summary_text.*`
+ * and `encrypted_content` items are OpenAI dialect (passed through).
  *
  * @param {unknown} payload
  * @param {{
  *   thinkingMode?: ThinkingMode,
  *   onReasoningDelta?: (delta: string) => void,
- *   adaptDeepSeekReasoning?: boolean,
+ *   onDialect?: (dialect: 'deepseek' | 'openai') => void,
+ *   webSearchCallsToReplay?: Array<{ type: 'web_search_call', id: string, status?: string, action?: unknown }>,
  * }} [options]
  * @returns {unknown}
  */
@@ -419,7 +426,6 @@ export function transformResponsesPayload(payload, options = {}) {
   }
   const thinkingMode = normalizeThinkingMode(options.thinkingMode);
   const onReasoningDelta = options.onReasoningDelta;
-  const adaptDeepSeekReasoning = options.adaptDeepSeekReasoning === true;
   const record = /** @type {Record<string, unknown>} */ (payload);
 
   // Streaming event object (no `output` wrapper).
@@ -427,7 +433,8 @@ export function transformResponsesPayload(payload, options = {}) {
     return adaptResponsesStreamEvent(record, {
       thinkingMode,
       onReasoningDelta,
-      adaptDeepSeekReasoning,
+      onDialect: options.onDialect,
+      webSearchCallsToReplay: options.webSearchCallsToReplay,
     });
   }
 
@@ -435,9 +442,10 @@ export function transformResponsesPayload(payload, options = {}) {
   /** @type {Record<string, unknown>} */
   let next = record;
 
-  if (adaptDeepSeekReasoning && Array.isArray(record.output)) {
+  if (Array.isArray(record.output)) {
     const output = record.output.map((item) => {
-      const adapted = adaptResponsesOutputItem(item);
+      captureWebSearchCall(options.webSearchCallsToReplay, item);
+      const adapted = adaptResponsesOutputItem(item, options.onDialect);
       if (adapted !== item) changed = true;
       return adapted;
     });
@@ -460,13 +468,14 @@ export function transformResponsesPayload(payload, options = {}) {
  * @param {{
  *   thinkingMode: ThinkingMode,
  *   onReasoningDelta?: (delta: string) => void,
- *   adaptDeepSeekReasoning?: boolean,
+ *   onDialect?: (dialect: 'deepseek' | 'openai') => void,
+ *   webSearchCallsToReplay?: Array<{ type: 'web_search_call', id: string, status?: string, action?: unknown }>,
  * }} options
  * @returns {Record<string, unknown>}
  */
 function adaptResponsesStreamEvent(event, options) {
-  if (!options.adaptDeepSeekReasoning) return event;
   if (event.type === 'response.reasoning_text.delta') {
+    options.onDialect?.('deepseek');
     const delta = typeof event.delta === 'string' ? event.delta : '';
     if (delta && options.thinkingMode === 'think' && options.onReasoningDelta) {
       options.onReasoningDelta(delta);
@@ -478,14 +487,23 @@ function adaptResponsesStreamEvent(event, options) {
     };
   }
   if (event.type === 'response.reasoning_text.done') {
+    options.onDialect?.('deepseek');
     return {
       ...event,
       type: 'response.reasoning_summary_text.done',
       summary_index: typeof event.summary_index === 'number' ? event.summary_index : 0,
     };
   }
+  if (
+    event.type === 'response.reasoning_summary_text.delta' ||
+    event.type === 'response.reasoning_summary_text.done'
+  ) {
+    options.onDialect?.('openai');
+    return event;
+  }
   if (event.type === 'response.output_item.added' || event.type === 'response.output_item.done') {
-    const item = adaptResponsesOutputItem(event.item);
+    captureWebSearchCall(options.webSearchCallsToReplay, event.item);
+    const item = adaptResponsesOutputItem(event.item, options.onDialect);
     if (item === event.item) return event;
     return { ...event, item };
   }
@@ -501,16 +519,26 @@ function adaptResponsesStreamEvent(event, options) {
  * DeepSeek → OpenAI-SDK shape for reasoning items.
  * Sets encrypted_content to '' when absent so @ai-sdk/openai's store:false
  * filter keeps the item (it drops reasoning with encrypted_content == null).
+ * OpenAI-shaped items (with a real encrypted_content blob) pass through.
  *
  * @param {unknown} item
+ * @param {(dialect: 'deepseek' | 'openai') => void} [onDialect]
  * @returns {unknown}
  */
-export function adaptResponsesOutputItem(item) {
+export function adaptResponsesOutputItem(item, onDialect) {
   if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
   const row = /** @type {Record<string, unknown>} */ (item);
   if (row.type !== 'reasoning') return item;
 
+  // OpenAI official shape carries a real encrypted_content blob; keep it.
+  if (typeof row.encrypted_content === 'string' && row.encrypted_content) {
+    onDialect?.('openai');
+    return item;
+  }
+
   const text = extractReasoningText(row.content) || extractReasoningText(row.summary);
+  if (!text && !Array.isArray(row.content)) return item;
+  onDialect?.('deepseek');
   const summary = Array.isArray(row.summary)
     ? row.summary
     : text
@@ -568,7 +596,7 @@ export function transformModelResponse(response, options = {}) {
  * @param {{
  *   thinkingMode?: ThinkingMode,
  *   onReasoningDelta?: (delta: string) => void,
- *   adaptDeepSeekReasoning?: boolean,
+ *   onDialect?: (dialect: 'deepseek' | 'openai') => void,
  * }} [options]
  * @returns {Promise<Response> | Response}
  */
@@ -581,14 +609,16 @@ export function transformResponsesModelResponse(response, options = {}) {
  * @param {{
  *   thinkingMode?: ThinkingMode,
  *   onReasoningDelta?: (delta: string) => void,
- *   adaptDeepSeekReasoning?: boolean,
+ *   onDialect?: (dialect: 'deepseek' | 'openai') => void,
+ *   webSearchCallsToReplay?: Array<{ type: 'web_search_call', id: string, status?: string, action?: unknown }>,
  * }} options
  * @param {(
  *   payload: unknown,
  *   options: {
  *     thinkingMode?: ThinkingMode,
  *     onReasoningDelta?: (delta: string) => void,
- *     adaptDeepSeekReasoning?: boolean,
+ *     onDialect?: (dialect: 'deepseek' | 'openai') => void,
+ *     webSearchCallsToReplay?: Array<{ type: 'web_search_call', id: string, status?: string, action?: unknown }>,
  *   },
  * ) => unknown} transformPayload
  * @returns {Promise<Response> | Response}
@@ -596,8 +626,12 @@ export function transformResponsesModelResponse(response, options = {}) {
 function transformSseOrJsonResponse(response, options, transformPayload) {
   const thinkingMode = normalizeThinkingMode(options.thinkingMode);
   const onReasoningDelta = options.onReasoningDelta;
-  const adaptDeepSeekReasoning = options.adaptDeepSeekReasoning === true;
-  const payloadOptions = { thinkingMode, onReasoningDelta, adaptDeepSeekReasoning };
+  const payloadOptions = {
+    thinkingMode,
+    onReasoningDelta,
+    onDialect: options.onDialect,
+    webSearchCallsToReplay: options.webSearchCallsToReplay,
+  };
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('text/event-stream') && response.body) {
     const decoder = new TextDecoder();
@@ -663,14 +697,14 @@ function transformSseOrJsonResponse(response, options, transformPayload) {
  * @param {{
  *   thinkingMode: ThinkingMode,
  *   onReasoningDelta?: (delta: string) => void,
- *   adaptDeepSeekReasoning?: boolean,
+ *   onDialect?: (dialect: 'deepseek' | 'openai') => void,
  * }} options
  * @param {(
  *   payload: unknown,
  *   options: {
  *     thinkingMode?: ThinkingMode,
  *     onReasoningDelta?: (delta: string) => void,
- *     adaptDeepSeekReasoning?: boolean,
+ *     onDialect?: (dialect: 'deepseek' | 'openai') => void,
  *   },
  * ) => unknown} [transformPayload]
  * @returns {string}
