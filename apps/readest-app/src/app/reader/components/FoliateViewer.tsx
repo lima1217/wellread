@@ -278,7 +278,13 @@ const FoliateViewer: React.FC<{
           // the loader reads the type after the data resolves
           detail.type = section ? getSectionDocumentType(type) : type;
           if (viewSettings && detail.type === 'text/css')
-            return transformStylesheet(data, width, height, viewSettings.vertical);
+            return transformStylesheet(
+              data,
+              width,
+              height,
+              viewSettings.vertical,
+              bookData?.isFixedLayout,
+            );
           if (detail.type === 'image/svg+xml' && !viewSettings?.allowScript) {
             return sanitizeSvg(data);
           }
@@ -372,7 +378,7 @@ const FoliateViewer: React.FC<{
       });
 
       if (bookDoc.rendition?.layout === 'pre-paginated') {
-        applyFixedlayoutStyles(detail.doc, viewSettings);
+        applyFixedlayoutStyles(detail.doc, viewSettings, undefined, bookData.book?.format);
         const themeCode = getThemeCode();
         if (bookData.book?.format === 'PDF' && themeCode && renderer) {
           renderer.pageColors = viewSettings.applyThemeToPDF
@@ -923,7 +929,7 @@ const FoliateViewer: React.FC<{
       const docs = viewRef.current.renderer.getContents();
       docs.forEach(({ doc }) => {
         if (bookDoc.rendition?.layout === 'pre-paginated') {
-          applyFixedlayoutStyles(doc, viewSettings);
+          applyFixedlayoutStyles(doc, viewSettings, undefined, bookData?.book?.format);
         }
         applyThemeModeClass(doc, isDarkMode);
         applyScrollModeClass(doc, viewSettings.scrolled || false);
