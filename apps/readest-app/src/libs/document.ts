@@ -44,6 +44,8 @@ export interface SectionItem {
   fragments?: Array<SectionFragment>;
 
   loadText?: () => Promise<string | null>;
+  // Resolve a reference a script introduces after load (see observeDynamicResources).
+  loadHref?: (href: string) => Promise<string>;
   createDocument: () => Promise<Document>;
 }
 
