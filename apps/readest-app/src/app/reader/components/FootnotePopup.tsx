@@ -55,6 +55,8 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({ bookKey, bookDoc }) => {
   const [responsiveHeight, setResponsiveHeight] = useState(popupHeight);
   const sizeAdjustCountRef = useRef(0);
   const maxSizeAdjustCount = 3;
+  const contentSizeObserverRef = useRef<ResizeObserver | null>(null);
+  const contentSizeFrameRef = useRef<number | null>(null);
   const size18 = useResponsiveSize(18);
   const popupPadding = useResponsiveSize(10);
 
@@ -89,6 +91,63 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({ bookKey, bookDoc }) => {
 
   const clipPopupHeight = (size: number) => {
     return Math.min(size, window.innerHeight - popupPadding - 12);
+  };
+
+  // Imperative, not an effect keyed on the trigger position: that effect ran
+  // after the commit and overwrote the size just measured from the content.
+  const seedPopupSize = (isVertical: boolean) => {
+    const size = isVertical
+      ? {
+          width: clipPopupWith(popupHeight),
+          height: clipPopupHeight(Math.max(popupWidth, window.innerHeight / 4)),
+        }
+      : {
+          width: clipPopupWith(Math.max(popupWidth, window.innerWidth / 4)),
+          height: clipPopupHeight(popupHeight),
+        };
+    setResponsiveWidth(size.width);
+    setResponsiveHeight(size.height);
+    return size;
+  };
+
+  // Fits the box along the reading axis and returns the size it applied.
+  const fitPopupToContent = (view: FoliateView) => {
+    const { renderer } = view;
+    if (!renderer) return 0;
+    const vertical = getViewSettings(bookKey)!.vertical;
+    const size = vertical
+      ? clipPopupWith(Math.min(getResponsivePopupSize(renderer.viewSize, true), getMaxWidth()))
+      : clipPopupHeight(Math.min(getResponsivePopupSize(renderer.viewSize, false), getMaxHeight()));
+    if (vertical) setResponsiveWidth(size);
+    else setResponsiveHeight(size);
+    return size;
+  };
+
+  // The document keeps growing after the first `relocate` — the section may
+  // still be parsing, fonts and images arrive later — so measuring once left
+  // the popup cut to whatever it held at that instant.
+  const trackPopupContentSize = (view: FoliateView, doc: Document) => {
+    stopTrackingPopupContentSize();
+    const observer = new ResizeObserver(() => {
+      if (contentSizeFrameRef.current) cancelAnimationFrame(contentSizeFrameRef.current);
+      contentSizeFrameRef.current = requestAnimationFrame(() => {
+        // Showing the popup only from `relocate` left one whose visible content
+        // is elements alone — an image, a bare figure — parked off-screen for
+        // good: an element-only visible range collapses, so foliate's paginator
+        // returns before it ever dispatches `relocate`. A measured content size
+        // is the same promise that event was standing in for.
+        if (fitPopupToContent(view) > 0) setShowPopup(true);
+      });
+    });
+    observer.observe(doc.documentElement);
+    contentSizeObserverRef.current = observer;
+  };
+
+  const stopTrackingPopupContentSize = () => {
+    if (contentSizeFrameRef.current) cancelAnimationFrame(contentSizeFrameRef.current);
+    contentSizeFrameRef.current = null;
+    contentSizeObserverRef.current?.disconnect();
+    contentSizeObserverRef.current = null;
   };
 
   useEffect(() => {
@@ -129,6 +188,9 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({ bookKey, bookDoc }) => {
         getLoadedFonts().forEach((font) => {
           mountCustomFont(doc, font);
         });
+        // Track the popup document's size: one measurement at the first
+        // relocate left a still-settling document short (#5887).
+        trackPopupContentSize(view, doc);
       });
       footnoteViewRef.current = view;
       footnoteRef.current?.replaceChildren(view);
@@ -164,29 +226,21 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({ bookKey, bookDoc }) => {
       footnoteHrefRef.current = href;
       sizeAdjustCountRef.current = 0;
       view.addEventListener('relocate', () => {
-        if (sizeAdjustCountRef.current >= maxSizeAdjustCount) return;
-        sizeAdjustCountRef.current += 1;
-        const { renderer } = view as FoliateView;
-        const viewSettings = getViewSettings(bookKey)!;
-        if (viewSettings.vertical) {
-          const responsiveWidth = clipPopupWith(
-            Math.min(getResponsivePopupSize(renderer.viewSize, true), getMaxWidth()),
-          );
-          setResponsiveWidth(responsiveWidth);
-          const scrollRatio = renderer.viewSize / responsiveWidth;
+        const readingAxisSize = fitPopupToContent(view as FoliateView);
+        // The cross-axis widening reflows the document, so keep it capped.
+        if (readingAxisSize > 0 && sizeAdjustCountRef.current < maxSizeAdjustCount) {
+          sizeAdjustCountRef.current += 1;
+          const { renderer } = view as FoliateView;
+          const viewSettings = getViewSettings(bookKey)!;
+          const scrollRatio = renderer.viewSize / readingAxisSize;
           if (scrollRatio > 1.5) {
-            setResponsiveHeight(
-              clipPopupHeight(Math.min(popupWidth * scrollRatio, getMaxHeight())),
-            );
-          }
-        } else {
-          const responsiveHeight = clipPopupHeight(
-            Math.min(getResponsivePopupSize(renderer.viewSize, false), getMaxHeight()),
-          );
-          setResponsiveHeight(responsiveHeight);
-          const scrollRatio = renderer.viewSize / responsiveHeight;
-          if (scrollRatio > 1.5) {
-            setResponsiveWidth(clipPopupWith(Math.min(popupWidth * scrollRatio, getMaxWidth())));
+            if (viewSettings.vertical) {
+              setResponsiveHeight(
+                clipPopupHeight(Math.min(popupWidth * scrollRatio, getMaxHeight())),
+              );
+            } else {
+              setResponsiveWidth(clipPopupWith(Math.min(popupWidth * scrollRatio, getMaxWidth())));
+            }
           }
         }
         setShowPopup(true);
@@ -209,15 +263,9 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({ bookKey, bookDoc }) => {
   }, [showPopup]);
 
   useEffect(() => {
-    if (viewSettings.vertical) {
-      setResponsiveWidth(clipPopupWith(popupHeight));
-      setResponsiveHeight(clipPopupHeight(Math.max(popupWidth, window.innerHeight / 4)));
-    } else {
-      setResponsiveWidth(clipPopupWith(Math.max(popupWidth, window.innerWidth / 4)));
-      setResponsiveHeight(clipPopupHeight(popupHeight));
-    }
+    if (!showPopup) seedPopupSize(viewSettings.vertical);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewSettings, trianglePosition]);
+  }, [viewSettings, showPopup]);
 
   useEffect(() => {
     if (trianglePosition && gridRect) {
@@ -240,6 +288,8 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({ bookKey, bookDoc }) => {
     const rect = gridFrame.getBoundingClientRect();
     const viewSettings = getViewSettings(bookKey)!;
     const triangPos = getPosition(detail.a, rect, popupPadding, viewSettings.vertical);
+    stopTrackingPopupContentSize();
+    seedPopupSize(viewSettings.vertical);
     setGridRect(rect);
     setTrianglePosition(triangPos);
     trianglePositionRef.current = triangPos;
@@ -285,6 +335,7 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({ bookKey, bookDoc }) => {
 
   const handleDismissPopup = () => {
     closePopup();
+    stopTrackingPopupContentSize();
     historyRef.current = { items: [], index: -1 };
     canGoBackRef.current = false;
     sizeAdjustCountRef.current = 0;
@@ -303,18 +354,20 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({ bookKey, bookDoc }) => {
     const { element, footnote } = event.detail;
     const gridFrame = document.querySelector(`#gridcell-${bookKey}`);
     if (!gridFrame) return;
+    stopTrackingPopupContentSize();
     const rect = gridFrame.getBoundingClientRect();
     const viewSettings = getViewSettings(bookKey)!;
     const triangPos = getPosition(element, rect, popupPadding, viewSettings.vertical);
+    const seed = seedPopupSize(viewSettings.vertical);
     if (footnoteRef.current) {
       const elem = document.createElement('p');
       elem.textContent = footnote;
       elem.setAttribute('style', `padding: 1em; hanging-punctuation: allow-end last;`);
       elem.style.visibility = 'hidden';
       if (viewSettings.vertical) {
-        elem.style.height = `${responsiveHeight}px`;
+        elem.style.height = `${seed.height}px`;
       } else {
-        elem.style.width = `${responsiveWidth}px`;
+        elem.style.width = `${seed.width}px`;
       }
       document.body.appendChild(elem);
       const popupSize = elem.getBoundingClientRect();
@@ -344,6 +397,7 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({ bookKey, bookDoc }) => {
     return () => {
       window.removeEventListener('resize', handleDismissPopup);
       eventDispatcher.off('footnote-popup', handleFootnotePopupEvent);
+    stopTrackingPopupContentSize();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
