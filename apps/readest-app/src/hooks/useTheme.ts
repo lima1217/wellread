@@ -5,6 +5,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useSafeAreaInsets } from './useSafeAreaInsets';
 import { themes, applyCustomTheme, Palette } from '@/styles/themes';
 import { getStatusBarHeight, setSystemUIVisibility } from '@/utils/bridge';
+import { getOverlayerBlendMode } from '@/utils/style';
 import { getOSPlatform } from '@/utils/misc';
 import { parseWebViewVersion } from '@/utils/ua';
 
@@ -136,9 +137,11 @@ export const useTheme = ({
       '--overlayer-highlight-opacity',
       isBwEink ? '1.0' : String(highlightOpacity),
     );
+    // The global default assumes a page painted in the theme colors. Books that
+    // keep their own page (PDFs, comics) override it per view in FoliateViewer.
     document.documentElement.style.setProperty(
       '--overlayer-highlight-blend-mode',
-      isBwEink ? 'difference' : isDarkMode ? 'screen' : 'multiply',
+      getOverlayerBlendMode({ isDarkMode, isBwEink: !!isBwEink }),
     );
     document.documentElement.style.setProperty(
       '--bg-texture-blend-mode',

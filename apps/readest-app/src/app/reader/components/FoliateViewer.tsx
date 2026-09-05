@@ -32,6 +32,7 @@ import {
   applyScrollbarStyle,
   applyScrollModeClass,
   applyThemeModeClass,
+  getOverlayerBlendMode,
   getStyles,
   getThemeCode,
   keepTextAlignment,
@@ -948,6 +949,33 @@ const FoliateViewer: React.FC<{
     viewSettings?.applyThemeToPDF,
     viewSettings?.contrast,
     viewSettings?.hideScrollbar,
+  ]);
+
+  // The annotation overlay lives outside the content iframe, so its blend mode
+  // has to follow the page the highlight sits on rather than the app theme: a
+  // PDF keeps its own white bitmap in a dark theme unless the reader asked us
+  // to darken it (#5790, #5930, #5943). Scoped to this view so the library and
+  // reflowable books keep the global default from useTheme.
+  useEffect(() => {
+    if (!containerRef.current || !viewSettings) return;
+    containerRef.current.style.setProperty(
+      '--overlayer-highlight-blend-mode',
+      getOverlayerBlendMode({
+        isDarkMode,
+        isBwEink: !!viewSettings.isEink && !viewSettings.isColorEink,
+        isFixedLayout: bookDoc.rendition?.layout === 'pre-paginated',
+        invertImgColorInDark: !!viewSettings.invertImgColorInDark,
+        applyThemeToPDF: !!viewSettings.applyThemeToPDF,
+        format: bookData?.book?.format,
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isDarkMode,
+    viewSettings?.isEink,
+    viewSettings?.isColorEink,
+    viewSettings?.invertImgColorInDark,
+    viewSettings?.applyThemeToPDF,
   ]);
 
   useEffect(() => {
