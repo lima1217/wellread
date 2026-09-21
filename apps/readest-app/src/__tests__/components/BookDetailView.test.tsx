@@ -16,7 +16,7 @@ vi.mock('@/store/settingsStore', () => ({
       // The "File Path" entry lives under the Metadata section; tests below
       // depend on it being expanded by default so the row is in the DOM.
       metadataOthersCollapsed: false,
-      metadataDescriptionCollapsed: true,
+      metadataDescriptionCollapsed: false,
     },
   }),
 }));
@@ -175,5 +175,24 @@ describe('BookDetailView file path row', () => {
   it('omits the file path row for hash-copy books (no filePath)', () => {
     const { queryByText } = renderView({ book: makeBook() });
     expect(queryByText('File Path')).toBeNull();
+  });
+});
+
+describe('BookDetailView untrusted description', () => {
+  it('removes executable markup while preserving description formatting', () => {
+    const { container } = renderView({
+      metadata: {
+        title: 'Test Book',
+        author: 'Test Author',
+        language: 'en',
+        description:
+          '<strong>Book summary</strong><img src="x" onerror="alert(1)"><a href="javascript:alert(1)">link</a><iframe srcdoc="evil"></iframe>',
+      },
+    });
+    const description = container.querySelector('.prose')!;
+    expect(description.querySelector('strong')?.textContent).toBe('Book summary');
+    expect(description.querySelector('img')?.hasAttribute('onerror')).toBe(false);
+    expect(description.querySelector('a')?.hasAttribute('href')).toBe(false);
+    expect(description.querySelector('iframe')).toBeNull();
   });
 });
