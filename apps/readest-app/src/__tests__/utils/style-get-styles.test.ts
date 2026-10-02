@@ -8,7 +8,7 @@ vi.mock('@/utils/misc', async (importOriginal) => {
   };
 });
 
-import { LINK_HIT_AREA_CLASS, getStyles, ThemeCode } from '@/utils/style';
+import { LINK_HIT_AREA_CLASS, getStyles, TEXT_SELECTED_CLASS, ThemeCode } from '@/utils/style';
 import { CustomFont } from '@/styles/fonts';
 import { ViewSettings } from '@/types/book';
 import {
@@ -956,5 +956,16 @@ describe('link hit area in link-dense sections', () => {
     );
     expect(css).toMatch(new RegExp(`html\\.${LINK_HIT_AREA_CLASS} a::before\\s*\\{`));
     expect(css).not.toMatch(/(^|\n)\s*a\s*\{\s*position: relative !important;/);
+  });
+});
+
+describe('link hit area during a text selection (#6566)', () => {
+  it('takes the enlarged link hit area out of hit testing while text is selected', () => {
+    // The empty a::before box spreads 10px around each link and swallows the
+    // text there, so dragging a selection onto a footnote's neighbor snapped it.
+    const css = getStyles(makeViewSettings(), makeThemeCode());
+    expect(css).toMatch(
+      new RegExp(`html\\.${TEXT_SELECTED_CLASS} a::before\\s*\\{\\s*pointer-events: none;`),
+    );
   });
 });

@@ -374,6 +374,7 @@ const getColorStyles = (
 
 export const LINK_HIT_AREA_CLASS = 'link-hit-area';
 export const MAX_ENLARGED_LINKS = 1000;
+export const TEXT_SELECTED_CLASS = 'text-selected';
 
 const getPageLayoutStyles = (
   marginTop: number,
@@ -426,6 +427,11 @@ const getPageLayoutStyles = (
     content: '';
     position: absolute;
     inset: -10px;
+  }
+  /* the enlarged area swallows the text around a link, so a selection dragged
+     next to a footnote marker snaps away (#6566); set while text is selected */
+  html.${TEXT_SELECTED_CLASS} a::before {
+    pointer-events: none;
   }
 
   .${SCROLL_WRAPPER_CLASS} {
