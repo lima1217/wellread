@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Book } from '@/types/book';
 import { useEnv } from '@/context/EnvContext';
 import { useSettingsStore } from '@/store/settingsStore';
-import { useBookDataStore } from '@/store/bookDataStore';
+import { flushPendingLibrarySave, useBookDataStore } from '@/store/bookDataStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { useGamepad } from '@/hooks/useGamepad';
@@ -18,7 +18,6 @@ import { UnlistenFn } from '@tauri-apps/api/event';
 import { tauriHandleClose, tauriHandleOnCloseWindow } from '@/utils/window';
 import { isTauriAppPlatform } from '@/services/environment';
 import { uniqueId } from '@/utils/misc';
-import { throttle } from '@/utils/throttle';
 import { eventDispatcher } from '@/utils/event';
 import {
   closeReaderWindowOrGoToLibrary,
@@ -139,6 +138,10 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
       const settings = useSettingsStore.getState().settings;
       eventDispatcher.dispatch('sync-book-progress', { bookKey });
       await saveConfig(envConfig, bookKey, config, settings);
+      // saveConfig defers the library.json write by up to 30s, and closing the
+      // last window can quit the app before it lands: the shelf then shows the
+      // old progress on the next launch (#6623).
+      await flushPendingLibrarySave();
     }
   };
 
@@ -168,11 +171,20 @@ const ReaderContent: React.FC<{ ids?: string; settings: SystemSettings }> = ({ i
     return handleCloseBooks();
   };
 
-  const handleCloseBooks = throttle(async () => {
-    const settings = useSettingsStore.getState().settings;
-    await Promise.all(bookKeys.map(async (key) => await saveConfigAndCloseBook(key)));
-    await saveSettings(envConfig, settings);
-  }, 200);
+  // Wired to beforeunload / quit-app / window-close. Returns the close so the
+  // window-close and quit paths can await it before the app exits; a trigger
+  // that arrives mid-close joins the one already running (#6623).
+  const closingBooksRef = useRef<Promise<void> | null>(null);
+  const handleCloseBooks = () => {
+    closingBooksRef.current ??= (async () => {
+      const settings = useSettingsStore.getState().settings;
+      await Promise.all(bookKeys.map((key) => saveConfigAndCloseBook(key)));
+      await saveSettings(envConfig, settings);
+    })().finally(() => {
+      closingBooksRef.current = null;
+    });
+    return closingBooksRef.current;
+  };
 
   const handleCloseBooksToLibrary = async () => {
     handleCloseBooks();
