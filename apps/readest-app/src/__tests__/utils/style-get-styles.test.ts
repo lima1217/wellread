@@ -8,7 +8,7 @@ vi.mock('@/utils/misc', async (importOriginal) => {
   };
 });
 
-import { getStyles, ThemeCode } from '@/utils/style';
+import { LINK_HIT_AREA_CLASS, getStyles, ThemeCode } from '@/utils/style';
 import { CustomFont } from '@/styles/fonts';
 import { ViewSettings } from '@/types/book';
 import {
@@ -942,5 +942,19 @@ describe('instant-highlight selection suppression stays out of getStyles', () =>
     });
     const css = getStyles(vs, theme);
     expect(css).not.toContain('user-select: none !important');
+  });
+});
+
+describe('link hit area in link-dense sections', () => {
+  it('enlarges link hit areas only in documents opted in with LINK_HIT_AREA_CLASS', () => {
+    // Positioning every link and its ::before box made a 20 MB concordance
+    // section with 273k links take minutes to lay out, so the enlarged area is
+    // opt-in per document instead of on by default.
+    const css = getStyles(makeViewSettings(), makeThemeCode());
+    expect(css).toMatch(
+      new RegExp(`html\\.${LINK_HIT_AREA_CLASS} a\\s*\\{\\s*position: relative !important;`),
+    );
+    expect(css).toMatch(new RegExp(`html\\.${LINK_HIT_AREA_CLASS} a::before\\s*\\{`));
+    expect(css).not.toMatch(/(^|\n)\s*a\s*\{\s*position: relative !important;/);
   });
 });

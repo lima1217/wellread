@@ -8,7 +8,7 @@ import { useBookDataStore } from '@/store/bookDataStore';
 import { useFoliateEvents } from '../hooks/useFoliateEvents';
 import { useCustomFontStore } from '@/store/customFontStore';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
-import { getFootnoteStyles, getStyles, getThemeCode } from '@/utils/style';
+import { applyLinkHitArea, getFootnoteStyles, getStyles, getThemeCode } from '@/utils/style';
 import { getPopupPosition, getPosition, Position } from '@/utils/sel';
 import { FootnoteHandler } from 'foliate-js/footnotes.js';
 import { mountAdditionalFonts, mountCustomFont } from '@/styles/fonts';
@@ -159,6 +159,8 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({ bookKey, bookDoc }) => {
       const detail = (e as CustomEvent).detail;
       // console.log('render footnote', detail);
       const { view, href } = detail;
+      const popupDoc = (view as FoliateView).renderer.getContents?.()[0]?.doc;
+      if (popupDoc) applyLinkHitArea(popupDoc);
       footnoteHrefRef.current = href;
       sizeAdjustCountRef.current = 0;
       view.addEventListener('relocate', () => {
