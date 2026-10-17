@@ -254,7 +254,10 @@ const detectMediaTarget = (target: HTMLElement | null): MediaTarget | null => {
     if (href) return { elementType: 'image', src: href };
   }
   const table = target.localName === 'table' ? target : target.closest('table');
-  if (table) return { elementType: 'table', html: (table as HTMLElement).outerHTML };
+  // A link inside a table is followed; the table zooms from anywhere else (#6856)
+  if (table && !table.contains(target.closest('a'))) {
+    return { elementType: 'table', html: (table as HTMLElement).outerHTML };
+  }
   return null;
 };
 
