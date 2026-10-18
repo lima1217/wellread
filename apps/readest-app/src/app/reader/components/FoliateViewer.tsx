@@ -63,7 +63,11 @@ import { getDirFromUILanguage } from '@/utils/rtl';
 import { isTauriAppPlatform } from '@/services/environment';
 import { TransformContext } from '@/services/transformers/types';
 import { transformContent } from '@/services/transformService';
-import { sanitizeSvg } from '@/services/transformers/sanitizer';
+import {
+  getSectionDocumentType,
+  normalizeMediaType,
+  sanitizeSvg,
+} from '@/services/transformers/sanitizer';
 import { lockScreenOrientation, setTextSelectionSuppressed } from '@/utils/bridge';
 import { useBookCoverAutoSave } from '../hooks/useAutoSaveBookCover';
 import { manageSyntaxHighlighting } from '@/utils/highlightjs';
@@ -268,6 +272,10 @@ const FoliateViewer: React.FC<{
         .then((data) => {
           const viewSettings = getViewSettings(bookKey);
           const bookData = getBookData(bookKey);
+          const section = bookData?.bookDoc?.sections?.find((s) => s.id === detail.name);
+          const type = normalizeMediaType(detail.type);
+          // the loader reads the type after the data resolves
+          detail.type = section ? getSectionDocumentType(type) : type;
           if (viewSettings && detail.type === 'text/css')
             return transformStylesheet(data, width, height, viewSettings.vertical);
           if (detail.type === 'image/svg+xml' && !viewSettings?.allowScript) {
