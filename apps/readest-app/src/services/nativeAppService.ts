@@ -707,6 +707,9 @@ export class NativeAppService extends BaseAppService {
   }
 
   async setCustomRootDir(customRootDir: string) {
+    // The cache is keyed by base, not root: what existed under the old root
+    // says nothing about the new one.
+    knownExistingDirs.clear();
     this.fs.resolvePath = getPathResolver({
       customRootDir,
       isPortable: this.isPortableApp,
@@ -903,6 +906,8 @@ export class NativeAppService extends BaseAppService {
     base: BaseDir,
     opts?: DatabaseOpts,
   ): Promise<DatabaseService> {
+    // Turso doesn't create the parent folder (#7068).
+    await ensureDirExists(this.fs, getDirPath(path), base);
     const fullPath = await this.resolveFilePath(path, base);
     const { NativeDatabaseService } = await import('./database/nativeDatabaseService');
     const db = await NativeDatabaseService.open(`sqlite:${fullPath}`, opts);
