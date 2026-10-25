@@ -190,6 +190,30 @@ export { WorkerMessageHandler };`,
   pdfjsLib.GlobalWorkerOptions.workerSrc = compatPDFWorkerURL;
 }
 
+const COMIC_IMAGE_EXTS = [
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.bmp',
+  '.webp',
+  '.svg',
+  '.jxl',
+  '.avif',
+];
+
+// A plain .zip of images is a comic without the .cbz name (issue #7038).
+// Directories, macOS resource forks, dotfiles and ComicInfo.xml don't count.
+const isImageArchive = (entries: { filename: string; directory?: boolean }[]) => {
+  const files = entries
+    .filter((e) => !e.directory && !e.filename.startsWith('__MACOSX/'))
+    .map((e) => e.filename.split('/').pop()!.toLowerCase())
+    .filter((name) => name && !name.startsWith('.') && name !== 'comicinfo.xml');
+  return (
+    files.length > 0 && files.every((name) => COMIC_IMAGE_EXTS.some((ext) => name.endsWith(ext)))
+  );
+};
+
 export class DocumentLoader {
   private file: File;
   private nativeFilePath?: string;
@@ -449,7 +473,7 @@ export class DocumentLoader {
         const loader = await this.makeZipLoader(prefetch);
         const { entries } = loader;
 
-        if (this.isCBZ()) {
+        if (this.isCBZ() || (!this.isFBZ() && isImageArchive(entries))) {
           const { makeComicBook } = await import('foliate-js/comic-book.js');
           book = await makeComicBook(loader, this.file);
           format = 'CBZ';
