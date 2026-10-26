@@ -97,6 +97,7 @@ const ControlPanel: React.FC<SettingsPanelPanelProp> = ({ bookKey, onRegisterRes
       disableSwipe: setIsDisableSwipe,
       swapClickArea: setSwapClickArea,
       animated: setAnimated,
+      pageTurnStyle: setPageTurnStyle,
       isEink: setIsEink,
       allowScript: setAllowScript,
       fullscreenClickArea: setFullscreenClickArea,

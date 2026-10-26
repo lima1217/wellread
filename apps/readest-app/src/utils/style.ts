@@ -6,7 +6,7 @@ import {
   CJK_SANS_SERIF_FONTS,
   CJK_SERIF_FONTS,
 } from '@/services/constants';
-import { ViewSettings } from '@/types/book';
+import { BookFormat, FIXED_LAYOUT_FORMATS, ViewSettings } from '@/types/book';
 import {
   themes,
   Palette,
@@ -16,7 +16,12 @@ import {
 } from '@/styles/themes';
 import { createFontCSS, CustomFont } from '@/styles/fonts';
 import { getOSPlatform } from './misc';
-import { SCROLL_WRAPPER_CLASS, SCROLL_WRAPPER_FIT_CLASS } from './scrollable';
+import {
+  LINK_HIT_AREA_CLASS,
+  LINK_HIT_AREA_PX,
+  SCROLL_WRAPPER_CLASS,
+  SCROLL_WRAPPER_FIT_CLASS,
+} from './scrollable';
 
 /**
  * Build the resolved CSS font-family lists (serif / sans-serif / monospace)
@@ -115,8 +120,14 @@ const getFontStyles = (
       -webkit-text-size-adjust: none;
       text-size-adjust: none;
     }
-    /* lower specificity than ebook built-in font styles */
-    html {
+    /* Zero specificity (:where) so ANY ebook font-family declaration — even
+       one on the html element itself, at equal (0,0,1) specificity — wins the
+       cascade regardless of injection order. Books like Pandoc-generated
+       EPUBs declare their font on the html element; a plain html rule here
+       ties on specificity and wins only by being appended later, silently
+       overriding the book's embedded font with the app's default font
+       (mobile especially, whose default font is sans-serif). */
+    :where(html) {
       font-family: var(${defaultFontFamily}) ${overrideFont ? '!important' : ''};
     }
     /* higher specificity than ebook built-in font styles */
@@ -148,8 +159,13 @@ const getFontStyles = (
     [style*="font-size: 16px"], [style*="font-size:16px"] {
       font-size: 1rem !important;
     }
-    pre, code, kbd {
-      font-family: var(--monospace);
+    /* The revert pass below deliberately excludes pre/code/kbd, so this is the
+       only rule that applies the app's code font and it has to swap sides with
+       the toggle. Off: zero specificity, so a book's own code font wins. On:
+       above the book, and !important is not enough on its own because
+       specificity still breaks ties between important author declarations. */
+    ${overrideFont ? 'html body :is(pre, code, kbd)' : ':where(pre, code, kbd)'} {
+      font-family: var(--monospace) ${overrideFont ? '!important' : ''};
       font-variant-ligatures: none;
     }
     body *:not(pre, code, kbd, .code):not(pre *, code *, kbd *, .code *) {
@@ -227,6 +243,17 @@ const getEinkSelectionStyles = () => {
   `;
 };
 
+// Chromium's default selection colors force near-black text (on blue when
+// focused, on grey when not), unreadable on a dark page — most visibly on the
+// selection a lookup popup holds while it has focus (#6503). Setting only the
+// background keeps each element's own text color, and pdf.js's transparent
+// text layer stays transparent.
+const getDarkSelectionStyles = (primary: string) => `
+    ::selection {
+      background: color-mix(in srgb, ${primary} 40%, transparent);
+    }
+  `;
+
 const getColorStyles = (
   overrideColor: boolean,
   invertImgColorInDark: boolean,
@@ -251,7 +278,7 @@ const getColorStyles = (
     html, body {
       color: ${fg};
     }
-    ${isEink ? getEinkSelectionStyles() : ''}
+    ${isEink ? getEinkSelectionStyles() : isDarkMode ? getDarkSelectionStyles(primary) : ''}
     html[has-background], body[has-background] {
       --background-set: var(--theme-bg-color);
     }
@@ -372,6 +399,10 @@ const getColorStyles = (
   return colorStyles;
 };
 
+export { LINK_HIT_AREA_CLASS };
+export const MAX_ENLARGED_LINKS = 1000;
+export const TEXT_SELECTED_CLASS = 'text-selected';
+
 const getPageLayoutStyles = (
   marginTop: number,
   marginRight: number,
@@ -415,14 +446,19 @@ const getPageLayoutStyles = (
   figure > div:has(img) {
     height: auto !important;
   }
-  /* enlarge the clickable area of links */
-  a {
+  /* enlarge the clickable area of links, in documents opted in by applyLinkHitArea */
+  html.${LINK_HIT_AREA_CLASS} a {
     position: relative !important;
   }
-  a::before {
+  html.${LINK_HIT_AREA_CLASS} a::before {
     content: '';
     position: absolute;
-    inset: -10px;
+    inset: -${LINK_HIT_AREA_PX}px;
+  }
+  /* the enlarged area swallows the text around a link, so a selection dragged
+     next to a footnote marker snaps away (#6566); set while text is selected */
+  html.${TEXT_SELECTED_CLASS} a::before {
+    pointer-events: none;
   }
 
   .${SCROLL_WRAPPER_CLASS} {
@@ -440,12 +476,13 @@ const getPageLayoutStyles = (
     display: table !important;
     max-width: 100%;
   }
-  pre, code, math {
+  pre, code {
     white-space: pre-wrap !important;
     scrollbar-width: none;
   }
   math {
     overflow: auto;
+    scrollbar-width: none;
   }
   table, math {
     max-width: calc(var(--available-width) * 1px);
@@ -549,6 +586,8 @@ const getPageLayoutStyles = (
 // Paragraph-scoped CSS controlled by the Paragraph section of the Layout
 // panel. Gated by BookStyle.useBookLayout: when true, this chunk is skipped
 // and the book's own paragraph formatting takes over.
+const CJK_LANGS = ['zh', 'ja', 'ko'];
+const CJK_LANG_SELECTOR = CJK_LANGS.map((lang) => `:lang(${lang})`).join(', ');
 const getParagraphLayoutStyles = (
   overrideLayout: boolean,
   paragraphMargin: number,
@@ -656,7 +695,7 @@ const getParagraphLayoutStyles = (
     display: flow-root; 
   }
 
-  :lang(zh), :lang(ja), :lang(ko) {
+  ${CJK_LANG_SELECTOR} {
     widows: 1;
     orphans: 1;
   }
@@ -677,6 +716,23 @@ const getParagraphLayoutStyles = (
 
   .nonindent, .noindent {
     text-indent: unset !important;
+  }
+`;
+
+// Zero-specificity fallback for the paragraph chunk's CJK widow/orphan lift
+// above. Use Book Layout skips that chunk wholesale, taking the lift with it,
+// so a CJK book wearing the placeholder `en` its conversion tool stamped
+// (#6672) falls back to the UA default of 2 and the page-bottom gap the lift
+// closes comes back. It is scoped to the section root on purpose: a direct
+// declaration beats an inherited value at any specificity, so an element-wide
+// fallback would stomp widows/orphans the book declares on html or body and
+// expects its paragraphs to inherit. From the root the 1s flow to every
+// paragraph the book says nothing about, while a declaration at any ancestor
+// — or on the paragraph itself — still wins.
+const getCJKLineFlowStyles = () => `
+  :where(${CJK_LANGS.map((lang) => `html:lang(${lang})`).join(', ')}) {
+    widows: 1;
+    orphans: 1;
   }
 `;
 
@@ -918,6 +974,7 @@ export const getStyles = (
   );
   const warichuStyles = getWarichuStyles();
   const rubyStyles = getRubyStyles(viewSettings);
+  const cjkLineFlowStyles = getCJKLineFlowStyles();
   const userStylesheet = viewSettings.userStylesheet!;
   // The `@namespace` declaration must lead the stylesheet: a `@namespace` rule
   // placed after any style or `@font-face` rule is invalid and silently ignored,
@@ -925,7 +982,7 @@ export const getStyles = (
   // the footnote aside's border show as a stray horizontal line (#4438). Keep it
   // ahead of the inlined custom `@font-face` rules.
   const epubNamespace = `@namespace epub "http://www.idpf.org/2007/ops";`;
-  return `${epubNamespace}\n${customFontFaces}\n${pageLayoutStyles}\n${paragraphLayoutStyles}\n${fontStyles}\n${colorStyles}\n${warichuStyles}\n${rubyStyles}\n${userStylesheet}`;
+  return `${epubNamespace}\n${customFontFaces}\n${pageLayoutStyles}\n${paragraphLayoutStyles}\n${cjkLineFlowStyles}\n${fontStyles}\n${colorStyles}\n${warichuStyles}\n${rubyStyles}\n${userStylesheet}`;
 };
 
 // Build a CSS chunk of `@font-face` rules for the given user custom
@@ -946,7 +1003,18 @@ const getCustomFontFaces = (fonts: CustomFont[]): string =>
     })
     .join('\n');
 
-export const transformStylesheet = (css: string, vw: number, vh: number, vertical: boolean) => {
+export const transformStylesheet = (
+  css: string,
+  vw: number,
+  vh: number,
+  vertical: boolean,
+  isFixedLayout = false,
+) => {
+  // Fixed-layout pages are authored against their own viewport: rescaling font
+  // sizes, resolving vw/vh against the reader viewport or repainting colors
+  // breaks the authored page. Leave them exactly as the book wrote them (#5649).
+  if (isFixedLayout) return css;
+
   const isMobile = ['ios', 'android'].includes(getOSPlatform());
   const fontScale = isMobile ? 1.25 : 1;
   const isInlineStyle = !css.includes('{');
@@ -1238,10 +1306,35 @@ export const transformStylesheet = (css: string, vw: number, vh: number, vertica
     .replace(/([\s;])-ms-user-select\s*:\s*none/gi, '$1-ms-user-select: unset')
     .replace(/([\s;])-o-user-select\s*:\s*none/gi, '$1-o-user-select: unset')
     .replace(/([\s;])user-select\s*:\s*none/gi, '$1user-select: unset')
-    .replace(/(font-family\s*:[^;]*?)\bsans-serif\b/gi, '$1WELLREAD_SS_PLACEHOLDER')
-    .replace(/(font-family\s*:[^;]*?)\bserif\b(?!-)/gi, '$1var(--serif, serif)')
-    .replace(/WELLREAD_SS_PLACEHOLDER/g, 'var(--sans-serif, sans-serif)')
-    .replace(/(font-family\s*:[^;]*?)\bmonospace\b/gi, '$1var(--monospace, monospace)')
+    // Point the generic families at the user's per-category font choice, so a
+    // book that asks for `serif` gets the configured serif chain (which also
+    // carries the CJK font) instead of the platform default.
+    //
+    // Only a list item that IS the bare keyword may be rewritten. Matching the
+    // word anywhere in the declaration also hit the book's own family names:
+    // `font-family: Source Han Serif CN` became `Source Han var(--serif, serif) CN`,
+    // and since CSS descriptors cannot contain var() the engine dropped the
+    // whole @font-face rule, detaching the book's only reference to its
+    // embedded font (readest#6047).
+    //
+    // Parking the keyword inside the var() fallback also makes this idempotent:
+    // a stylesheet can be handed to this transform more than once, and a second
+    // pass no longer sees a bare generic to rewrite into
+    // `var(--var(--serif, serif), serif)` (readest#5277).
+    .replace(/(font-family\s*:\s*)([^;{}]*)/gi, (_match: string, prefix: string, value: string) => {
+      const important = /\s*!\s*important\s*$/i.exec(value);
+      const families = important ? value.slice(0, important.index) : value;
+      const rewritten = families
+        .split(',')
+        .map((family: string) => {
+          const generic = /^(serif|sans-serif|monospace)$/i.exec(family.trim());
+          if (!generic) return family;
+          const name = generic[1]!.toLowerCase();
+          return family.replace(generic[1]!, `var(--${name}, ${name})`);
+        })
+        .join(',');
+      return prefix + rewritten + (important ? important[0] : '');
+    })
     .replace(/([\s;])font-weight\s*:\s*normal/gi, '$1font-weight: var(--font-weight)')
     .replace(/([\s;])color\s*:\s*black/gi, '$1color: var(--theme-fg-color)')
     // the whole hex value, or `#000` would also match the start of `#0000FF` (#6858)
@@ -1423,6 +1516,16 @@ export const applyImageStyle = (document: Document) => {
   });
 };
 
+// The enlarged link hit area positions every link and its ::before box, and
+// paginated layout slows down with each positioned box: a Strong's dictionary
+// section went from 1.3s to 10s to lay out, and a 20 MB concordance with 273k
+// links never finished. Opt a document in only when it has few enough links.
+export const applyLinkHitArea = (document: Document) => {
+  if (document.links.length <= MAX_ENLARGED_LINKS) {
+    document.documentElement.classList.add(LINK_HIT_AREA_CLASS);
+  }
+};
+
 export const keepTextAlignment = (document: Document) => {
   // Why two-phase: the previous version read getComputedStyle and wrote
   // classList.add inside the same forEach pass. classList.add invalidates
@@ -1460,15 +1563,56 @@ export const keepTextAlignment = (document: Document) => {
   }
 };
 
+/**
+ * Blend mode for the annotation overlay (`--overlayer-highlight-blend-mode`).
+ *
+ * The overlay is an SVG sibling of the content iframe, so it blends against
+ * whatever the page paints behind it — the mode has to follow the *page*
+ * background, not the app theme. `screen` lightens a dark page, but over a
+ * white one it is a no-op on the background and only tints the glyphs, which is
+ * how highlights went missing on PDFs in dark mode (#5790, #5930, #5943). A
+ * pre-paginated page keeps the book's own bitmap unless the reader asked us to
+ * invert it or to re-render it in the theme colors, so a dark theme alone says
+ * nothing about how dark the page is. Blending does not cross the iframe
+ * boundary in WebKit, which is why Apple platforms never showed the bug.
+ */
+export const getOverlayerBlendMode = ({
+  isDarkMode,
+  isBwEink,
+  isFixedLayout = false,
+  invertImgColorInDark = false,
+  applyThemeToPDF = false,
+  format,
+}: {
+  isDarkMode: boolean;
+  isBwEink: boolean;
+  isFixedLayout?: boolean;
+  invertImgColorInDark?: boolean;
+  applyThemeToPDF?: boolean;
+  format?: BookFormat;
+}): 'difference' | 'screen' | 'multiply' => {
+  if (isBwEink) return 'difference';
+  if (!isDarkMode) return 'multiply';
+  const isDarkPage =
+    !isFixedLayout || invertImgColorInDark || (format === 'PDF' && applyThemeToPDF);
+  return isDarkPage ? 'screen' : 'multiply';
+};
+
 export const applyFixedlayoutStyles = (
   document: Document,
   viewSettings: ViewSettings,
   themeCode?: ThemeCode,
+  format?: BookFormat,
 ) => {
   if (!themeCode) {
     themeCode = getThemeCode();
   }
   const { bg, fg, primary, isDarkMode } = themeCode;
+  // PDF and comic pages are rendered by the app, so they take the theme colors.
+  // Fixed-layout EPUB pages are authored by the book: theming the page repaints
+  // the background the book drew and, because a dark color scheme also swaps the
+  // browser default text color, recolors text the book never colored (#5649).
+  const appRendered = !format || FIXED_LAYOUT_FORMATS.has(format);
   const isEink = viewSettings.isEink;
   const overrideColor = viewSettings.overrideColor!;
   const invertImgColorInDark = viewSettings.invertImgColorInDark!;
@@ -1490,11 +1634,15 @@ export const applyFixedlayoutStyles = (
       --theme-bg-color: ${bg};
       --theme-fg-color: ${fg};
       --theme-primary-color: ${primary};
-      color-scheme: ${isDarkMode ? 'dark' : 'light'};
+      color-scheme: ${appRendered && isDarkMode ? 'dark' : 'light'};
+      /* Chrome for Android's text autosizing rescales line metrics and shifts
+         absolutely positioned per-letter text in fixed-layout books (#5641). */
+      -webkit-text-size-adjust: none;
+      text-size-adjust: none;
     }
     body {
       position: relative;
-      background-color: var(--theme-bg-color);
+      ${appRendered ? 'background-color: var(--theme-bg-color);' : ''}
     }
     ${isEink ? getEinkSelectionStyles() : ''}
     #canvas {
@@ -1509,6 +1657,12 @@ export const applyFixedlayoutStyles = (
     }
     img.singlePage {
       position: relative;
+    }
+    /* An unsized <image> draws at its natural size, which is the page size,
+       but a percentage-height svg in an auto-height block is only 150px tall
+       and would clip it to a strip (#6530). */
+    svg:not([viewBox]):has(> image:not([width])) {
+      overflow: visible;
     }
   `;
   document.head.appendChild(style);

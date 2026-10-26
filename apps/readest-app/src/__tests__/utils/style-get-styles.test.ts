@@ -8,7 +8,7 @@ vi.mock('@/utils/misc', async (importOriginal) => {
   };
 });
 
-import { getStyles, ThemeCode } from '@/utils/style';
+import { LINK_HIT_AREA_CLASS, getStyles, TEXT_SELECTED_CLASS, ThemeCode } from '@/utils/style';
 import { CustomFont } from '@/styles/fonts';
 import { ViewSettings } from '@/types/book';
 import {
@@ -60,6 +60,22 @@ function makeThemeCode(overrides: Partial<ThemeCode> = {}): ThemeCode {
 // ---------------------------------------------------------------------------
 // getFontStyles branches
 // ---------------------------------------------------------------------------
+describe('oversized-block rules (via getStyles)', () => {
+  it('does not force pre-wrap white-space onto MathML (#480)', () => {
+    // MathML markup is usually pretty-printed; pre-wrap would turn the newlines
+    // and indentation between <mi>/<mo> tokens into rendered line breaks and
+    // spaces, breaking every inline formula onto its own line.
+    const css = getStyles(makeViewSettings(), makeThemeCode());
+    const preWrapSelectors = [...css.matchAll(/([^{}]+)\{[^}]*white-space:\s*pre-wrap/g)].map((m) =>
+      m[1]!.trim(),
+    );
+    expect(preWrapSelectors.length).toBeGreaterThan(0);
+    for (const selector of preWrapSelectors) {
+      expect(selector).not.toMatch(/\bmath\b/);
+    }
+  });
+});
+
 describe('getFontStyles branches (via getStyles)', () => {
   const theme = makeThemeCode();
 
@@ -90,6 +106,35 @@ describe('getFontStyles branches (via getStyles)', () => {
     expect(css).toMatch(/font-family: var\(--serif\)\s*[^!]/);
     // And body block should not have font-family at all
     expect(css).not.toContain('font-family: revert !important');
+  });
+
+  // Regression: the app default font used to be injected as a plain `html`
+  // rule, tying on specificity with ebook CSS that also declares its font on
+  // the html element (Pandoc-style EPUBs) and winning purely by injection
+  // order — the book's embedded font silently never applied with "Override
+  // Book Font" off. :where() drops the rule's specificity to zero so any book
+  // declaration beats it.
+  it('injects the default font at zero specificity via :where(html)', () => {
+    const vs = makeViewSettings({ overrideFont: false, defaultFont: 'Serif' });
+    const css = getStyles(vs, theme);
+    expect(css).toContain(':where(html)');
+    expect(css).toMatch(/:where\(html\)\s*\{\s*font-family: var\(--serif\)/);
+  });
+
+  // The monospace injection is zero-specificity too, so a book's own code font
+  // wins when Override Book Font is off. With the toggle ON the rule has to
+  // swap sides and outrank the book, which !important alone cannot do:
+  // specificity still breaks ties between important author declarations.
+  // The resolved cascade is asserted in code-font-override.browser.test.ts.
+  it('swaps the monospace rule above the book only when overrideFont is on', () => {
+    const off = getStyles(makeViewSettings({ overrideFont: false }), theme);
+    expect(off).toMatch(/:where\(pre, code, kbd\)\s*\{\s*font-family: var\(--monospace\)\s*;/);
+
+    const on = getStyles(makeViewSettings({ overrideFont: true }), theme);
+    expect(on).toMatch(
+      /html body :is\(pre, code, kbd\)\s*\{\s*font-family: var\(--monospace\) !important\s*;/,
+    );
+    expect(on).not.toContain(':where(pre, code, kbd)');
   });
 
   it('sets font-size according to defaultFontSize', () => {
@@ -423,6 +468,42 @@ describe('getLayoutStyles branches (via getStyles)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// CJK widow/orphan lift under Use Book Layout
+// ---------------------------------------------------------------------------
+// The paragraph chunk lifts widows/orphans to 1 for CJK via `:lang(zh)…`, but
+// Use Book Layout skips that chunk wholesale and takes the lift with it — a
+// CJK book mislabeled `en` (#6672) then falls back to the UA default of 2 and
+// the page-bottom gap returns. A zero-specificity root fallback ships in
+// every mode: inert where the chunk is present, and scoped to `html:lang()`
+// so book-declared values on html/body reach the paragraphs by inheritance
+// instead of being stomped by a direct declaration (which beats any inherited
+// value regardless of specificity).
+describe('CJK widow/orphan lift (via getStyles)', () => {
+  const theme = makeThemeCode();
+  const whereRule = (css: string) =>
+    css.match(/:where\(html:lang\(zh\), html:lang\(ja\), html:lang\(ko\)\)\s*\{([^}]*)\}/)?.[1] ??
+    '';
+
+  it('ships the zero-specificity fallback even when Use Book Layout skips the paragraph chunk', () => {
+    const css = getStyles(makeViewSettings({ useBookLayout: true }), theme);
+    // the chunk's own class-strength lift is gone…
+    expect(css).not.toMatch(/(^|\n)\s*:lang\(zh\), :lang\(ja\), :lang\(ko\)\s*\{/);
+    // …but the fallback itself survives at zero specificity, on the roots only
+    const rule = whereRule(css);
+    expect(rule).toContain('widows: 1');
+    expect(rule).toContain('orphans: 1');
+  });
+
+  it('keeps the chunk lift and the zero-specificity fallback when Use Book Layout is off', () => {
+    const css = getStyles(makeViewSettings({ useBookLayout: false }), theme);
+    expect(css).toMatch(/(^|\n)\s*:lang\(zh\), :lang\(ja\), :lang\(ko\)\s*\{/);
+    const rule = whereRule(css);
+    expect(rule).toContain('widows: 1');
+    expect(rule).toContain('orphans: 1');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // getColorStyles branches
 // ---------------------------------------------------------------------------
 describe('getColorStyles branches (via getStyles)', () => {
@@ -578,6 +659,17 @@ describe('getColorStyles branches (via getStyles)', () => {
     const css = getStyles(vs, theme);
     expect(css).not.toContain('::selection');
     expect(css).not.toContain('::-moz-selection');
+  });
+
+  // Chromium's default selection paints near-black text, unreadable on a dark
+  // page (#6503). A background-only rule keeps each element's own text color.
+  it('gives dark mode a theme selection background without forcing a text color', () => {
+    const vs = makeViewSettings({ isEink: false });
+    const theme = makeThemeCode({ isDarkMode: true, bg: '#222222', fg: '#e0e0e0' });
+    const css = getStyles(vs, theme);
+    const rule = css.match(/::selection\s*{([^}]*)}/);
+    expect(rule?.[1]).toContain('background: color-mix(in srgb, #3366cc 40%, transparent)');
+    expect(rule?.[1]).not.toMatch(/(^|[\s;])color:/);
   });
 
   it('sets text-decoration to underline for links when isEink is true', () => {
@@ -926,5 +1018,30 @@ describe('instant-highlight selection suppression stays out of getStyles', () =>
     });
     const css = getStyles(vs, theme);
     expect(css).not.toContain('user-select: none !important');
+  });
+});
+
+describe('link hit area in link-dense sections', () => {
+  it('enlarges link hit areas only in documents opted in with LINK_HIT_AREA_CLASS', () => {
+    // Positioning every link and its ::before box made a 20 MB concordance
+    // section with 273k links take minutes to lay out, so the enlarged area is
+    // opt-in per document instead of on by default.
+    const css = getStyles(makeViewSettings(), makeThemeCode());
+    expect(css).toMatch(
+      new RegExp(`html\\.${LINK_HIT_AREA_CLASS} a\\s*\\{\\s*position: relative !important;`),
+    );
+    expect(css).toMatch(new RegExp(`html\\.${LINK_HIT_AREA_CLASS} a::before\\s*\\{`));
+    expect(css).not.toMatch(/(^|\n)\s*a\s*\{\s*position: relative !important;/);
+  });
+});
+
+describe('link hit area during a text selection (#6566)', () => {
+  it('takes the enlarged link hit area out of hit testing while text is selected', () => {
+    // The empty a::before box spreads 10px around each link and swallows the
+    // text there, so dragging a selection onto a footnote's neighbor snapped it.
+    const css = getStyles(makeViewSettings(), makeThemeCode());
+    expect(css).toMatch(
+      new RegExp(`html\\.${TEXT_SELECTED_CLASS} a::before\\s*\\{\\s*pointer-events: none;`),
+    );
   });
 });

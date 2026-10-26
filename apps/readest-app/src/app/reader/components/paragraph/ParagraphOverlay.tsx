@@ -14,6 +14,7 @@ import {
 } from '@/utils/paragraphPresentation';
 import { loadShortcuts } from '@/helpers/shortcuts';
 import { matchesShortcut } from '@/utils/shortcutKeys';
+import { sanitizeBookFragment } from '@/services/transformers/sanitizer';
 
 interface ParagraphOverlayProps {
   bookKey: string;
@@ -38,6 +39,9 @@ const AnimatedParagraph: React.FC<{
   style: React.CSSProperties;
 }> = ({ html, presentation, style }) => {
   const [isReady, setIsReady] = useState(false);
+  // The clone is book markup rendered in the app window: sanitize it, and keep
+  // one object per paragraph so React does not rebuild the DOM every render.
+  const innerHtml = useMemo(() => ({ __html: sanitizeBookFragment(html) }), [html]);
 
   useEffect(() => {
     setIsReady(false);
@@ -63,7 +67,7 @@ const AnimatedParagraph: React.FC<{
         textAlign: getParagraphTextAlign(presentation) as React.CSSProperties['textAlign'],
         transformOrigin: 'center top',
       }}
-      dangerouslySetInnerHTML={{ __html: html }}
+      dangerouslySetInnerHTML={innerHtml}
     />
   );
 };

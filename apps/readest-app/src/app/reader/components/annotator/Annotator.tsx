@@ -72,6 +72,7 @@ import {
 } from '../../utils/globalAnnotations';
 import { annotationToolButtons } from './AnnotationTools';
 import AnnotationRangeEditor from './AnnotationRangeEditor';
+import PageTurnHint from './PageTurnHint';
 import SelectionRangeEditor from './SelectionRangeEditor';
 import AnnotationPopup from './AnnotationPopup';
 import DictionaryPopup from './DictionaryPopup';
@@ -317,6 +318,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     noteAutoTurnPoint,
     cancelAutoTurn,
     onAutoTurn,
+    turnHint,
   } = useTextSelector(
     bookKey,
     contentInsets,
@@ -1107,6 +1109,9 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
           });
         }
       } else {
+        // The teardown above only drops the highlight; a note bubble drawn for
+        // the same record would stay on the page (#6540).
+        views.forEach((view) => removeBookNoteOverlays(view, existing));
         existing.deletedAt = Date.now();
         handleDismissPopup();
       }
@@ -1597,6 +1602,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
 
   return (
     <div ref={containerRef} role='toolbar' tabIndex={-1}>
+      <PageTurnHint bookKey={bookKey} contentInsets={contentInsets} hint={turnHint} />
       {showDictionaryPopup &&
         (() => {
           // Below `sm` (or short landscape) we present the dictionary as a

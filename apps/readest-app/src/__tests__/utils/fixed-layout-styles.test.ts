@@ -9,7 +9,7 @@ vi.mock('@/utils/misc', async (importOriginal) => {
 });
 
 import { applyFixedlayoutStyles, ThemeCode } from '@/utils/style';
-import { ViewSettings } from '@/types/book';
+import { BookFormat, ViewSettings } from '@/types/book';
 import {
   DEFAULT_BOOK_FONT,
   DEFAULT_BOOK_LAYOUT,
@@ -55,9 +55,9 @@ function makeThemeCode(overrides: Partial<ThemeCode> = {}): ThemeCode {
 }
 
 /** Run applyFixedlayoutStyles on a fresh document and return the injected CSS. */
-function fixedLayoutCss(vs: ViewSettings, theme: ThemeCode): string {
+function fixedLayoutCss(vs: ViewSettings, theme: ThemeCode, format: BookFormat = 'PDF'): string {
   const doc = document.implementation.createHTMLDocument('test');
-  applyFixedlayoutStyles(doc, vs, theme);
+  applyFixedlayoutStyles(doc, vs, theme, format);
   return doc.getElementById('fixed-layout-styles')?.textContent ?? '';
 }
 
@@ -100,5 +100,49 @@ describe('applyFixedlayoutStyles contrast filter', () => {
       makeThemeCode(),
     );
     expect(css).not.toContain('contrast(');
+  });
+});
+
+describe('applyFixedlayoutStyles page colors', () => {
+  const darkTheme = makeThemeCode({ isDarkMode: true, bg: '#342e25', fg: '#ffd595' });
+
+  it('keeps book-authored pages out of dark mode so their text stays as authored (#5649)', () => {
+    const css = fixedLayoutCss(makeViewSettings(), darkTheme, 'EPUB');
+    expect(css).toContain('color-scheme: light');
+    expect(css).not.toContain('color-scheme: dark');
+  });
+
+  it('does not paint the theme background over book-authored pages', () => {
+    const css = fixedLayoutCss(makeViewSettings(), darkTheme, 'EPUB');
+    expect(css).not.toMatch(/body\s*{[^}]*background-color/);
+  });
+
+  it('still themes app-rendered pages (PDF, comics) in dark mode', () => {
+    for (const format of ['PDF', 'CBZ'] as const) {
+      const css = fixedLayoutCss(makeViewSettings(), darkTheme, format);
+      expect(css).toContain('color-scheme: dark');
+      expect(css).toMatch(/body\s*{[^}]*background-color: var\(--theme-bg-color\)/);
+    }
+  });
+});
+
+describe('applyFixedlayoutStyles text autosizing', () => {
+  it('disables Chrome-for-Android text autosizing that misplaces per-letter positioned text (#5641)', () => {
+    const css = fixedLayoutCss(makeViewSettings(), makeThemeCode(), 'EPUB');
+    expect(css).toContain('-webkit-text-size-adjust: none');
+    expect(css).toMatch(/[^-]text-size-adjust: none/);
+  });
+});
+
+describe('applyFixedlayoutStyles unsized SVG page images', () => {
+  // KCC-style comics wrap each page as `<div><svg width="100%" height="100%">
+  // <image/></svg></div>` with no viewBox or image size: the percentage height
+  // resolves against an auto-height div, so the svg is 150px tall and clips the
+  // page image to a strip (#6530)
+  it('lets an SVG without a viewBox show its unsized image beyond the svg box', () => {
+    const css = fixedLayoutCss(makeViewSettings(), makeThemeCode(), 'EPUB');
+    expect(css).toMatch(
+      /svg:not\(\[viewBox\]\):has\(> image:not\(\[width\]\)\)\s*\{\s*overflow: visible;/,
+    );
   });
 });

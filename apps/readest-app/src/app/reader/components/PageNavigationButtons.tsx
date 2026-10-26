@@ -91,7 +91,7 @@ const PageNavigationButtons: React.FC<PageNavigationButtonsProps> = ({
           'absolute left-2 -translate-y-1/2',
           'flex items-center gap-1',
           isPageNavigationButtonsVisible ? 'top-1/2 opacity-100' : 'bottom-2 opacity-0',
-          !isPageNavigationButtonsVisible && !appService?.isAndroidApp ? 'pointer-events-none' : '',
+          !isPageNavigationButtonsVisible ? 'pointer-events-none' : '',
         )}
       >
         <button
@@ -143,7 +143,7 @@ const PageNavigationButtons: React.FC<PageNavigationButtonsProps> = ({
           'absolute right-2 -translate-y-1/2',
           'flex items-center gap-1',
           isPageNavigationButtonsVisible ? 'top-1/2 opacity-100' : 'bottom-2 opacity-0',
-          !isPageNavigationButtonsVisible && !appService?.isAndroidApp ? 'pointer-events-none' : '',
+          !isPageNavigationButtonsVisible ? 'pointer-events-none' : '',
         )}
       >
         <button

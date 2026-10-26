@@ -77,6 +77,7 @@ const setup = () => {
 
 let currentSel: Selection | null = null;
 const doc = {
+  documentElement: document.createElement('html'),
   getSelection: () => currentSel,
   createRange: () => ({
     setStart: () => {},
@@ -94,7 +95,7 @@ const setDocSelection = (valid: boolean) => {
     isCollapsed: !valid,
     rangeCount: valid ? 1 : 0,
     toString: () => (valid ? 'selected text' : ''),
-    getRangeAt: () => ({}) as Range,
+    getRangeAt: () => document.createRange(),
   } as unknown as Selection;
 };
 

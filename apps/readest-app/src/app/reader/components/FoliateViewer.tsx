@@ -28,9 +28,11 @@ import {
   applyFixedlayoutStyles,
   applyImageStyle,
   applyNamespacedAttributes,
+  applyLinkHitArea,
   applyScrollbarStyle,
   applyScrollModeClass,
   applyThemeModeClass,
+  getOverlayerBlendMode,
   getStyles,
   getThemeCode,
   keepTextAlignment,
@@ -62,6 +64,11 @@ import { getDirFromUILanguage } from '@/utils/rtl';
 import { isTauriAppPlatform } from '@/services/environment';
 import { TransformContext } from '@/services/transformers/types';
 import { transformContent } from '@/services/transformService';
+import {
+  getSectionDocumentType,
+  normalizeMediaType,
+  sanitizeSvg,
+} from '@/services/transformers/sanitizer';
 import { lockScreenOrientation, setTextSelectionSuppressed } from '@/utils/bridge';
 import { useBookCoverAutoSave } from '../hooks/useAutoSaveBookCover';
 import { manageSyntaxHighlighting } from '@/utils/highlightjs';
@@ -74,6 +81,7 @@ import { isMetered } from '@/utils/network';
 import { eventDispatcher } from '@/utils/event';
 import { isFontType } from '@/utils/font';
 import { getScrollGapAttr } from '@/utils/webtoon';
+import { observeDynamicResources } from '@/utils/dynamicResources';
 import { useMiddleClickAutoscroll } from '../hooks/useMiddleClickAutoscroll';
 import { useAutoScroll } from '../hooks/useAutoScroll';
 import { useAutoScrollSpeedGesture } from '../hooks/useAutoScrollSpeedGesture';
@@ -140,9 +148,18 @@ const FoliateViewer: React.FC<{
   const { registerSpeedListeners, overlayVisible: speedOverlayVisible } =
     useAutoScrollSpeedGesture(autoScroll);
 
+  // The book document outlives this view: bookDataStore keeps it for the next
+  // open, so listeners left on its transformTarget would keep the closed view,
+  // its iframes and their listeners alive, one more set per open (#6710).
+  const removeTransformListenersRef = useRef<(() => void) | null>(null);
+  const unmountedRef = useRef(false);
+
   // A pending anti-flash timer must not fire setNavigating on an unmounted component.
   useEffect(() => {
+    unmountedRef.current = false;
     return () => {
+      unmountedRef.current = true;
+      removeTransformListenersRef.current?.();
       if (navSpinnerTimerRef.current) clearTimeout(navSpinnerTimerRef.current);
     };
   }, []);
@@ -256,8 +273,21 @@ const FoliateViewer: React.FC<{
         .then((data) => {
           const viewSettings = getViewSettings(bookKey);
           const bookData = getBookData(bookKey);
+          const section = bookData?.bookDoc?.sections?.find((s) => s.id === detail.name);
+          const type = normalizeMediaType(detail.type);
+          // the loader reads the type after the data resolves
+          detail.type = section ? getSectionDocumentType(type) : type;
           if (viewSettings && detail.type === 'text/css')
-            return transformStylesheet(data, width, height, viewSettings.vertical);
+            return transformStylesheet(
+              data,
+              width,
+              height,
+              viewSettings.vertical,
+              bookData?.isFixedLayout,
+            );
+          if (detail.type === 'image/svg+xml' && !viewSettings?.allowScript) {
+            return sanitizeSvg(data);
+          }
           const isHtml = detail.type === 'application/xhtml+xml' || detail.type === 'text/html';
           if (viewSettings && bookData && isHtml) {
             const ctx: TransformContext = {
@@ -271,6 +301,7 @@ const FoliateViewer: React.FC<{
               content: data,
               sectionHref: detail.name,
               transformers: [
+                'epubSwitch',
                 'style',
                 'punctuation',
                 'footnote',
@@ -319,6 +350,7 @@ const FoliateViewer: React.FC<{
       // Repair the parsed DOM before anything reads it: the renderer and the
       // fix-ups below both resolve styles off this document.
       applyNamespacedAttributes(detail.doc);
+      applyLinkHitArea(detail.doc);
       const renderer = viewRef.current?.renderer;
       const writingDir = renderer?.setStyles && getDirection(detail.doc);
       const viewSettings = getViewSettings(bookKey)!;
@@ -346,7 +378,7 @@ const FoliateViewer: React.FC<{
       });
 
       if (bookDoc.rendition?.layout === 'pre-paginated') {
-        applyFixedlayoutStyles(detail.doc, viewSettings);
+        applyFixedlayoutStyles(detail.doc, viewSettings, undefined, bookData.book?.format);
         const themeCode = getThemeCode();
         if (bookData.book?.format === 'PDF' && themeCode && renderer) {
           renderer.pageColors = viewSettings.applyThemeToPDF
@@ -371,6 +403,13 @@ const FoliateViewer: React.FC<{
         skipToNextSectionCallback: skipToNextSection,
         skipToNextSectionLabel: _('End of this section. Continue to the next.'),
       });
+
+      if (viewSettings.allowScript) {
+        // Book scripts may add media, or a background image, with a path
+        // relative to the section long after foliate's load-time URL rewrite.
+        const section = bookDoc.sections?.[detail.index];
+        if (section?.loadHref) observeDynamicResources(detail.doc, section.loadHref);
+      }
 
       // Inline scripts in tauri platforms are not executed by default
       if (viewSettings.allowScript && isTauriAppPlatform()) {
@@ -687,7 +726,7 @@ const FoliateViewer: React.FC<{
 
       const { book } = view;
 
-      book.transformTarget?.addEventListener('load', async (event: Event) => {
+      const handleTransformLoad = async (event: Event) => {
         const { detail } = event as CustomEvent<{
           isScript: boolean;
           type: string;
@@ -713,12 +752,20 @@ const FoliateViewer: React.FC<{
             }
           });
         }
-      });
+      };
       const viewWidth = appService?.isMobile ? screen.width : window.innerWidth;
       const viewHeight = appService?.isMobile ? screen.height : window.innerHeight;
       const width = viewWidth - insets.left - insets.right;
       const height = viewHeight - insets.top - insets.bottom;
-      book.transformTarget?.addEventListener('data', getDocTransformHandler({ width, height }));
+      const handleTransformData = getDocTransformHandler({ width, height });
+      book.transformTarget?.addEventListener('load', handleTransformLoad);
+      book.transformTarget?.addEventListener('data', handleTransformData);
+      removeTransformListenersRef.current = () => {
+        book.transformTarget?.removeEventListener('load', handleTransformLoad);
+        book.transformTarget?.removeEventListener('data', handleTransformData);
+      };
+      // The reader can close while view.open() is pending; its cleanup has run.
+      if (unmountedRef.current) removeTransformListenersRef.current();
       view.renderer.setStyles?.(getStyles(viewSettings, undefined, getLoadedFonts()));
 
       doubleClickDisabled.current = viewSettings.disableDoubleClick!;
@@ -882,7 +929,7 @@ const FoliateViewer: React.FC<{
       const docs = viewRef.current.renderer.getContents();
       docs.forEach(({ doc }) => {
         if (bookDoc.rendition?.layout === 'pre-paginated') {
-          applyFixedlayoutStyles(doc, viewSettings);
+          applyFixedlayoutStyles(doc, viewSettings, undefined, bookData?.book?.format);
         }
         applyThemeModeClass(doc, isDarkMode);
         applyScrollModeClass(doc, viewSettings.scrolled || false);
@@ -908,6 +955,33 @@ const FoliateViewer: React.FC<{
     viewSettings?.applyThemeToPDF,
     viewSettings?.contrast,
     viewSettings?.hideScrollbar,
+  ]);
+
+  // The annotation overlay lives outside the content iframe, so its blend mode
+  // has to follow the page the highlight sits on rather than the app theme: a
+  // PDF keeps its own white bitmap in a dark theme unless the reader asked us
+  // to darken it (#5790, #5930, #5943). Scoped to this view so the library and
+  // reflowable books keep the global default from useTheme.
+  useEffect(() => {
+    if (!containerRef.current || !viewSettings) return;
+    containerRef.current.style.setProperty(
+      '--overlayer-highlight-blend-mode',
+      getOverlayerBlendMode({
+        isDarkMode,
+        isBwEink: !!viewSettings.isEink && !viewSettings.isColorEink,
+        isFixedLayout: bookDoc.rendition?.layout === 'pre-paginated',
+        invertImgColorInDark: !!viewSettings.invertImgColorInDark,
+        applyThemeToPDF: !!viewSettings.applyThemeToPDF,
+        format: bookData?.book?.format,
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isDarkMode,
+    viewSettings?.isEink,
+    viewSettings?.isColorEink,
+    viewSettings?.invertImgColorInDark,
+    viewSettings?.applyThemeToPDF,
   ]);
 
   useEffect(() => {

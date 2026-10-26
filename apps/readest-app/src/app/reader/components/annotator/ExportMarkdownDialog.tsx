@@ -14,6 +14,7 @@ import {
   getHighlightColorLabel,
 } from '@/app/reader/utils/annotatorUtil';
 import { renderNoteTemplate, formatBlockQuote } from '@/utils/note';
+import DOMPurify from 'dompurify';
 import {
   AnnotationLinkType,
   buildAnnotationAppUrl,
@@ -313,7 +314,12 @@ const ExportMarkdownDialog: React.FC<ExportMarkdownDialogProps> = ({
   // Convert markdown to HTML for preview
   const htmlPreview = useMemo(() => {
     if (!markdownPreview) return '';
-    const html = marked.parse(markdownPreview) as string;
+    // Titles, highlighted text and notes (including imported ones) flow into
+    // the preview, which is rendered in the app window: sanitize it.
+    const html = DOMPurify.sanitize(marked.parse(markdownPreview) as string, {
+      USE_PROFILES: { html: true },
+      FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select'],
+    });
     return html.replace(/<a href=/g, '<a target="_blank" rel="noopener noreferrer" href=');
   }, [markdownPreview]);
 

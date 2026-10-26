@@ -247,8 +247,9 @@ export const usePagination = (
                 (screenX >= centerStartX && screenX <= centerEndX)
               ) {
                 // A page-filling image/table leaves nowhere else to tap for
-                // its viewer, so the center opens it (#6424).
-                if (msg.data.media) {
+                // its viewer, so the center opens it (#6424). Only media
+                // from the reader's own handlers, which post from this window.
+                if (msg.data.media && msg.source === window) {
                   window.postMessage(
                     { type: 'iframe-open-media', bookKey, ...msg.data.media },
                     '*',
@@ -362,7 +363,7 @@ export const usePagination = (
   // postMessage (mirroring useShortcuts' unified window + iframe handling).
   // All resolve through the shared binding registry. Suppressed while the
   // toolbar is visible so D-pad keys keep driving toolbar spatial navigation.
-  const handleHardwarePageTurn = (candidate: KeyCandidate): boolean => {
+  const handleHardwarePageTurn = (candidate: KeyCandidate, execute = true): boolean => {
     const settings = useSettingsStore.getState().settings.hardwarePageTurner;
     if (!settings?.enabled) return false;
     if (useReaderStore.getState().hoveredBookKey) return false;
@@ -376,6 +377,9 @@ export const usePagination = (
 
     const action = resolvePageTurn(settings, candidate);
     if (!action) return false;
+    // Auto-repeat must still claim a configured chord so browser defaults
+    // (for example Ctrl+End) remain suppressed, but must not turn again.
+    if (!execute) return true;
 
     // E-ink full screen refresh (Android only) — clears ghosting without
     // turning the page. The native bridge no-ops on non-e-ink hardware.
@@ -410,24 +414,37 @@ export const usePagination = (
     handleHardwarePageTurn({ source: 'native', id: keyName });
   };
 
+  const handleHardwareIframeKey = (msg: CustomEvent): boolean => {
+    const detail = msg.detail as { bookKey?: string; event?: KeyboardEvent } | undefined;
+    const event = detail?.event;
+    if (detail?.bookKey !== bookKey || !event) return false;
+    const target = event.target as HTMLElement | null;
+    if (target?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target?.tagName ?? '')) {
+      return false;
+    }
+    return handleHardwarePageTurn(normalizeDomKeyEvent(event), !event.repeat);
+  };
+
   const handleHardwareDomKey = (event: KeyboardEvent | MessageEvent) => {
     let candidate: KeyCandidate;
+    let execute = true;
     if (event instanceof KeyboardEvent) {
-      if (event.repeat) return;
       const target = event.target as HTMLElement | null;
       if (target?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target?.tagName ?? '')) {
         return;
       }
       candidate = normalizeDomKeyEvent(event);
+      execute = !event.repeat;
     } else if (event.data?.type === 'iframe-keydown' && event.data.bookKey === bookKey) {
+      if (event.data.interactiveTarget || event.data.repeat) return;
       const id = event.data.code || event.data.key;
       if (typeof id !== 'string' || !id) return;
-      candidate = { source: 'dom', id };
+      candidate = normalizeDomKeyEvent(event.data);
     } else {
       return;
     }
 
-    if (handleHardwarePageTurn(candidate)) {
+    if (handleHardwarePageTurn(candidate, execute)) {
       // Stop `useShortcuts` from also paging on this key — capture-phase
       // for the window keydown, registration order for the iframe message.
       if (event instanceof KeyboardEvent) event.preventDefault();
@@ -479,6 +496,7 @@ export const usePagination = (
     if (hasNativeBinding) {
       eventDispatcher.on('native-key-down', handleHardwareNativeKey);
     }
+    eventDispatcher.onSync('iframe-page-turn-keydown', handleHardwareIframeKey);
     window.addEventListener('keydown', handleHardwareDomKey, true);
     window.addEventListener('message', handleHardwareDomKey);
 
@@ -489,6 +507,7 @@ export const usePagination = (
       if (hasNativeBinding) {
         eventDispatcher.off('native-key-down', handleHardwareNativeKey);
       }
+      eventDispatcher.offSync('iframe-page-turn-keydown', handleHardwareIframeKey);
       window.removeEventListener('keydown', handleHardwareDomKey, true);
       window.removeEventListener('message', handleHardwareDomKey);
     };

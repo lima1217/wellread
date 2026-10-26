@@ -44,6 +44,8 @@ export interface SectionItem {
   fragments?: Array<SectionFragment>;
 
   loadText?: () => Promise<string | null>;
+  // Resolve a reference a script introduces after load (see observeDynamicResources).
+  loadHref?: (href: string) => Promise<string>;
   createDocument: () => Promise<Document>;
 }
 
@@ -147,6 +149,70 @@ export interface DocumentLoaderOptions {
    */
   nativeFilePath?: string;
 }
+
+type PDFJSGlobal = {
+  GlobalWorkerOptions: { workerSrc: string };
+};
+
+let compatPDFWorkerURL: string | undefined;
+
+async function configurePDFWorker() {
+  if (typeof ArrayBuffer.prototype.transferToFixedLength === 'function') return;
+
+  // PDF.js 6 uses transferToFixedLength inside its worker, but WebKit 16 does
+  // not provide it. PDF.js swallows the resulting worker error and renders an
+  // empty operator list, leaving both the cover and every page blank (#6015).
+  await import('@pdfjs/pdf.min.mjs');
+  const { pdfjsLib } = globalThis as typeof globalThis & { pdfjsLib: PDFJSGlobal };
+  const workerURL = new URL('/vendor/pdfjs/pdf.worker.min.mjs', location.href).href;
+  compatPDFWorkerURL ??= URL.createObjectURL(
+    new Blob(
+      [
+        `if (!ArrayBuffer.prototype.transferToFixedLength) {
+  Object.defineProperty(ArrayBuffer.prototype, 'transferToFixedLength', {
+    configurable: true,
+    writable: true,
+    value(newByteLength = this.byteLength) {
+      const result = new ArrayBuffer(newByteLength);
+      new Uint8Array(result).set(
+        new Uint8Array(this, 0, Math.min(this.byteLength, result.byteLength)),
+      );
+      return result;
+    },
+  });
+}
+const { WorkerMessageHandler } = await import(${JSON.stringify(workerURL)});
+export { WorkerMessageHandler };`,
+      ],
+      { type: 'text/javascript' },
+    ),
+  );
+  pdfjsLib.GlobalWorkerOptions.workerSrc = compatPDFWorkerURL;
+}
+
+const COMIC_IMAGE_EXTS = [
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.bmp',
+  '.webp',
+  '.svg',
+  '.jxl',
+  '.avif',
+];
+
+// A plain .zip of images is a comic without the .cbz name (issue #7038).
+// Directories, macOS resource forks, dotfiles and ComicInfo.xml don't count.
+const isImageArchive = (entries: { filename: string; directory?: boolean }[]) => {
+  const files = entries
+    .filter((e) => !e.directory && !e.filename.startsWith('__MACOSX/'))
+    .map((e) => e.filename.split('/').pop()!.toLowerCase())
+    .filter((name) => name && !name.startsWith('.') && name !== 'comicinfo.xml');
+  return (
+    files.length > 0 && files.every((name) => COMIC_IMAGE_EXTS.some((ext) => name.endsWith(ext)))
+  );
+};
 
 export class DocumentLoader {
   private file: File;
@@ -407,7 +473,7 @@ export class DocumentLoader {
         const loader = await this.makeZipLoader(prefetch);
         const { entries } = loader;
 
-        if (this.isCBZ()) {
+        if (this.isCBZ() || (!this.isFBZ() && isImageArchive(entries))) {
           const { makeComicBook } = await import('foliate-js/comic-book.js');
           book = await makeComicBook(loader, this.file);
           format = 'CBZ';
@@ -423,6 +489,7 @@ export class DocumentLoader {
           format = 'EPUB';
         }
       } else if (await this.isPDF()) {
+        await configurePDFWorker();
         const { makePDF } = await import('foliate-js/pdf.js');
         book = await makePDF(this.file);
         format = 'PDF';

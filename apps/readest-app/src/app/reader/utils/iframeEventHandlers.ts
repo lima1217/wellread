@@ -73,6 +73,9 @@ const getKeyStatus = (event?: MouseEvent | WheelEvent | TouchEvent) => {
 };
 
 export const handleKeydown = (bookKey: string, event: KeyboardEvent) => {
+  const target = event.target as HTMLElement | null;
+  const interactiveTarget =
+    !!target?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target?.tagName ?? '');
   keyboardState = {
     key: event.key,
     code: event.code,
@@ -89,6 +92,14 @@ export const handleKeydown = (bookKey: string, event: KeyboardEvent) => {
     event.preventDefault();
   }
 
+  // The original iframe KeyboardEvent must be consumed synchronously. A later
+  // postMessage handler cannot cancel browser defaults such as Ctrl+End.
+  if (eventDispatcher.dispatchSync('iframe-page-turn-keydown', { bookKey, event })) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return;
+  }
+
   window.postMessage(
     {
       type: 'iframe-keydown',
@@ -99,6 +110,9 @@ export const handleKeydown = (bookKey: string, event: KeyboardEvent) => {
       shiftKey: event.shiftKey,
       altKey: event.altKey,
       metaKey: event.metaKey,
+      altGraphKey: event.getModifierState('AltGraph'),
+      repeat: event.repeat,
+      interactiveTarget,
     },
     '*',
   );
@@ -240,7 +254,10 @@ const detectMediaTarget = (target: HTMLElement | null): MediaTarget | null => {
     if (href) return { elementType: 'image', src: href };
   }
   const table = target.localName === 'table' ? target : target.closest('table');
-  if (table) return { elementType: 'table', html: (table as HTMLElement).outerHTML };
+  // A link inside a table is followed; the table zooms from anywhere else (#6856)
+  if (table && !table.contains(target.closest('a'))) {
+    return { elementType: 'table', html: (table as HTMLElement).outerHTML };
+  }
   return null;
 };
 
