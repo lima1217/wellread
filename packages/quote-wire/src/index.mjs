@@ -4,11 +4,15 @@
  */
 
 const CHAPTER_ATTR = /^— 《(.+)》$/;
+/** Selection anchor attr line `> @cfi epubcfi(…)` (optional, after the chapter attr). */
+const CFI_ATTR = /^@cfi (epubcfi\(\S+\))$/;
+/** Matches READER_STATE_CFI_MAX_LENGTH in @wellread/reading-context. */
+const CFI_MAX_LENGTH = 4096;
 /** Keeps quote body lines / composer `>` lines from being peeled as chapter attrs. */
 const PROTECT_ZWSP = '\u200B';
 
 /**
- * @typedef {{ text: string, chapterTitle?: string | null, id?: string }} PendingQuoteForTurn
+ * @typedef {{ text: string, chapterTitle?: string | null, cfi?: string | null, id?: string }} PendingQuoteForTurn
  */
 
 /**
@@ -43,10 +47,20 @@ function sanitizeChapterTitle(chapter) {
  * @param {string} line
  */
 function protectAmbiguousLine(line) {
-  if (CHAPTER_ATTR.test(line) || line.startsWith('>')) {
+  if (CHAPTER_ATTR.test(line) || CFI_ATTR.test(line) || line.startsWith('>')) {
     return `${PROTECT_ZWSP}${line}`;
   }
   return line;
+}
+
+/**
+ * Single-line epubcfi(...) or '' when absent / malformed / oversized.
+ * @param {unknown} cfi
+ */
+function sanitizeCfi(cfi) {
+  const value = typeof cfi === 'string' ? cfi.trim() : '';
+  if (!value || value.length > CFI_MAX_LENGTH) return '';
+  return CFI_ATTR.test(`@cfi ${value}`) ? value : '';
 }
 
 /**
@@ -83,6 +97,10 @@ export function formatPendingQuotesForTurn(quotes, userText) {
     const chapter = sanitizeChapterTitle(q.chapterTitle ?? '');
     if (chapter) {
       lines.push(`> — 《${chapter}》`);
+    }
+    const cfi = sanitizeCfi(q.cfi);
+    if (cfi) {
+      lines.push(`> @cfi ${cfi}`);
     }
     return [lines.join('\n')];
   });
@@ -123,13 +141,13 @@ export function peelLeadingQuoteWire(wire) {
  * Peel leading Pending Quote blockquotes from wire text into QuoteStack fields.
  * @param {string} wire
  * @returns {{
- *   quotes: Array<{ text: string, chapterTitle: string | null }>,
+ *   quotes: Array<{ text: string, chapterTitle: string | null, cfi?: string }>,
  *   content: string,
  * }}
  */
 export function parsePendingQuotesFromWire(wire) {
   const { quoteParts, content } = peelLeadingQuoteWire(wire);
-  /** @type {Array<{ text: string, chapterTitle: string | null }>} */
+  /** @type {Array<{ text: string, chapterTitle: string | null, cfi?: string }>} */
   const quotes = [];
   for (const part of quoteParts) {
     const block = (part || '').trim();
@@ -137,19 +155,23 @@ export function parsePendingQuotesFromWire(wire) {
     const lines = block.split('\n');
     /** @type {string | null} */
     let chapterTitle = null;
+    let cfi = '';
     /** @type {string[]} */
     const textLines = [];
     for (const line of lines) {
       const body = line.replace(/^>\s?/, '');
       const chapterMatch = CHAPTER_ATTR.exec(body);
+      const cfiMatch = CFI_ATTR.exec(body);
       if (chapterMatch) {
         chapterTitle = chapterMatch[1] ?? null;
+      } else if (cfiMatch) {
+        cfi = sanitizeCfi(cfiMatch[1]);
       } else {
         textLines.push(stripQuoteWireProtection(body));
       }
     }
     const text = textLines.join('\n').trim();
-    if (text) quotes.push({ text, chapterTitle });
+    if (text) quotes.push({ text, chapterTitle, ...(cfi ? { cfi } : {}) });
   }
   return { quotes, content };
 }

@@ -11,16 +11,19 @@ import { shouldAttachNativeWebSearch } from '../createModel.adapters.mjs';
 import { readExtractStatus } from './extractMeta.mjs';
 import { listNotesIndex } from './notesIndex.mjs';
 import {
-  appendReadingContext,
   buildReadingContextEnvelope,
   buildSystemPrompt,
   collectPriorSources,
+  prependReadingContext,
 } from './prompt.mjs';
 import {
+  resolveChunksForCfi,
   resolveFocusChunks,
   resolveSectionChunksForReader,
 } from './resolveSectionChunks.mjs';
 import { discoverSkills } from './skills/discover.mjs';
+import { readAnnotationsStatus } from './annotations.mjs';
+import { createSpoilerGuard } from './spoilerGuard.mjs';
 import { parseSlashInvocation } from './skills/invoke.mjs';
 import {
   resolveFinalMaxOutputTokens,
@@ -31,6 +34,20 @@ import { bindTurnTools, maybeAttachNativeWebSearch } from './turnTools.mjs';
 import { prepareUserTurn } from './userTurn.mjs';
 
 /**
+ * Drop envelope chunk paths the spoiler guard hides (count follows).
+ * @template {{ paths: string[], count: number } | null} T
+ * @param {T} resolved
+ * @param {import('./spoilerGuard.mjs').SpoilerGuard | null} guard
+ * @returns {T}
+ */
+function withVisiblePaths(resolved, guard) {
+  if (!resolved || !guard) return resolved;
+  const { paths, hidden } = guard.filterPaths(resolved.paths);
+  if (!hidden) return resolved;
+  return { ...resolved, paths, count: Math.max(0, resolved.count - hidden) };
+}
+
+/**
  * @param {{
  *   session: import('./sessionStore.mjs').Session,
  *   userMessage: string,
@@ -39,6 +56,7 @@ import { prepareUserTurn } from './userTurn.mjs';
  *   apiMode?: 'chat' | 'responses',
  *   baseURL?: string | null,
  *   readerState?: { chapter?: string | null, cfi?: string | null, sectionIndex?: number | null } | null,
+ *   spoilerGuard?: boolean,
  *   maxToolRounds?: number,
  *   finalMaxOutputTokens?: number,
  *   tools?: import('ai').ToolSet, // schema tools self-gate; bare tools wrapped in bindTurnTools
@@ -71,33 +89,57 @@ export function prepareTurnContext(input) {
   const notesIndex = booksRoot
     ? listNotesIndex(booksRoot, session.bookId)
     : [];
-  const sectionChunks = booksRoot
-    ? resolveSectionChunksForReader({
-        booksRoot,
-        bookId: session.bookId,
-        readerState: input.readerState,
-      })
-    : null;
-  const focusChunks = booksRoot
-    ? resolveFocusChunks({
-        booksRoot,
-        bookId: session.bookId,
-        readerState: input.readerState,
-      })
-    : null;
+  const spoilerGuard = createSpoilerGuard({
+    enabled: input.spoilerGuard,
+    booksRoot,
+    bookId: session.bookId,
+    readerState: input.readerState,
+  });
+  const sectionChunks = withVisiblePaths(
+    booksRoot
+      ? resolveSectionChunksForReader({
+          booksRoot,
+          bookId: session.bookId,
+          readerState: input.readerState,
+        })
+      : null,
+    spoilerGuard,
+  );
+  const focusChunks = withVisiblePaths(
+    booksRoot
+      ? resolveFocusChunks({
+          booksRoot,
+          bookId: session.bookId,
+          readerState: input.readerState,
+        })
+      : null,
+    spoilerGuard,
+  );
+  const annotations = booksRoot ? readAnnotationsStatus(booksRoot, session.bookId) : null;
   const extractStatus = booksRoot
     ? readExtractStatus(booksRoot, session.bookId)
     : { status: 'missing', chunkCount: 0, schemaVersion: null };
+  // Selection anchors → the extract chunk(s) that hold each quote.
+  const quotes = prepared.quotes.map((q) =>
+    q.cfi && booksRoot
+      ? {
+          ...q,
+          chunks: resolveChunksForCfi({ booksRoot, bookId: session.bookId, cfi: q.cfi }),
+        }
+      : q,
+  );
   const envelope = buildReadingContextEnvelope({
     bookId: session.bookId,
     bookTitle: session.bookTitle,
     readerState: input.readerState,
-    quotes: prepared.quotes,
+    quotes,
     priorSources,
     notesIndex,
     extractStatus,
     focusChunks,
     sectionChunks,
+    annotations,
+    spoilerGuard: spoilerGuard ? { limitCfi: spoilerGuard.limitCfi } : null,
   });
   const instructions = buildSystemPrompt({
     bookId: session.bookId,
@@ -105,12 +147,14 @@ export function prepareTurnContext(input) {
     skills,
     webSearchEnabled,
   });
-  const system = appendReadingContext(instructions, envelope);
+  // System stays stable across turns (provider prompt caching); the per-turn
+  // envelope is prepended to this turn's user message and persisted with it,
+  // so earlier turns keep their own quotes/position byte-for-byte.
+  const system = instructions;
+  const modelContent = prependReadingContext(prepared.modelContent, envelope);
   const { toolSystem, streamTextOptions } = resolveTurnModelPresentation({
     apiMode: input.apiMode,
     thinkingMode,
-    system,
-    envelope,
     instructions,
   });
 
@@ -134,6 +178,7 @@ export function prepareTurnContext(input) {
     composeGenerateTextFn: input.composeGenerateTextFn,
     abortSignal: input.abortSignal,
     contextWindowTokens: input.contextWindowTokens,
+    spoilerGuard,
   });
   const tools = maybeAttachNativeWebSearch(bound.tools, {
     baseURL: input.baseURL,
@@ -149,7 +194,8 @@ export function prepareTurnContext(input) {
   );
 
   return {
-    prepared,
+    prepared: { ...prepared, modelContent },
+    envelope,
     thinkingMode,
     system,
     toolSystem,

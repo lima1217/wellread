@@ -6,12 +6,23 @@
 import { generateText } from 'ai';
 import { randomBytes } from 'node:crypto';
 import { isAbortError } from './httpAbort.mjs';
+import { compactToolResultValue } from './historyCompact.mjs';
+import { assistantToModelMessages } from './modelHistory.mjs';
 
 export const COMPRESS_TRIGGER_RATIO = 0.68;
 export const COMPRESS_TARGET_RATIO = 0.2;
 
 /** Per-message role/framing overhead in the rough token estimate. */
 const MSG_OVERHEAD_TOKENS = 4;
+
+/** Summary length bounds (tokens); scales with the window in between. */
+export const SUMMARY_MIN_TOKENS = 64;
+export const SUMMARY_MAX_TOKENS = 4096;
+
+/** Per-message caps when serializing dropped turns for the summarizer. */
+const SUMMARY_INPUT_MESSAGE_CHARS = 6000;
+const SUMMARY_INPUT_TOOL_ARGS_CHARS = 200;
+const SUMMARY_INPUT_SOURCES_MAX = 12;
 
 /**
  * Conservative rough token estimate for compression triggers.
@@ -43,8 +54,27 @@ export function estimateTokens(text) {
 }
 
 /**
+ * @param {unknown} value
+ */
+function safeJson(value) {
+  try {
+    return JSON.stringify(value) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Estimate what each message costs on the wire, matching buildModelMessages:
+ * user turns send modelContent (envelope + expanded skill), assistant turns
+ * send their (replay-compacted) modelMessages when persisted, else the
+ * legacy content/reasoning/tool reconstruction.
+ *
  * @param {Array<{
+ *   id?: string,
+ *   role?: string,
  *   content?: string,
+ *   modelContent?: string,
  *   reasoning?: string,
  *   tools?: unknown,
  *   modelMessages?: unknown,
@@ -54,21 +84,37 @@ export function estimateTokens(text) {
 export function estimateMessagesTokens(messages) {
   let total = 0;
   for (const m of messages) {
-    total += estimateTokens(m.content) + MSG_OVERHEAD_TOKENS;
-    total += estimateTokens(m.reasoning);
-    if (m.tools != null) {
-      try {
-        total += estimateTokens(JSON.stringify(m.tools));
-      } catch {
-        // ignore non-serializable tool traces
-      }
+    total += MSG_OVERHEAD_TOKENS;
+    if (m.role === 'user') {
+      total += estimateTokens(
+        typeof m.modelContent === 'string' && m.modelContent ? m.modelContent : m.content,
+      );
+      continue;
     }
-    if (m.modelMessages != null) {
-      try {
-        total += estimateTokens(JSON.stringify(m.modelMessages));
-      } catch {
-        // ignore non-serializable transcripts
-      }
+    if (Array.isArray(m.modelMessages) && m.modelMessages.length > 0) {
+      total += estimateTokens(
+        safeJson(
+          assistantToModelMessages(
+            /** @type {import('./modelHistory.mjs').HistorySourceMessage} */ (
+              /** @type {unknown} */ (m)
+            ),
+          ),
+        ),
+      );
+      continue;
+    }
+    total += estimateTokens(m.content);
+    total += estimateTokens(m.reasoning);
+    if (Array.isArray(m.tools)) {
+      total += estimateTokens(
+        safeJson(
+          m.tools.map((t) =>
+            t && typeof t === 'object' && 'result' in t
+              ? { ...t, result: compactToolResultValue(t.result) }
+              : t,
+          ),
+        ),
+      );
     }
   }
   return total;
@@ -79,6 +125,7 @@ export function estimateMessagesTokens(messages) {
  *   messages: Array<{ id: string, role: string, content: string }>,
  *   systemPrompt: string,
  *   contextWindowTokens: number,
+ *   observedTokens?: number,
  * }} input
  * @returns {{
  *   beforeTokens: number,
@@ -92,14 +139,24 @@ export function planCompression(input) {
   const window = Number(input.contextWindowTokens);
   if (!Number.isFinite(window) || window <= 0) return null;
 
+  const messages = input.messages;
+  if (messages.length === 0) return null;
   const systemTokens = estimateTokens(input.systemPrompt);
-  const beforeTokens = systemTokens + estimateMessagesTokens(input.messages);
+  const estimated = systemTokens + estimateMessagesTokens(messages);
+  // The provider's own count for the previous request (history before the
+  // newest message) beats the char heuristic when it is larger.
+  const observed = Number(input.observedTokens);
+  const beforeTokens =
+    Number.isFinite(observed) && observed > 0
+      ? Math.max(
+          estimated,
+          observed + estimateMessagesTokens([messages[messages.length - 1]]),
+        )
+      : estimated;
   const trigger = Math.floor(window * COMPRESS_TRIGGER_RATIO);
   if (beforeTokens < trigger) return null;
 
   const targetTokens = Math.floor(window * COMPRESS_TARGET_RATIO);
-  const messages = input.messages;
-  if (messages.length === 0) return null;
 
   // Always keep the newest message (usually the in-flight user turn).
   const keep = [messages[messages.length - 1]];
@@ -108,8 +165,8 @@ export function planCompression(input) {
   // Leave room under the 20% target for system + a summary of the dropped prefix.
   const roomForKeepAndSummary = Math.max(0, targetTokens - systemTokens);
   const summaryBudgetTokens = Math.max(
-    64,
-    Math.min(Math.floor(roomForKeepAndSummary * 0.45), 512),
+    SUMMARY_MIN_TOKENS,
+    Math.min(Math.floor(roomForKeepAndSummary * 0.45), SUMMARY_MAX_TOKENS),
   );
   let keepBudget = Math.max(0, roomForKeepAndSummary - summaryBudgetTokens);
 
@@ -169,12 +226,43 @@ export function applyCompressionPlan(input) {
 }
 
 /**
- * Serialize dropped messages for the summarizer.
- * @param {Array<{ role: string, content: string }>} messages
+ * Serialize dropped messages for the summarizer: prose plus what the
+ * assistant read (tool name + args) and the passages it cited (cfi + title),
+ * so the summary can keep concrete references instead of only chat text.
+ *
+ * @param {Array<{
+ *   role: string,
+ *   content: string,
+ *   tools?: Array<{ name?: string, args?: unknown }>,
+ *   sources?: Array<{ cfi?: string, title?: string }>,
+ * }>} messages
  */
 export function formatMessagesForSummary(messages) {
   return messages
-    .map((m) => `${m.role.toUpperCase()}:\n${m.content}`)
+    .map((m) => {
+      let body = typeof m.content === 'string' ? m.content : '';
+      if (body.length > SUMMARY_INPUT_MESSAGE_CHARS) {
+        body = `${body.slice(0, SUMMARY_INPUT_MESSAGE_CHARS)}…`;
+      }
+      const lines = [`${m.role.toUpperCase()}:`, body];
+      if (Array.isArray(m.tools) && m.tools.length) {
+        const calls = m.tools
+          .filter((t) => t && typeof t.name === 'string')
+          .map((t) => {
+            const args = safeJson(t.args ?? {});
+            return `${t.name}(${args.length > SUMMARY_INPUT_TOOL_ARGS_CHARS ? `${args.slice(0, SUMMARY_INPUT_TOOL_ARGS_CHARS)}…` : args})`;
+          });
+        if (calls.length) lines.push(`[read: ${calls.join('; ')}]`);
+      }
+      if (Array.isArray(m.sources) && m.sources.length) {
+        const refs = m.sources
+          .filter((src) => src && typeof src.cfi === 'string' && src.cfi)
+          .slice(0, SUMMARY_INPUT_SOURCES_MAX)
+          .map((src) => (src.title ? `${src.title} <${src.cfi}>` : `<${src.cfi}>`));
+        if (refs.length) lines.push(`[cited: ${refs.join('; ')}]`);
+      }
+      return lines.join('\n');
+    })
     .join('\n\n');
 }
 
@@ -192,7 +280,7 @@ export function buildCompressPrompt(input) {
     'conclusions: …',
     'open_questions: …',
     'cfi_refs: …',
-    'Keep: user goals, key conclusions, named characters/plot points, CFIs or chapter refs, unresolved threads.',
+    'Keep: user goals, key conclusions, named characters/plot points, CFIs or chapter refs (copy epubcfi(...) values from [cited: ...] lines verbatim), unresolved threads.',
     'Drop: chit-chat, repeated tool narration, and tool errors that were later resolved.',
     `At most ${maxChars} characters total. Plain labeled lines only — no markdown headings, no bullet lists.`,
   ].join(' ');
@@ -277,6 +365,7 @@ export async function maybeCompressSession(input) {
     messages: modelMessages,
     systemPrompt: input.systemPrompt,
     contextWindowTokens: input.contextWindowTokens,
+    observedTokens: input.session.lastContextTokens,
   });
   if (!plan) return false;
 
@@ -323,6 +412,8 @@ export async function maybeCompressSession(input) {
     summary: summaryText,
     summaryId,
   });
+  // The observed size described the pre-compression history.
+  delete input.session.lastContextTokens;
 
   const afterTokens =
     estimateTokens(input.systemPrompt) + estimateMessagesTokens(input.session.messages);

@@ -51,6 +51,7 @@ export const useReadingAssistantStore = create<ReadingAssistantState>((set) => (
           id: uniqueId(),
           text,
           chapterTitle: input.chapterTitle?.trim() || null,
+          ...(input.cfi?.trim() ? { cfi: input.cfi.trim() } : {}),
         },
       ],
     }));

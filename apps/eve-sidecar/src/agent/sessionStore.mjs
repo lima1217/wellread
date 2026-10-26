@@ -37,8 +37,26 @@ export function isSafeSessionId(id) {
  *   reasoningDialect?: 'deepseek' | 'openai',
  *   reasoningDialectBaseURL?: string,
  *   webSearchCalls?: Array<import('./webSearchReplay.mjs').WebSearchCallItem>,
+ *   lastContextTokens?: number,
  * }} Session
  */
+
+/**
+ * Drop the user message `messageId` and everything after it (regenerate /
+ * edit-and-resend). Only user turns are valid targets so a turn boundary is
+ * never split. Returns false (session untouched) when the id is not found.
+ * @param {Session} session
+ * @param {string} messageId
+ * @returns {boolean}
+ */
+export function truncateSessionFrom(session, messageId) {
+  const idx = session.messages.findIndex((m) => m.id === messageId);
+  if (idx < 0 || session.messages[idx].role !== 'user') return false;
+  session.messages = session.messages.slice(0, idx);
+  // Observed size described the longer history.
+  delete session.lastContextTokens;
+  return true;
+}
 
 /** Default title stamped at create time (History distinguishes after first turn). */
 export function defaultSessionTitle(bookTitle, bookId) {
@@ -168,6 +186,14 @@ export function normalizeSession(raw) {
         ? s.reasoningDialectBaseURL
         : undefined,
     webSearchCalls: normalizeWebSearchCalls(s.webSearchCalls),
+    // Provider-reported size of the last request (input + output tokens);
+    // calibrates the compression trigger beyond the char-based estimate.
+    lastContextTokens:
+      typeof s.lastContextTokens === 'number' &&
+      Number.isFinite(s.lastContextTokens) &&
+      s.lastContextTokens > 0
+        ? s.lastContextTokens
+        : undefined,
     messages,
   };
 }

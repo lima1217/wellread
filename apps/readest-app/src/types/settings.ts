@@ -226,6 +226,17 @@ export interface SystemSettings {
    */
   thinkingMode: 'think' | 'fast';
   /**
+   * Reading Assistant spoiler guard: hide book text past the reader's current
+   * position from the assistant's tools. Default off.
+   */
+  assistantSpoilerGuard?: boolean;
+  /**
+   * Export this book's highlights/notes/bookmarks to
+   * `Books/.wellread/annotations/<bookId>.md` before each assistant turn so
+   * the assistant can read them. Default on.
+   */
+  assistantShareAnnotations?: boolean;
+  /**
    * Per-device id used as the deviceId portion of every HLC this device
    * mints. Lazy-generated on first sync init via uuidv4. Independent from
    * third-party sync services — distinct identifier semantics and rotation

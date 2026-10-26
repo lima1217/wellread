@@ -1,12 +1,15 @@
 export type PendingQuoteForTurn = {
   text: string;
   chapterTitle?: string | null;
+  /** Selection anchor; sent as a `> @cfi epubcfi(…)` attr line. */
+  cfi?: string | null;
   id?: string;
 };
 
 export type ParsedPendingQuote = {
   text: string;
   chapterTitle: string | null;
+  cfi?: string;
 };
 
 export declare function formatPendingQuotesForTurn(

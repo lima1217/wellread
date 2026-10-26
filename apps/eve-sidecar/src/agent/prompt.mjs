@@ -45,16 +45,19 @@ export function buildSystemPrompt(input) {
       ? "You are wellread's Reading Assistant, primarily scoped to the current book; web_search may look up timely facts outside the book."
       : "You are wellread's Reading Assistant, scoped to the current book only.",
     `Current book: "${title}" (bookId=${input.bookId}).`,
-    `Extract: ${extractRoot}: UTF-8 text of this book: toc.md, section-index.json, chunks/*.md (frontmatter: title, sectionIndex, chunkIndex, cfi, endCfi), meta.json. Tools: resolve_section, read_file, read_section_text, grep, glob.`,
+    `Extract: ${extractRoot}: UTF-8 text of this book: toc.md, section-index.json, chunks/*.md (frontmatter: title, sectionIndex, chunkIndex, cfi, endCfi), meta.json. Tools: resolve_section, read_file, read_section_text, search_book, grep, glob.`,
     "Grounding is optional: answer freely when you already know enough; search the extract when you need this book's text; cite locations when you reference specific passages.",
+    'User turns may start with a <reading_context> block describing the reader at that moment (position, quotes, focus chunks). The newest block is current; older blocks describe their own turn.',
     'Locate extract text without listing the whole tree:',
-    '- Quotes in <reading_context> are the primary target when present.',
+    '- Quotes in the newest <reading_context> are the primary target when present; a quote with chunks lists the extract chunk(s) holding it: read_file those for surrounding text and cite the quote with its own cfi.',
     '- "this page / current position / this passage": read_file focus_chunks only (leave section_chunks unread).',
     '- "this chapter / whole section" or a summary/explain of a whole chapter: read_section_text(sectionIndex and/or title) returns the full concatenated section text in one call; never glob extract/**/chunks/*.md to discover a section.',
     `- section_chunk_count > ${SECTION_CHUNKS_ASK_THRESHOLD} (or section_chunks_note): the section is large; read_section_text still reads it in one call (hundreds of chunks), so use it for whole-chapter tasks; ask only when the user gave a narrower target.`,
     '- extract_status missing: say extract is unavailable; stop empty glob/grep loops.',
     '- extract_status stale: tools still work (prefer resolve_section / scan paths).',
-    '- grep for phrases; glob for notes paths (not section discovery).',
+    '- search_book for topics, themes and concepts (ranked, wording may differ); grep for exact phrases; glob for notes paths (not section discovery).',
+    `Reader annotations: /workspace/.wellread/annotations/${input.bookId}.md (when <reading_context> lists annotations): the reader's own highlights, notes and bookmarks, one "### " block each with chapter and cfi. Read it for questions about what they marked, noted or found important.`,
+    'spoiler_guard on: the reader asked not to be spoiled; tools hide text past the limit (error spoiler_guard / hiddenBySpoilerGuard). Never reveal later events from your own knowledge of the book either; say the answer lies ahead when it does.',
     `Notes: ${notesRoot}: OKF wiki (index.md, log.md, sources|chapters|concepts|frameworks|claims|glossary|questions). Read with glob/grep/read_file; write_file only on an explicit user ask to save; overwrite in place. Skill rules/validators: /workspace/skills/note/ (read-only).`,
     'Cite passages as [section title](<epubcfi(...)>) using the full chunk frontmatter cfi (epubcfi(…) wrapper + angle brackets). Never write bare paths like cfi: /6/… or wrap cfi in backticks; the reader jumps from the link.',
     // Positive prose target first; named bans are hard style locks (paired per writing-for-agents).
@@ -113,9 +116,11 @@ export function collectPriorSources(messages, max = PRIOR_SOURCES_MAX) {
  *   bookId: string,
  *   bookTitle?: string | null,
  *   readerState?: { chapter?: string | null, cfi?: string | null, sectionIndex?: number | null } | null,
- *   quotes?: Array<{ text: string, chapterTitle?: string | null }> | null,
+ *   quotes?: Array<{ text: string, chapterTitle?: string | null, cfi?: string, chunks?: string[] }> | null,
  *   priorSources?: Array<{ cfi: string, title?: string, path?: string }> | null,
  *   notesIndex?: string[] | null,
+ *   annotations?: { path: string, count: number } | null,
+ *   spoilerGuard?: { limitCfi: string } | null,
  *   extractStatus?: { status: string, chunkCount?: number } | null,
  *   focusChunks?: {
  *     paths: string[],
@@ -225,11 +230,18 @@ export function buildReadingContextEnvelope(input) {
       typeof q.chapterTitle === 'string' && q.chapterTitle.trim()
         ? q.chapterTitle.trim()
         : '';
-    quoteLines.push(
-      ch
-        ? `  - text: ${JSON.stringify(text)} chapter: ${JSON.stringify(ch)}`
-        : `  - text: ${JSON.stringify(text)}`,
-    );
+    let line = `  - text: ${JSON.stringify(text)}`;
+    if (ch) line += ` chapter: ${JSON.stringify(ch)}`;
+    if (typeof q.cfi === 'string' && q.cfi.trim()) {
+      line += ` cfi: ${JSON.stringify(q.cfi.trim())}`;
+    }
+    const chunks = Array.isArray(q.chunks)
+      ? q.chunks.filter((c) => typeof c === 'string' && c.trim())
+      : [];
+    if (chunks.length) {
+      line += ` chunks: ${JSON.stringify(chunks.slice(0, FOCUS_CHUNKS_MAX))}`;
+    }
+    quoteLines.push(line);
   }
   if (quoteLines.length) {
     body.push(`${K.quotes}:`);
@@ -262,6 +274,21 @@ export function buildReadingContextEnvelope(input) {
     );
   }
 
+  const annotations = input.annotations;
+  if (annotations && typeof annotations.path === 'string' && annotations.path) {
+    const n = Number(annotations.count);
+    body.push(
+      `${K.annotations}: ${JSON.stringify(annotations.path)}${Number.isFinite(n) && n >= 0 ? ` (${n} items)` : ''}`,
+    );
+  }
+
+  const spoilerGuard = input.spoilerGuard;
+  if (spoilerGuard && typeof spoilerGuard.limitCfi === 'string' && spoilerGuard.limitCfi) {
+    body.push(
+      `${K.spoilerGuard}: on (limit ${JSON.stringify(spoilerGuard.limitCfi)}; text after it is hidden from tools)`,
+    );
+  }
+
   // book/bookId alone are already in the base system prompt — skip empty envelope.
   const hasExtra =
     Boolean(position) ||
@@ -270,10 +297,26 @@ export function buildReadingContextEnvelope(input) {
     Boolean(sectionChunks?.via) ||
     quoteLines.length > 0 ||
     priors.length > 0 ||
-    notes.length > 0;
+    notes.length > 0 ||
+    Boolean(annotations?.path) ||
+    Boolean(spoilerGuard?.limitCfi);
   if (!hasExtra) return null;
 
   return ['<reading_context>', ...body, '</reading_context>'].join('\n');
+}
+
+/**
+ * Prefix this turn's user model content with its reading-context envelope.
+ * Persisted as the user message's modelContent, so replayed history keeps the
+ * exact bytes the model saw (cache-stable) and each turn's own quotes.
+ * @param {string} userContent
+ * @param {string | null | undefined} envelope
+ */
+export function prependReadingContext(userContent, envelope) {
+  const env = typeof envelope === 'string' ? envelope.trim() : '';
+  const text = typeof userContent === 'string' ? userContent : '';
+  if (!env) return text;
+  return text ? `${env}\n\n${text}` : env;
 }
 
 /**

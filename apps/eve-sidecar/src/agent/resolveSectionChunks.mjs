@@ -5,7 +5,12 @@
 
 import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CFI_COMPARE_MAX_LENGTH, cfiInRange } from './epubcfiCompare.mjs';
+import {
+  CFI_COMPARE_MAX_LENGTH,
+  collapse as collapseCfi,
+  compare as compareCfi,
+  parse as parseCfi,
+} from './epubcfiCompare.mjs';
 import {
   parseExtractChunkFrontmatter,
   projectExtractContentForModel,
@@ -24,8 +29,53 @@ export const SECTION_CHUNKS_ASK_THRESHOLD = 64;
 /** Cap files visited while scanning one extract (DoS / huge books). */
 export const SECTION_CHUNKS_WALK_MAX = 2000;
 
-/** Max focus chunk paths listed in reading_context. */
-export const FOCUS_CHUNKS_MAX = 2;
+/** Max focus chunk paths listed in reading_context (a visible page can span several). */
+export const FOCUS_CHUNKS_MAX = 4;
+
+/**
+ * Spine index encoded in a CFI's first step (`/6/N` → N/2 - 1), matching the
+ * reader's progress.index / chunk frontmatter sectionIndex.
+ * @param {string} cfi
+ * @returns {number | null}
+ */
+export function spineIndexFromCfi(cfi) {
+  if (typeof cfi !== 'string' || !cfi || cfi.length > CFI_COMPARE_MAX_LENGTH) return null;
+  try {
+    const parsed = parseCfi(cfi);
+    const first = (parsed.parent ?? parsed)[0];
+    const last = Array.isArray(first) ? first[first.length - 1] : null;
+    const index = last && typeof last.index === 'number' ? last.index / 2 - 1 : NaN;
+    return Number.isInteger(index) && index >= 0 ? index : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Start/end points of a point or range CFI; null when unparsable.
+ * @param {string} cfi
+ * @returns {{ start: string, end: string } | null}
+ */
+function cfiBounds(cfi) {
+  try {
+    return { start: collapseCfi(cfi), end: collapseCfi(cfi, true) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {string} a
+ * @param {string} b
+ * @returns {number | null}
+ */
+function safeCompareCfi(a, b) {
+  try {
+    return compareCfi(a, b);
+  } catch {
+    return null;
+  }
+}
 
 /** Soft cap for read_section_text output (bytes before UTF-8 decode). */
 export const READ_SECTION_TEXT_MAX_BYTES = 256 * 1024;
@@ -309,6 +359,7 @@ export function resolveSectionQuery(input) {
  *   sectionIndex?: number | null,
  *   title?: string | null,
  *   maxBytes?: number,
+ *   pathFilter?: (paths: string[]) => { paths: string[], hidden: number },
  * }} input
  * @returns {{
  *   ok: boolean,
@@ -357,6 +408,23 @@ export function readSectionText(input) {
   } else {
     const r = resolveSectionChunksByTitle(booksRoot, bookId, title);
     resolved = { paths: r.paths, count: r.count, title: r.title };
+  }
+
+  let hiddenBySpoilerGuard = 0;
+  if (resolved.count && typeof input.pathFilter === 'function') {
+    const filtered = input.pathFilter(resolved.paths);
+    hiddenBySpoilerGuard = filtered.hidden;
+    resolved = { ...resolved, paths: filtered.paths, count: filtered.paths.length };
+    if (!resolved.count) {
+      return {
+        ok: false,
+        error: 'spoiler_guard',
+        message:
+          "Hidden by spoiler guard: this section is past the reader's current position.",
+        hiddenBySpoilerGuard,
+        ...(hasIndex ? { sectionIndex: resolved.sectionIndex } : { title: resolved.title }),
+      };
+    }
   }
 
   if (!resolved.count) {
@@ -422,6 +490,7 @@ export function readSectionText(input) {
     text: parts.join('\n'),
     chunkCount,
     ...(truncated ? { truncated: true } : {}),
+    ...(hiddenBySpoilerGuard ? { hiddenBySpoilerGuard } : {}),
     ...(hasIndex
       ? { sectionIndex: resolved.sectionIndex, via: 'sectionIndex' }
       : { title: resolved.title, via: 'title' }),
@@ -494,7 +563,25 @@ export function resolveSectionChunksForReader(input) {
 }
 
 /**
- * Pick 1–2 chunk paths for the reader's current CFI (or section midpoint fallback).
+ * Chunk paths containing a Pending Quote's selection cfi (section derived
+ * from the cfi itself when the quote carries no sectionIndex).
+ * @param {{ booksRoot: string, bookId: string, cfi: string }} input
+ * @returns {string[]}
+ */
+export function resolveChunksForCfi(input) {
+  const sectionIndex = spineIndexFromCfi(input.cfi);
+  if (sectionIndex === null) return [];
+  const focus = resolveFocusChunks({
+    booksRoot: input.booksRoot,
+    bookId: input.bookId,
+    readerState: { cfi: input.cfi, sectionIndex },
+    exact: true,
+  });
+  return focus?.via === 'cfi' ? focus.paths : [];
+}
+
+/**
+ * Pick chunk paths for the reader's current CFI (or section midpoint fallback).
  * @param {{
  *   booksRoot: string,
  *   bookId: string,
@@ -503,6 +590,7 @@ export function resolveSectionChunksForReader(input) {
  *     cfi?: string | null,
  *     sectionIndex?: number | null,
  *   } | null,
+ *   exact?: boolean, // only chunks overlapping the cfi: no padding, no midpoint fallback
  * }} input
  * @returns {{
  *   paths: string[],
@@ -575,16 +663,28 @@ export function resolveFocusChunks(input) {
     return { paths: [], count: 0, via: 'none' };
   }
 
-  if (cfi) {
-    const hitIdx = rows.findIndex(
-      (r) => r.cfi && r.endCfi && cfiInRange(cfi, r.cfi, r.endCfi),
-    );
-    if (hitIdx >= 0) {
-      const paths = [rows[hitIdx].path];
-      const next = rows[hitIdx + 1];
-      if (next && paths.length < FOCUS_CHUNKS_MAX) paths.push(next.path);
+  const bounds = cfi ? cfiBounds(cfi) : null;
+  if (bounds) {
+    // Every chunk overlapping the visible range [start, end] (a page can span
+    // several chunks); a single hit also gets the following chunk for context.
+    /** @type {number[]} */
+    const hits = [];
+    rows.forEach((r, i) => {
+      if (!r.cfi || !r.endCfi) return;
+      const endsAfterStart = safeCompareCfi(r.endCfi, bounds.start);
+      const startsBeforeEnd = safeCompareCfi(r.cfi, bounds.end);
+      if (endsAfterStart === null || startsBeforeEnd === null) return;
+      if (endsAfterStart >= 0 && startsBeforeEnd <= 0) hits.push(i);
+    });
+    if (hits.length) {
+      const paths = hits.slice(0, FOCUS_CHUNKS_MAX).map((i) => rows[i].path);
+      const next = rows[hits[hits.length - 1] + 1];
+      if (input.exact !== true && hits.length === 1 && next) paths.push(next.path);
       return { paths, count: paths.length, via: 'cfi' };
     }
+  }
+  if (input.exact === true) {
+    return { paths: [], count: 0, via: 'none' };
   }
 
   // Mid-section fallback (plan: when CFI range match fails).

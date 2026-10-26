@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { CheckIcon, CopyIcon, XIcon } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -55,7 +55,49 @@ export function PendingReplyDots() {
   );
 }
 
-export function CopyMessageButton({ content, workedMs }: { content: string; workedMs?: number }) {
+const messageActionBtn = clsx(
+  'hover:text-base-content relative inline-flex size-6 items-center justify-center',
+  'after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2',
+  'transition-colors disabled:pointer-events-none disabled:opacity-40',
+  focusRing,
+);
+
+/** Icon-only action in a message's footer row (same chassis as Copy). */
+export function MessageActionButton({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type='button'
+      className={messageActionBtn}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function CopyMessageButton({
+  content,
+  workedMs,
+  children,
+}: {
+  content: string;
+  workedMs?: number;
+  /** Extra footer actions rendered after Copy (regenerate, save note, …). */
+  children?: ReactNode;
+}) {
   const _ = useTranslation();
   const [copied, setCopied] = useState(false);
 
@@ -72,12 +114,7 @@ export function CopyMessageButton({ content, workedMs }: { content: string; work
     <div className='text-base-content/40 mt-2 flex items-center gap-1.5 font-sans text-[0.8em] leading-none select-none'>
       <button
         type='button'
-        className={clsx(
-          'hover:text-base-content relative inline-flex size-6 items-center justify-center',
-          'after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2',
-          'transition-colors',
-          focusRing,
-        )}
+        className={messageActionBtn}
         aria-label={copied ? _('Copied') : _('Copy')}
         onClick={() => {
           void handleCopy();
@@ -89,6 +126,7 @@ export function CopyMessageButton({ content, workedMs }: { content: string; work
           <CopyIcon size={12} aria-hidden='true' />
         )}
       </button>
+      {children}
       {duration ? (
         <>
           <span className='text-base-content/25' aria-hidden='true'>

@@ -18,6 +18,8 @@ export function useOpenReadingAssistant() {
       /** Selection text → append as Pending Quote */
       selectionText?: string;
       chapterTitle?: string | null;
+      /** Selection anchor so the assistant can locate and cite the quote */
+      selectionCfi?: string | null;
     }) => {
       setAssistantPanelVisible(true);
 
@@ -39,6 +41,7 @@ export function useOpenReadingAssistant() {
         appendPendingQuote({
           text: options.selectionText,
           chapterTitle: options.chapterTitle,
+          cfi: options.selectionCfi,
         });
       }
     },

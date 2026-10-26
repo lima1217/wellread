@@ -5,7 +5,11 @@ import clsx from 'clsx';
 
 import { useTranslation } from '@/hooks/useTranslation';
 import type { SessionToolTrace } from '@wellread/eve-message';
-import { summarizeToolTrace } from '@/services/wellread/assistant/displayParts';
+import {
+  describeToolStep,
+  summarizeToolTrace,
+  type ToolStepDescription,
+} from '@/services/wellread/assistant/displayParts';
 import { focusRing } from './AssistantMarkdown';
 
 const TOOL_JSON_MAX = 2048;
@@ -20,10 +24,50 @@ function truncateJson(value: unknown): string {
   }
 }
 
+function useToolStepLabel() {
+  const _ = useTranslation();
+  return (d: ToolStepDescription): string => {
+    const detail = d.detail ?? '';
+    switch (d.kind) {
+      case 'read_chapter':
+        return d.count !== undefined
+          ? _('Read chapter {{detail}} · {{count}} passage(s)', { detail, count: d.count })
+          : _('Read chapter {{detail}}', { detail });
+      case 'read_passage':
+        return detail ? _('Read passage: {{detail}}', { detail }) : _('Read a passage');
+      case 'read_annotations':
+        return _('Read your highlights and notes');
+      case 'read_note':
+        return _('Read note {{detail}}', { detail });
+      case 'read_skill':
+        return _('Loaded skill {{detail}}', { detail });
+      case 'search_book':
+        return _('Searched the book for “{{detail}}” · {{count}} hit(s)', {
+          detail,
+          count: d.count ?? 0,
+        });
+      case 'grep':
+        return _('Found “{{detail}}” · {{count}} hit(s)', { detail, count: d.count ?? 0 });
+      case 'list_section':
+        return _('Located section {{detail}}', { detail });
+      case 'list_files':
+        return _('Listed notes');
+      case 'save_note':
+        return _('Saved note {{detail}}', { detail });
+      case 'web_search':
+        return detail ? _('Searched the web for “{{detail}}”', { detail }) : _('Searched the web');
+      default:
+        return detail;
+    }
+  };
+}
+
 export function ToolStep({ tool }: { tool: SessionToolTrace }) {
   const _ = useTranslation();
+  const label = useToolStepLabel();
   const [open, setOpen] = useState(false);
   const pending = tool.result === undefined;
+  const described = describeToolStep(tool);
   return (
     <div className='text-base-content/60 border-base-content/15 eink-bordered mb-2 border-s ps-2.5 font-sans text-[0.85em] leading-snug'>
       <button
@@ -35,8 +79,13 @@ export function ToolStep({ tool }: { tool: SessionToolTrace }) {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className='font-medium'>{tool.name}</span>
-        <span className='text-base-content/40'>
+        <span className='min-w-0 truncate font-medium' title={tool.name}>
+          {label(described)}
+        </span>
+        {described.spoilerHidden ? (
+          <span className='text-base-content/40 shrink-0'>{_('Spoiler guard')}</span>
+        ) : null}
+        <span className='text-base-content/40 shrink-0'>
           {pending ? _('Running…') : open ? _('Collapse') : _('Details')}
         </span>
       </button>
