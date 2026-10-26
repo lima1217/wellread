@@ -160,6 +160,7 @@
     "zustand": "5.0.10"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "0.1.100",
     "@next/bundle-analyzer": "^15.4.2",
     "@playwright/test": "^1.60.0",
     "@tailwindcss/typography": "^0.5.16",
