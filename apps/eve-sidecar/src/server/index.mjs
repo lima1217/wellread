@@ -31,7 +31,7 @@ import {
   corsHeaders as buildCorsHeaders,
   parseCorsOriginsEnv,
 } from './cors.mjs';
-import { resolveLoopbackToken } from './loopbackToken.mjs';
+import { resolveLoopbackToken, tokenMatches } from './loopbackToken.mjs';
 import {
   BadJsonError,
   RequestBodyTooLargeError,
@@ -41,6 +41,7 @@ import {
   TURN_IN_FLIGHT_BODY,
   createTurnInFlightGate,
 } from './turnInFlight.mjs';
+import { readStdinSecret } from './stdinSecret.mjs';
 import { testModelConnection } from './testModelConnection.mjs';
 import { waitForResponseEnd } from './waitForResponseEnd.mjs';
 
@@ -77,7 +78,12 @@ const turnAborters = new Map();
 
 const modelConfig = normalizeModelEnv({
   baseURL: process.env.EVE_MODEL_BASE_URL,
-  apiKey: process.env.EVE_MODEL_API_KEY,
+  // The desktop host pipes the key over stdin (EVE_MODEL_API_KEY_STDIN=1);
+  // the env var stays for local `pnpm start` debugging.
+  apiKey:
+    process.env.EVE_MODEL_API_KEY_STDIN === '1'
+      ? await readStdinSecret()
+      : process.env.EVE_MODEL_API_KEY,
   modelId: process.env.EVE_MODEL_ID,
   contextWindowTokens: process.env.EVE_MODEL_CONTEXT_WINDOW,
   apiMode: process.env.EVE_MODEL_API_MODE,
@@ -121,8 +127,7 @@ function corsHeaders(req) {
 function checkAuth(req) {
   // Empty token only reachable with EVE_ALLOW_NO_TOKEN=1 (fail-closed at boot).
   if (!token) return true;
-  const header = req.headers.authorization || '';
-  return header === `Bearer ${token}`;
+  return tokenMatches(req.headers.authorization, token);
 }
 
 function sendJson(res, status, body, req) {
@@ -323,9 +328,13 @@ const server = http.createServer(async (req, res) => {
         // Absent means shared (default on); only an explicit false opts out.
         const shareAnnotations = body.shareAnnotations !== false;
         // Regenerate / edit-and-resend: drop the named user turn and everything
-        // after it before running this turn in its place.
+        // after it before running this turn in its place. If the replacement
+        // turn is stopped or fails, `truncation.restore()` puts it back.
+        /** @type {{ restore: () => void } | null} */
+        let truncation = null;
         if (typeof body.truncateFrom === 'string' && body.truncateFrom) {
-          if (!truncateSessionFrom(session, body.truncateFrom)) {
+          truncation = truncateSessionFrom(session, body.truncateFrom);
+          if (!truncation) {
             sendJson(res, 409, { error: 'truncate_target_not_found' }, req);
             return;
           }
@@ -336,6 +345,7 @@ const server = http.createServer(async (req, res) => {
           createHttpAbort(req, res);
         turnAborters.set(id, cancelTurn);
 
+        let turnStarted = false;
         try {
           const stream = runTurn({
             model: languageModel,
@@ -352,7 +362,9 @@ const server = http.createServer(async (req, res) => {
             shareAnnotations,
             // runTurn owns mid-turn + onFinish persistence via this callback.
             persistSession: (s) => sessions.save(s),
+            onDropUser: () => truncation?.restore(),
           });
+          turnStarted = true;
           pipeUIMessageStreamToResponse({
             response: res,
             stream,
@@ -391,7 +403,9 @@ const server = http.createServer(async (req, res) => {
             );
           }
           // Crash belt when the stream throws before onFinish — only if the
-          // session still looks like a valid container.
+          // session still looks like a valid container. A runTurn that threw
+          // never pushed its user turn, so undo the truncation first.
+          if (!turnStarted) truncation?.restore();
           try {
             sessions.save(session);
           } catch {
@@ -425,11 +439,12 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// Keep the loopback server alive if a turn's UI-message transform throws
-// (historically: AI SDK reasoning after finish-step). One bad turn must not
-// leave the app pointing at a dead PORT.
+// An uncaught exception leaves the process in an unknown state: log and exit
+// so the desktop host's child watch respawns a clean sidecar (with backoff)
+// and broadcasts the new PORT instead of serving from a corrupt process.
 process.on('uncaughtException', (err) => {
   console.error('[eve-sidecar] uncaughtException', err);
+  process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
   console.error('[eve-sidecar] unhandledRejection', reason);

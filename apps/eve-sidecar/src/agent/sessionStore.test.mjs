@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, after } from 'node:test';
@@ -8,6 +8,7 @@ import {
   isSafeSessionId,
   maybeApplyFirstTurnTitle,
   normalizeSession,
+  truncateSessionFrom,
 } from './sessionStore.mjs';
 import {
   collectSourcesFromTools,
@@ -122,6 +123,33 @@ describe('sessionStore', () => {
     assert.equal(listed[0].id, a.id);
     assert.equal(listed[0].bookId, 'book-a');
     assert.equal(isSafeSessionId(a.id), true);
+  });
+
+  it('list reuses cached metadata until the file changes', () => {
+    const cacheDir = mkdtempSync(join(tmpdir(), 'eve-list-cache-'));
+    try {
+      const cached = createSessionStore(cacheDir);
+      const s = cached.create({ bookId: 'book-c', title: 'first' });
+      // Whole-second mtime so it can be restored exactly below.
+      const file = join(cacheDir, 'sessions', `${s.id}.json`);
+      utimesSync(file, 1_700_000_000, 1_700_000_000);
+      assert.equal(cached.list('book-c')[0].title, 'first');
+
+      // Same size + mtime as before: list must not re-read the transcript.
+      writeFileSync(file, 'x'.repeat(statSync(file).size));
+      utimesSync(file, 1_700_000_000, 1_700_000_000);
+      assert.equal(cached.list('book-c')[0]?.title, 'first');
+
+      // Store writes invalidate the entry.
+      s.title = 'second';
+      cached.save(s);
+      assert.equal(cached.list('book-c')[0].title, 'second');
+
+      cached.remove(s.id);
+      assert.equal(cached.list('book-c').length, 0);
+    } finally {
+      rmSync(cacheDir, { recursive: true, force: true });
+    }
   });
 
   it('persists messages on save', () => {
@@ -242,5 +270,51 @@ body`;
       { name: 'grep', result: { hits: [] } },
     ]);
     assert.equal(sources.length, 1);
+  });
+});
+
+describe('truncateSessionFrom', () => {
+  function sessionWith(ids) {
+    return {
+      id: 'ses_0123456789abcdef',
+      bookId: 'book-a',
+      title: 't',
+      createdAt: 1,
+      updatedAt: 1,
+      lastContextTokens: 900,
+      messages: ids.map((id, i) => ({
+        id,
+        role: id.startsWith('u') ? 'user' : 'assistant',
+        content: id,
+        createdAt: i,
+      })),
+    };
+  }
+
+  it('drops the target user turn and the tail; restore puts it back once', () => {
+    const session = sessionWith(['u1', 'a1', 'u2', 'a2']);
+    const truncation = truncateSessionFrom(session, 'u2');
+    assert.ok(truncation);
+    assert.deepEqual(
+      session.messages.map((m) => m.id),
+      ['u1', 'a1'],
+    );
+    assert.equal(session.lastContextTokens, undefined);
+
+    truncation.restore();
+    truncation.restore();
+    assert.deepEqual(
+      session.messages.map((m) => m.id),
+      ['u1', 'a1', 'u2', 'a2'],
+    );
+    assert.equal(session.lastContextTokens, 900);
+  });
+
+  it('returns null and leaves the session alone for unknown or assistant targets', () => {
+    const session = sessionWith(['u1', 'a1']);
+    assert.equal(truncateSessionFrom(session, 'nope'), null);
+    assert.equal(truncateSessionFrom(session, 'a1'), null);
+    assert.equal(session.messages.length, 2);
+    assert.equal(session.lastContextTokens, 900);
   });
 });

@@ -426,7 +426,7 @@ export function createReadingTools() {
         }
         const session = createBooksFsSession({ getBooksRoot: () => booksRoot });
         try {
-          const bytes = await session.readFile({ path });
+          const bytes = await session.readFile({ path, maxBytes: READ_FILE_MAX_BYTES });
           if (bytes === null) {
             return {
               ok: false,
@@ -446,6 +446,14 @@ export function createReadingTools() {
           const raw = new TextDecoder('utf-8').decode(bytes);
           return { ok: true, path, content: projectExtractContentForModel(raw) };
         } catch (err) {
+          if (err?.code === 'FILE_TOO_LARGE') {
+            return {
+              ok: false,
+              path,
+              error: 'too_large',
+              message: `file exceeds ${READ_FILE_MAX_BYTES} byte read_file limit`,
+            };
+          }
           return {
             ok: false,
             path,

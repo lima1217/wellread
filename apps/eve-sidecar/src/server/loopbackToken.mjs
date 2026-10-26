@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'node:crypto';
+
 /**
  * Fail-closed loopback token: production always requires EVE_LOOPBACK_TOKEN.
  * Opt-in escape hatch for local debug: EVE_ALLOW_NO_TOKEN=1.
@@ -18,4 +20,15 @@ export function resolveLoopbackToken(env = process.env) {
     reason:
       'EVE_LOOPBACK_TOKEN is required (set EVE_ALLOW_NO_TOKEN=1 only for local debug)',
   };
+}
+
+/**
+ * Constant-time check of an `Authorization` header against the loopback token.
+ * @param {string | undefined} header
+ * @param {string} token
+ */
+export function tokenMatches(header, token) {
+  const got = Buffer.from(String(header || ''));
+  const want = Buffer.from(`Bearer ${token}`);
+  return got.length === want.length && timingSafeEqual(got, want);
 }

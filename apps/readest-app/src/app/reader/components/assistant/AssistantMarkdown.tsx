@@ -139,6 +139,25 @@ export function jumpToCfi(bookKey: string, cfi: string) {
   useReaderStore.getState().getView(bookKey)?.goTo(cfi);
 }
 
+function externalLinkButton(href: string, children: ReactNode) {
+  return (
+    <button
+      type='button'
+      className={clsx(
+        'text-base-content underline decoration-from-font underline-offset-2',
+        'hover:text-base-content/80',
+        focusRing,
+      )}
+      onClick={(e) => {
+        e.preventDefault();
+        openExternalUrl(href);
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function createAssistantMarkdownComponents(opts: {
   bookKey: string;
   sources?: SessionSource[];
@@ -177,22 +196,14 @@ export function createAssistantMarkdownComponents(opts: {
         return jumpButton(source.cfi, /epubcfi\(/i.test(label) ? undefined : label.trim());
       }
       if (!isExternalHttpHref(href)) return <span>{children}</span>;
-      return (
-        <button
-          type='button'
-          className={clsx(
-            'text-base-content underline decoration-from-font underline-offset-2',
-            'hover:text-base-content/80',
-            focusRing,
-          )}
-          onClick={(e) => {
-            e.preventDefault();
-            openExternalUrl(href!);
-          }}
-        >
-          {children}
-        </button>
-      );
+      return externalLinkButton(href!, children);
+    },
+    // Never auto-load a model-chosen image URL: the request itself can carry
+    // data out (prompt injection). Show it as a link the reader opens on purpose.
+    img: ({ src, alt }) => {
+      const label = alt?.trim() || (typeof src === 'string' ? src : '');
+      if (typeof src !== 'string' || !isExternalHttpHref(src)) return <span>{label}</span>;
+      return externalLinkButton(src, label);
     },
   };
 }
