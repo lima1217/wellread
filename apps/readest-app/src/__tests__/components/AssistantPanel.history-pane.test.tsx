@@ -173,6 +173,12 @@ vi.mock('@/app/reader/components/assistant/AnnotationsView', () => ({
   },
 }));
 
+vi.mock('@/app/reader/components/assistant/AINotesView', () => ({
+  default: function MockAINotes() {
+    return <div data-testid='ai-notes'>AI notes</div>;
+  },
+}));
+
 import AssistantPanel from '@/app/reader/components/assistant/AssistantPanel';
 
 describe('AssistantPanel chat↔history pane', () => {
@@ -216,6 +222,18 @@ describe('AssistantPanel chat↔history pane', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
     expect(screen.queryByTestId('annotations')).toBeNull();
+  });
+
+  it('opens AI Notes from the chat header and returns to chat', () => {
+    render(<AssistantPanel />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'AI Notes' }));
+
+    expect(screen.getByTestId('ai-notes')).toBeTruthy();
+    expect(chatLifecycle.unmounts).toBe(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
+    expect(screen.queryByTestId('ai-notes')).toBeNull();
   });
 
   it('keeps AIAssistant mounted when the panel is closed after opening', () => {

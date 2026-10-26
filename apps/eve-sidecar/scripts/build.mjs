@@ -39,7 +39,7 @@ function copyRuntimeTree(fromDir, toDir) {
 }
 
 /** server/ root modules ship flat next to createModel.mjs, so their
- * `../createModel.mjs` / `../agent/` imports need the same rewrite as the
+ * `../createModel.mjs` / `../agent/` / `../books/` imports need the same rewrite as the
  * entry. Subdirectories (agent/, books/) keep their relative depth. */
 function copyServerTree(fromDir, toDir) {
   mkdirSync(toDir, { recursive: true });
@@ -71,8 +71,10 @@ function rewriteServerEntry(srcPath, destPath) {
   const rewritten = raw
     .replaceAll("from '../createModel.mjs'", "from './createModel.mjs'")
     .replaceAll("from '../agent/", "from './agent/")
+    .replaceAll("from '../books/", "from './books/")
     .replaceAll('from "../createModel.mjs"', 'from "./createModel.mjs"')
-    .replaceAll('from "../agent/', 'from "./agent/');
+    .replaceAll('from "../agent/', 'from "./agent/')
+    .replaceAll('from "../books/', 'from "./books/');
   writeFileSync(destPath, rewritten);
 }
 

@@ -136,6 +136,38 @@ export async function deleteEveSession(id: string): Promise<void> {
   if (!res.ok && res.status !== 204) throw new Error(`delete session failed: ${res.status}`);
 }
 
+/** Note-skill package pages for a book, relative to its notes root (index.md first). */
+export async function listEveNotes(bookId: string): Promise<string[]> {
+  const { baseUrl, token } = base();
+  const res = await eveFetch(`${baseUrl}/eve/v1/notes?bookId=${encodeURIComponent(bookId)}`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(`list notes failed: ${res.status}`);
+  const data = (await res.json()) as { files: string[] };
+  return data.files ?? [];
+}
+
+export async function readEveNote(bookId: string, path: string): Promise<string> {
+  const { baseUrl, token } = base();
+  const qs = `bookId=${encodeURIComponent(bookId)}&path=${encodeURIComponent(path)}`;
+  const res = await eveFetch(`${baseUrl}/eve/v1/notes/file?${qs}`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(`read note failed: ${res.status}`);
+  const data = (await res.json()) as { content: string };
+  return data.content;
+}
+
+export async function saveEveNote(bookId: string, path: string, content: string): Promise<void> {
+  const { baseUrl, token } = base();
+  const res = await eveFetch(`${baseUrl}/eve/v1/notes/file`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify({ bookId, path, content }),
+  });
+  if (!res.ok) throw new Error(`save note failed: ${res.status}`);
+}
+
 /** Convert Response body → UIMessageChunk stream (AI SDK SSE). */
 export function responseToUIMessageChunkStream(
   body: ReadableStream<Uint8Array>,

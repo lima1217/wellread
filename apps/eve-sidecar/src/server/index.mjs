@@ -26,6 +26,7 @@ import { isSafeBookIdSegment } from '../agent/notesOkf.mjs';
 import { normalizeReaderState } from '../agent/prompt.mjs';
 import { runTurn } from '../agent/runTurn.mjs';
 import { discoverSkills } from '../agent/skills/discover.mjs';
+import { listNotes, readNote, writeNote } from './notesApi.mjs';
 import {
   buildAllowedOriginSet,
   corsHeaders as buildCorsHeaders,
@@ -202,6 +203,28 @@ const server = http.createServer(async (req, res) => {
         req,
       );
       return;
+    }
+
+    if (path === '/eve/v1/notes' || path === '/eve/v1/notes/file') {
+      if (!booksRootEnv) {
+        sendJson(res, 503, { error: 'books_root_unset' }, req);
+        return;
+      }
+      const bookId = url.searchParams.get('bookId');
+      let result = null;
+      if (req.method === 'GET' && path === '/eve/v1/notes') {
+        result = listNotes(booksRootEnv, bookId);
+      } else if (req.method === 'GET') {
+        result = await readNote(booksRootEnv, bookId, url.searchParams.get('path'));
+      } else if (req.method === 'POST' && path === '/eve/v1/notes/file') {
+        const body = await readJson(req);
+        result = await writeNote(booksRootEnv, body.bookId, body.path, body.content);
+      }
+      if (result) {
+        const { ok, status, ...rest } = result;
+        sendJson(res, ok ? 200 : status, ok ? { ok, ...rest } : rest, req);
+        return;
+      }
     }
 
     if (req.method === 'POST' && path === '/eve/v1/test-model-connection') {
