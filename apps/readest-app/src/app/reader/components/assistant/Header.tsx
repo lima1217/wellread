@@ -1,18 +1,19 @@
 import clsx from 'clsx';
 import React from 'react';
 
-import { LuHighlighter, LuHistory, LuPlus } from 'react-icons/lu';
+import { LuHighlighter, LuHistory, LuNotebookPen, LuPlus } from 'react-icons/lu';
 import { MdArrowBackIosNew, MdOutlinePushPin, MdPushPin } from 'react-icons/md';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 
 const AssistantHeader: React.FC<{
   isPinned: boolean;
-  pane: 'chat' | 'history' | 'notes';
+  pane: 'chat' | 'history' | 'notes' | 'aiNotes';
   handleClose: () => void;
   handleTogglePin: () => void;
   onOpenHistory: () => void;
   onOpenNotes: () => void;
+  onOpenAINotes: () => void;
   onBackToChat: () => void;
   onNewSession: () => void;
 }> = ({
@@ -22,6 +23,7 @@ const AssistantHeader: React.FC<{
   handleTogglePin,
   onOpenHistory,
   onOpenNotes,
+  onOpenAINotes,
   onBackToChat,
   onNewSession,
 }) => {
@@ -48,7 +50,9 @@ const AssistantHeader: React.FC<{
             ? _('Chat History')
             : pane === 'notes'
               ? _('Highlights & Notes')
-              : _('Reading Assistant')}
+              : pane === 'aiNotes'
+                ? _('AI Notes')
+                : _('Reading Assistant')}
         </h2>
       </div>
       <div className='relative z-10 flex w-full items-center gap-x-1.5'>
@@ -119,6 +123,17 @@ const AssistantHeader: React.FC<{
           </>
         )}
         <div className='flex-1' />
+        {isChat && (
+          <button
+            type='button'
+            title={_('AI Notes')}
+            aria-label={_('AI Notes')}
+            onClick={onOpenAINotes}
+            className={clsx('btn btn-ghost btn-circle h-8 min-h-8 w-8', pressScaleClass)}
+          >
+            <LuNotebookPen size={iconSize15} aria-hidden='true' />
+          </button>
+        )}
         <button
           type='button'
           title={_('New chat')}

@@ -1991,5 +1991,11 @@
   "Fast: answers right away. Tap for Think.": "快速：直接回答。点按切换为思考。",
   "Highlights & Notes": "高亮与批注",
   "No highlights in this book yet": "这本书还没有高亮",
-  "Go to highlight": "跳转到高亮"
+  "Go to highlight": "跳转到高亮",
+  "AI Notes": "AI 笔记",
+  "All notes": "全部笔记",
+  "Failed to open note": "无法打开笔记",
+  "Failed to save note": "无法保存笔记",
+  "No AI notes for this book yet": "这本书还没有 AI 笔记",
+  "Ask the assistant with /note to take notes on a chapter.": "在对话里用 /note 让助手为章节做笔记。"
 }
