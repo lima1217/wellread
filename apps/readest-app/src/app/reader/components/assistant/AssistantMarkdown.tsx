@@ -8,9 +8,11 @@ import { useReaderStore } from '@/store/readerStore';
 import { eventDispatcher } from '@/utils/event';
 import type { SessionSource } from '@wellread/eve-message';
 import {
+  citationNumber,
   isExternalHttpHref,
   normalizeEpubCfi,
   resolveEveSource,
+  type AssistantCitation,
 } from '@/services/wellread/assistant/cfiLinks';
 import { openExternalUrl } from '@/utils/open';
 
@@ -95,7 +97,44 @@ function plainTextFromChildren(children: ReactNode): string {
   return '';
 }
 
-function jumpToCfi(bookKey: string, cfi: string) {
+/** Shared chassis for citation markers and the sources list numbers. */
+export const citationBadgeClass = clsx(
+  'bg-base-200/80 text-base-content/60 eink-bordered inline-flex h-[1.4em] min-w-[1.4em] items-center justify-center',
+  'rounded-full px-1 font-sans text-[0.7em] font-medium leading-none tabular-nums select-none',
+);
+
+/** Compact numbered marker for an in-book citation; never part of copied text. */
+export function CitationMarker({
+  number,
+  title,
+  onJump,
+}: {
+  number: number | null;
+  title: string;
+  onJump: () => void;
+}) {
+  return (
+    <button
+      type='button'
+      data-citation=''
+      title={title}
+      aria-label={title}
+      className={clsx(
+        citationBadgeClass,
+        'hover:bg-base-300 hover:text-base-content mx-[0.15em] align-[0.12em] transition-colors',
+        focusRing,
+      )}
+      onClick={(e) => {
+        e.preventDefault();
+        onJump();
+      }}
+    >
+      {number ?? '↗'}
+    </button>
+  );
+}
+
+export function jumpToCfi(bookKey: string, cfi: string) {
   eventDispatcher.dispatch('navigate', { bookKey, cfi });
   useReaderStore.getState().getView(bookKey)?.goTo(cfi);
 }
@@ -103,26 +142,19 @@ function jumpToCfi(bookKey: string, cfi: string) {
 export function createAssistantMarkdownComponents(opts: {
   bookKey: string;
   sources?: SessionSource[];
+  citations: AssistantCitation[];
   passageLabel: string;
 }): Components {
-  const jumpButton = (cfi: string, display?: ReactNode) => {
+  const jumpButton = (cfi: string, label?: string) => {
     const source = resolveEveSource(opts.sources, { href: cfi });
-    const label = display ?? source?.title?.trim() ?? opts.passageLabel;
+    const target = source?.cfi ?? cfi;
+    const title = source?.title?.trim() || label || opts.passageLabel;
     return (
-      <button
-        type='button'
-        className={clsx(
-          'text-base-content underline decoration-from-font underline-offset-2',
-          'hover:text-base-content/80',
-          focusRing,
-        )}
-        onClick={(e) => {
-          e.preventDefault();
-          jumpToCfi(opts.bookKey, source?.cfi ?? cfi);
-        }}
-      >
-        {label}
-      </button>
+      <CitationMarker
+        number={citationNumber(opts.citations, target)}
+        title={title}
+        onJump={() => jumpToCfi(opts.bookKey, target)}
+      />
     );
   };
 
@@ -142,11 +174,7 @@ export function createAssistantMarkdownComponents(opts: {
       const label = plainTextFromChildren(children);
       const source = resolveEveSource(opts.sources, { href, label });
       if (source?.cfi) {
-        const rawCfiLabel =
-          /epubcfi\(/i.test(label) && extractEpubCfiFromLabel(label) === label.trim();
-        const display =
-          source.title?.trim() || (rawCfiLabel ? opts.passageLabel : null) || children;
-        return jumpButton(source.cfi, display);
+        return jumpButton(source.cfi, /epubcfi\(/i.test(label) ? undefined : label.trim());
       }
       if (!isExternalHttpHref(href)) return <span>{children}</span>;
       return (
@@ -167,11 +195,6 @@ export function createAssistantMarkdownComponents(opts: {
       );
     },
   };
-}
-
-function extractEpubCfiFromLabel(text: string): string | null {
-  const m = text.match(/epubcfi\([^)]+\)/i);
-  return m ? m[0] : null;
 }
 
 export const messageTypeClass = 'font-sans text-base leading-[1.65]';

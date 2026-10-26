@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  collectAssistantCitations,
   formatEveSourceLabel,
   isAssistantSourceHref,
   isExternalHttpHref,
   linkifyBareEpubCfi,
+  markInlineCitations,
   normalizeEpubCfi,
   resolveEveSource,
   stripAssistantCfiCitations,
@@ -521,6 +523,71 @@ describe('stripAssistantCfiCitations', () => {
   it('removes bare epubcfi and cfi-only inline code', () => {
     expect(stripAssistantCfiCitations(`文中 ${cfi} 可删。`)).toBe('文中 可删。');
     expect(stripAssistantCfiCitations(`文中 \`cfi: ${bare}\` 可删。`)).toBe('文中 可删。');
+  });
+  const cfi2 = 'epubcfi(/6/30!/4[x]/2:0)';
+
+  it('drops trailing citation links entirely, keeping no section title', () => {
+    expect(stripAssistantCfiCitations(`结论成立。[第三章](<${cfi}>)`)).toBe('结论成立。');
+    expect(stripAssistantCfiCitations(`结论成立[第三章](<${cfi}>)[第五章](<${cfi2}>)。`)).toBe(
+      '结论成立。',
+    );
+    expect(stripAssistantCfiCitations(`It holds [Chapter 3](<${cfi}>).`)).toBe('It holds.');
+  });
+
+  it('keeps the label when the link is part of the sentence', () => {
+    expect(stripAssistantCfiCitations(`在[第三章](<${cfi}>)中，作者转向。`)).toBe(
+      '在第三章中，作者转向。',
+    );
+  });
+
+  it('drops extract chunk links and empty citation groups', () => {
+    expect(
+      stripAssistantCfiCitations('结论[第三章](/workspace/.wellread/extract/b/chunks/003.md)。'),
+    ).toBe('结论。');
+    expect(stripAssistantCfiCitations(`结论（[甲](<${cfi}>)、[乙](<${cfi2}>)）。`)).toBe('结论。');
+  });
+
+  it('keeps external links and markdown formatting', () => {
+    expect(stripAssistantCfiCitations('**重点**见 [官网](https://example.com)。')).toBe(
+      '**重点**见 [官网](https://example.com)。',
+    );
+  });
+});
+
+describe('markInlineCitations', () => {
+  const cfi = 'epubcfi(/6/4!/4[a]/1:0)';
+
+  it('prefixes the label when a citation link is used inside the sentence', () => {
+    expect(markInlineCitations(`在[第三章](<${cfi}>)中`)).toBe(`在第三章[第三章](<${cfi}>)中`);
+  });
+
+  it('leaves trailing citations, placeholders and external links alone', () => {
+    const trailing = `结论。[第三章](<${cfi}>)`;
+    expect(markInlineCitations(trailing)).toBe(trailing);
+    const placeholder = `在[Passage](<${cfi}>)中`;
+    expect(markInlineCitations(placeholder)).toBe(placeholder);
+    const external = '在[官网](https://example.com)中';
+    expect(markInlineCitations(external)).toBe(external);
+  });
+});
+
+describe('collectAssistantCitations', () => {
+  const a = 'epubcfi(/6/4!/4[a]/1:0)';
+  const b = 'epubcfi(/6/8!/4[b]/1:0)';
+
+  it('lists unique in-book citations in first-appearance order', () => {
+    const md = `一[甲](<${a}>)。二（cfi: ${b}）。三[甲again](<${a}>)。外链[x](https://e.com)`;
+    expect(collectAssistantCitations(md, [{ cfi: b, title: '乙节' }])).toEqual([
+      { cfi: a, title: '甲' },
+      { cfi: b, title: '乙节' },
+    ]);
+  });
+
+  it('resolves chunk links through sources and ignores code', () => {
+    const md = '见[x](chunks/003.md)。`[y](<epubcfi(/6/2!/1:0)>)`';
+    expect(
+      collectAssistantCitations(md, [{ cfi: a, title: '甲', path: '/w/chunks/003.md' }]),
+    ).toEqual([{ cfi: a, title: '甲' }]);
   });
 });
 
