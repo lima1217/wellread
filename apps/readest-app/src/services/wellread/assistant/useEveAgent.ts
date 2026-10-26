@@ -42,6 +42,8 @@ async function* streamEveTurnRetrying(
   options: {
     thinkingMode: ThinkingMode;
     readerState?: ReaderState | null;
+    spoilerGuard?: boolean;
+    truncateFrom?: string;
   },
 ): AsyncGenerator<EveStreamEvent> {
   let lastError: unknown;
@@ -80,6 +82,10 @@ export type UseEveAgentOptions = {
   thinkingMode?: ThinkingMode;
   /** Optional snapshot of the reader's current chapter/CFI for this turn. */
   getReaderState?: () => ReaderState | null | undefined;
+  /** Hide book text past the reader's position from the assistant (per turn). */
+  spoilerGuard?: boolean;
+  /** Runs before each turn is posted (e.g. annotations export); failures are ignored. */
+  beforeTurn?: () => Promise<void>;
 };
 
 export type SendTurnInput = {
@@ -88,7 +94,14 @@ export type SendTurnInput = {
   quotes?: PendingQuote[];
   /** Restore quotes if the turn fails before/during stream. */
   onSendFailed?: (quotes: PendingQuote[]) => void;
+  /** Server user-message id: drop it and everything after, then send in its place. */
+  truncateFrom?: string;
 };
+
+/** Messages with server ids (not optimistic) can anchor regenerate / edit. */
+export function isPersistedMessageId(id: string): boolean {
+  return !id.startsWith('optimistic-');
+}
 
 /**
  * Lightweight useEveAgent-shaped hook over the wellread eve-compatible sidecar.
@@ -114,10 +127,14 @@ export function useEveAgent(options: UseEveAgentOptions) {
   const loadedSessionIdRef = useRef<string | null | undefined>(undefined);
   /** Always call latest getReaderState without putting it in sendTurn deps. */
   const getReaderStateRef = useRef(getReaderState);
+  const spoilerGuardRef = useRef(options.spoilerGuard === true);
+  const beforeTurnRef = useRef(options.beforeTurn);
   const bookIdRef = useRef(bookId);
   const bookTitleRef = useRef(bookTitle);
   useEffect(() => {
     getReaderStateRef.current = getReaderState;
+    spoilerGuardRef.current = options.spoilerGuard === true;
+    beforeTurnRef.current = options.beforeTurn;
     bookIdRef.current = bookId;
     bookTitleRef.current = bookTitle;
   });
@@ -296,8 +313,14 @@ export function useEveAgent(options: UseEveAgentOptions) {
         setInFlightTools([]);
         setStatus('submitted');
         setComposer('');
+        const truncateFrom = input?.truncateFrom;
         setMessages((prev) => [
-          ...prev,
+          ...(truncateFrom && prev.some((m) => m.id === truncateFrom)
+            ? prev.slice(
+                0,
+                prev.findIndex((m) => m.id === truncateFrom),
+              )
+            : prev),
           {
             id: optimisticUserId,
             role: 'user',
@@ -315,6 +338,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
         let needsReconcile = false;
 
         try {
+          await beforeTurnRef.current?.().catch(() => {});
           const readerState = getReaderStateRef.current?.() ?? undefined;
           for await (const event of streamEveTurnRetrying(
             sessionIdForTurn,
@@ -323,6 +347,8 @@ export function useEveAgent(options: UseEveAgentOptions) {
             {
               thinkingMode,
               readerState: readerState ?? undefined,
+              ...(spoilerGuardRef.current ? { spoilerGuard: true } : {}),
+              ...(truncateFrom ? { truncateFrom } : {}),
             },
           )) {
             // First streamed event means the server accepted the turn (user committed).

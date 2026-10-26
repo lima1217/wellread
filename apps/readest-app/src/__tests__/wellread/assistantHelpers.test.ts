@@ -12,6 +12,7 @@ import {
   assistantPartInputsFromMessage,
   coalesceAssistantParts,
   summarizeToolTrace,
+  describeToolStep,
 } from '@/services/wellread/assistant/displayParts';
 import { isReadingAssistantAvailable } from '@/services/wellread/assistant/gate';
 import { hydrateEveMessagesForDisplay } from '@/services/wellread/assistant/quoteWire';
@@ -520,5 +521,48 @@ describe('stripAssistantCfiCitations', () => {
   it('removes bare epubcfi and cfi-only inline code', () => {
     expect(stripAssistantCfiCitations(`文中 ${cfi} 可删。`)).toBe('文中 可删。');
     expect(stripAssistantCfiCitations(`文中 \`cfi: ${bare}\` 可删。`)).toBe('文中 可删。');
+  });
+});
+
+describe('describeToolStep', () => {
+  it('names whole-chapter reads by title and passage count', () => {
+    expect(
+      describeToolStep({
+        name: 'read_section_text',
+        args: { sectionIndex: 2 },
+        result: { ok: true, title: 'Loomings', chunkCount: 12, text: '…' },
+      }),
+    ).toEqual({ kind: 'read_chapter', detail: 'Loomings', count: 12 });
+  });
+
+  it('reads the chunk title from read_file frontmatter', () => {
+    expect(
+      describeToolStep({
+        name: 'read_file',
+        args: { path: '/workspace/.wellread/extract/bk/chunks/00001-a.md' },
+        result: {
+          ok: true,
+          content: '---\ncfi: "epubcfi(/6/2!)"\ntitle: "The Carpet-Bag"\n---\nbody',
+        },
+      }),
+    ).toEqual({ kind: 'read_passage', detail: 'The Carpet-Bag' });
+  });
+
+  it('recognizes annotations, searches and spoiler-hidden results', () => {
+    expect(
+      describeToolStep({
+        name: 'read_file',
+        args: { path: '/workspace/.wellread/annotations/bk.md' },
+        result: { ok: true, content: '' },
+      }),
+    ).toEqual({ kind: 'read_annotations' });
+    expect(
+      describeToolStep({
+        name: 'search_book',
+        args: { query: 'freedom' },
+        result: { ok: true, hits: [{}, {}], hiddenBySpoilerGuard: 1 },
+      }),
+    ).toEqual({ kind: 'search_book', detail: 'freedom', count: 2, spoilerHidden: true });
+    expect(describeToolStep({ name: 'mystery' })).toEqual({ kind: 'other', detail: 'mystery' });
   });
 });

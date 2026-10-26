@@ -34,6 +34,16 @@ Canonical: 面板标题用 Reading Assistant；执行期标识符迁离 `Noteboo
 
 Canonical: 选区进 Pending Quote，不进 composer 草稿。
 
+每段可带选区锚点 `cfi`（wire 上为 `> @cfi epubcfi(…)` 属性行）；sidecar 据此在 `<reading_context>` 里给出该引用所在的 extract chunk。
+
+## Spoiler Guard（防剧透）
+
+设置项，默认关。开启后每轮发送 `spoilerGuard: true`，sidecar 对所有 Books 工具隐藏当前阅读位置（`readerState.cfi` 的末端）之后的 extract chunk。
+
+## Annotations Export（标注导出）
+
+每轮发送前，宿主把当前书的高亮/笔记/书签写到 `Books/.wellread/annotations/<bookId>.md`（设置「共享高亮和笔记」关闭时写空）；`<reading_context>` 只列路径和条数，模型按需 `read_file` / `grep`。
+
 ## Thinking Mode（Think/Fast）
 
 Composer 二档：Think = 思考开，Fast = 思考关。默认 Fast；写入用户全局设置。请求侧只发协议标准字段：Responses 模式 Think → `reasoning.effort: high`、Fast → `reasoning.effort: none`；chat 模式不注入厂商私有 `thinking` 字段（推理模型默认思考，显示与否由 sidecar 决定）。思考内容的展示按响应实际形状自适应：`reasoning_content`（chat）/ `response.reasoning_text.*`（DeepSeek 方言 Responses）转发给 UI，`reasoning_summary_text.*`（OpenAI 方言）原样放行；Fast 模式模型可能仍在思考，只是 UI 不显示。

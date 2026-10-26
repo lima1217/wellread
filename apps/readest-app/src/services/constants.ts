@@ -131,6 +131,8 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   hardcover: DEFAULT_HARDCOVER_SETTINGS,
   modelConfig: DEFAULT_MODEL_CONFIG,
   thinkingMode: 'fast',
+  assistantSpoilerGuard: false,
+  assistantShareAnnotations: true,
 
   lastSyncedAtBooks: 0,
   lastSyncedAtConfigs: 0,
