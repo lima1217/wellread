@@ -57,6 +57,8 @@ function hasReadingContextSchema(def) {
  *   composeGenerateTextFn?: typeof import('ai').generateText,
  *   abortSignal?: AbortSignal,
  *   contextWindowTokens?: number,
+ *   bookTitle?: string | null,
+ *   shareAnnotations?: boolean,
  *   spoilerGuard?: import('./spoilerGuard.mjs').SpoilerGuard | null,
  * }} input
  * @returns {{
@@ -94,6 +96,10 @@ export function bindTurnTools(input) {
     ...(typeof input.contextWindowTokens === 'number'
       ? { contextWindowTokens: input.contextWindowTokens }
       : {}),
+    ...(typeof input.bookTitle === 'string' && input.bookTitle
+      ? { bookTitle: input.bookTitle }
+      : {}),
+    ...(input.shareAnnotations === false ? { shareAnnotations: false } : {}),
     ...(input.spoilerGuard ? { spoilerGuard: input.spoilerGuard } : {}),
   };
   return {

@@ -167,6 +167,8 @@ export async function* streamEveTurn(
     readerState?: ReaderState | null;
     /** Hide book text past readerState.cfi from the assistant's tools. */
     spoilerGuard?: boolean;
+    /** false keeps other books' annotation exports away from the assistant. */
+    shareAnnotations?: boolean;
     /** Replace this user turn and everything after it (regenerate / edit). */
     truncateFrom?: string;
   },
@@ -180,6 +182,9 @@ export async function* streamEveTurn(
   }
   if (options?.spoilerGuard) {
     body['spoilerGuard'] = true;
+  }
+  if (options?.shareAnnotations === false) {
+    body['shareAnnotations'] = false;
   }
   if (options?.truncateFrom) {
     body['truncateFrom'] = options.truncateFrom;

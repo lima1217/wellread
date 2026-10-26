@@ -20,10 +20,11 @@ export const READ_PARALLEL_TOOL_NAMES = new Set([
   'resolve_section',
   'read_section_text',
   'search_book',
+  'search_library',
 ]);
 
 /** @type {ReadonlySet<string>} */
-export const WRITE_PARALLEL_TOOL_NAMES = new Set(['write_file']);
+export const WRITE_PARALLEL_TOOL_NAMES = new Set(['write_file', 'remember']);
 
 /**
  * @typedef {{

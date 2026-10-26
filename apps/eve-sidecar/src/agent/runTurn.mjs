@@ -13,6 +13,7 @@ import {
 import { randomBytes } from 'node:crypto';
 import { turnFetchContext } from '../createModel.mjs';
 import { maybeCompressSession } from './contextCompress.mjs';
+import { filterUnverifiedCitationsStream } from './citationGuard.mjs';
 import { collectSourcesFromTools } from './extractChunk.mjs';
 import {
   buildModelMessages,
@@ -32,7 +33,7 @@ import {
   prepareToolExhaustionStep,
 } from './toolRounds.mjs';
 import { createTurnFailure } from './turnFailure.mjs';
-import { logToolExecution } from './turnLog.mjs';
+import { logCitationCheck, logToolExecution } from './turnLog.mjs';
 import {
   encodeEveSideChunk,
   sessionToUIMessage,
@@ -64,6 +65,7 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   baseURL?: string | null,
  *   readerState?: { chapter?: string | null, cfi?: string | null, sectionIndex?: number | null } | null,
  *   spoilerGuard?: boolean,
+ *   shareAnnotations?: boolean,
  *   generateTextFn?: import('ai').generateText, // context compression only
  *   composeGenerateTextFn?: import('ai').generateText, // write_file(draft) only
  *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
@@ -116,6 +118,7 @@ export function runTurn(input) {
     baseURL: input.baseURL,
     readerState: input.readerState,
     spoilerGuard: input.spoilerGuard,
+    shareAnnotations: input.shareAnnotations,
     maxToolRounds: input.maxToolRounds,
     finalMaxOutputTokens: input.finalMaxOutputTokens,
     tools: input.tools,
@@ -158,6 +161,7 @@ export function runTurn(input) {
     toolsContext,
     runtimeContext,
     parallelBudget,
+    citationVerifier,
     maxToolRounds,
     finalMaxOutputTokens,
   } = ctx;
@@ -404,16 +408,23 @@ export function runTurn(input) {
 
             writer.merge(
               enrichUIMessageStreamWithSources(
-                sanitizeUIMessageTextStream(
-                  toUIMessageStream({
-                    stream: result.stream,
-                    generateMessageId: () => assistantId,
-                    sendReasoning: false,
-                    sendStart: true,
-                    sendFinish: true,
-                    onError: (error) =>
-                      error instanceof Error ? error.message : String(error),
-                  }),
+                filterUnverifiedCitationsStream(
+                  sanitizeUIMessageTextStream(
+                    toUIMessageStream({
+                      stream: result.stream,
+                      generateMessageId: () => assistantId,
+                      sendReasoning: false,
+                      sendStart: true,
+                      sendFinish: true,
+                      onError: (error) =>
+                        error instanceof Error ? error.message : String(error),
+                    }),
+                  ),
+                  citationVerifier,
+                  {
+                    onDropped: (dropped) =>
+                      logCitationCheck({ sessionId: session.id, dropped }),
+                  },
                 ),
               ),
             );

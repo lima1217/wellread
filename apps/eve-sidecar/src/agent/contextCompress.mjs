@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto';
 import { isAbortError } from './httpAbort.mjs';
 import { compactToolResultValue } from './historyCompact.mjs';
 import { assistantToModelMessages } from './modelHistory.mjs';
+import { compactEnvelopeFocusText } from './focusText.mjs';
 
 export const COMPRESS_TRIGGER_RATIO = 0.68;
 export const COMPRESS_TARGET_RATIO = 0.2;
@@ -83,12 +84,15 @@ function safeJson(value) {
  */
 export function estimateMessagesTokens(messages) {
   let total = 0;
-  for (const m of messages) {
+  const last = messages.length - 1;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
     total += MSG_OVERHEAD_TOKENS;
     if (m.role === 'user') {
-      total += estimateTokens(
-        typeof m.modelContent === 'string' && m.modelContent ? m.modelContent : m.content,
-      );
+      const content =
+        typeof m.modelContent === 'string' && m.modelContent ? m.modelContent : m.content;
+      // Earlier user turns replay with focus text stubbed (buildModelMessages).
+      total += estimateTokens(i === last ? content : compactEnvelopeFocusText(content));
       continue;
     }
     if (Array.isArray(m.modelMessages) && m.modelMessages.length > 0) {

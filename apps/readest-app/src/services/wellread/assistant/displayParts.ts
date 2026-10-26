@@ -131,11 +131,14 @@ export type ToolStepDescription = {
     | 'read_note'
     | 'read_skill'
     | 'search_book'
+    | 'search_library'
     | 'grep'
     | 'list_section'
     | 'list_files'
     | 'save_note'
     | 'web_search'
+    | 'remember'
+    | 'read_memory'
     | 'other';
   /** Chapter title, query, pattern or file name when known. */
   detail?: string;
@@ -204,6 +207,7 @@ export function describeToolStep(tool: {
     }
     case 'read_file': {
       if (path?.includes('/.wellread/annotations/')) return { kind: 'read_annotations', ...extra };
+      if (path?.includes('/.wellread/memory/')) return { kind: 'read_memory' };
       if (path?.includes('/.wellread/notes/')) {
         return { kind: 'read_note', ...(baseName(path) ? { detail: baseName(path) } : {}) };
       }
@@ -223,6 +227,16 @@ export function describeToolStep(tool: {
         ...extra,
       };
     }
+    case 'search_library': {
+      const query = str(args['query']);
+      return {
+        kind: 'search_library',
+        ...(query ? { detail: query } : {}),
+        ...(hitCount !== undefined ? { count: hitCount } : {}),
+      };
+    }
+    case 'remember':
+      return { kind: 'remember' };
     case 'grep': {
       const pattern = str(args['pattern']);
       return {

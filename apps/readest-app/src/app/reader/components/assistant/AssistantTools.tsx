@@ -46,6 +46,15 @@ function useToolStepLabel() {
           detail,
           count: d.count ?? 0,
         });
+      case 'search_library':
+        return _('Searched your library notes for “{{detail}}” · {{count}} hit(s)', {
+          detail,
+          count: d.count ?? 0,
+        });
+      case 'remember':
+        return _('Updated memory');
+      case 'read_memory':
+        return _('Read memory');
       case 'grep':
         return _('Found “{{detail}}” · {{count}} hit(s)', { detail, count: d.count ?? 0 });
       case 'list_section':

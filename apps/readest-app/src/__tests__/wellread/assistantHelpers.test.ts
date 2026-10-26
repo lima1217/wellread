@@ -632,4 +632,24 @@ describe('describeToolStep', () => {
     ).toEqual({ kind: 'search_book', detail: 'freedom', count: 2, spoilerHidden: true });
     expect(describeToolStep({ name: 'mystery' })).toEqual({ kind: 'other', detail: 'mystery' });
   });
+
+  it('labels library search and memory steps', () => {
+    expect(
+      describeToolStep({
+        name: 'search_library',
+        args: { query: 'trust' },
+        result: { ok: true, hits: [{}] },
+      }),
+    ).toEqual({ kind: 'search_library', detail: 'trust', count: 1 });
+    expect(describeToolStep({ name: 'remember', args: { scope: 'reader' } })).toEqual({
+      kind: 'remember',
+    });
+    expect(
+      describeToolStep({
+        name: 'read_file',
+        args: { path: '/workspace/.wellread/memory/reader.md' },
+        result: { ok: true, content: '- x' },
+      }),
+    ).toEqual({ kind: 'read_memory' });
+  });
 });

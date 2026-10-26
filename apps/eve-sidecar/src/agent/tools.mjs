@@ -30,6 +30,8 @@ import {
 import { contextWindowToMaxReadBytes, readSectionText, resolveSectionQuery } from './resolveSectionChunks.mjs';
 import { SPOILER_GUARD_MESSAGE } from './spoilerGuard.mjs';
 import { BOOK_SEARCH_MAX_LIMIT, searchBook } from './bookSearch.mjs';
+import { LIBRARY_SEARCH_MAX_LIMIT, searchLibrary } from './librarySearch.mjs';
+import { MEMORY_ENTRIES_MAX, updateReaderMemory } from './readerMemory.mjs';
 import {
   MAX_PARALLEL_COMPOSE,
   composeGate,
@@ -46,14 +48,17 @@ function isExtractWorkspacePath(path) {
 }
 
 /**
- * Soft gate: read_file may touch skills + the current book's .wellread tree,
- * not other books' extract/notes packages.
+ * Soft gate: read_file may touch skills, reader memory, the current book's
+ * .wellread tree, and what the reader wrote about other books (notes
+ * packages; annotations unless sharing is off). Other books' extract text
+ * stays denied: the reader may not have read that far.
  * Lexically normalizes first (same as authorizeOkfNotesWrite) so `..` cannot
  * skip the cross-book deny via raw string prefixes.
  * @param {string} path
  * @param {string} bookId
+ * @param {{ shareAnnotations?: boolean }} [opts]
  */
-export function authorizeReadFilePath(path, bookId) {
+export function authorizeReadFilePath(path, bookId, opts = {}) {
   if (!isSafeBookIdSegment(bookId)) {
     return {
       ok: false,
@@ -87,20 +92,27 @@ export function authorizeReadFilePath(path, bookId) {
     };
   }
   if (ws === '/workspace/skills' || ws.startsWith('/workspace/skills/')) return { ok: true };
+  if (ws.startsWith('/workspace/.wellread/memory/')) return { ok: true };
   if (ws === '/workspace/.wellread/annotations' || ws.startsWith('/workspace/.wellread/annotations/')) {
-    return ws === `/workspace/.wellread/annotations/${bookId}.md`
-      ? { ok: true }
-      : {
-          ok: false,
-          error: 'denied',
-          message: "read_file is scoped to the current book's annotations",
-          path: ws,
-        };
+    if (ws === `/workspace/.wellread/annotations/${bookId}.md`) return { ok: true };
+    const other = ws.match(/^\/workspace\/\.wellread\/annotations\/([^/]+)\.md$/)?.[1];
+    if (other && isSafeBookIdSegment(other) && opts.shareAnnotations !== false) return { ok: true };
+    return {
+      ok: false,
+      error: 'denied',
+      message:
+        opts.shareAnnotations === false
+          ? 'annotation sharing is off; only the current book annotations file is readable'
+          : 'read_file reads one annotations file per book: /workspace/.wellread/annotations/<bookId>.md',
+      path: ws,
+    };
   }
   const notesPrefix = `/workspace/.wellread/notes/${bookId}`;
   const extractPrefix = `/workspace/.wellread/extract/${bookId}`;
   if (ws === notesPrefix || ws.startsWith(`${notesPrefix}/`)) return { ok: true };
   if (ws === extractPrefix || ws.startsWith(`${extractPrefix}/`)) return { ok: true };
+  const otherNotes = ws.match(/^\/workspace\/\.wellread\/notes\/([^/]+)\/.+/)?.[1];
+  if (otherNotes && isSafeBookIdSegment(otherNotes)) return { ok: true };
   if (
     ws === '/workspace/.wellread/notes' ||
     ws === '/workspace/.wellread/extract' ||
@@ -110,7 +122,7 @@ export function authorizeReadFilePath(path, bookId) {
     return {
       ok: false,
       error: 'denied',
-      message: 'read_file is scoped to the current book extract/notes package',
+      message: "read_file is scoped to the current book extract; other books expose only their notes packages",
       path: ws,
     };
   }
@@ -320,6 +332,10 @@ export const readingToolContextSchema = z.object({
   abortSignal: z.custom((v) => v == null || typeof v === 'object').optional(),
   /** Optional: read_section_text byte budget scales with the model context window. */
   contextWindowTokens: z.number().optional(),
+  /** Optional: titles the book memory file. */
+  bookTitle: z.string().optional(),
+  /** Optional: false keeps other books' annotation exports out of read_file / search_library. */
+  shareAnnotations: z.boolean().optional(),
   /** Optional: hides extract chunks past the reader's position (spoilerGuard.mjs). */
   spoilerGuard: z
     .custom(
@@ -340,6 +356,8 @@ export const readingToolContextSchema = z.object({
  *   composeGenerateTextFn?: typeof import('ai').generateText,
  *   abortSignal?: AbortSignal,
  *   contextWindowTokens?: number,
+ *   bookTitle?: string,
+ *   shareAnnotations?: boolean,
  *   spoilerGuard?: import('./spoilerGuard.mjs').SpoilerGuard | null,
  * }} ReadingToolContext
  */
@@ -395,7 +413,9 @@ export function createReadingTools() {
         const blocked = parallelGate(context.parallelBudget, 'read_file');
         if (blocked) return blocked;
         const { bookId, booksRoot } = context;
-        const scope = authorizeReadFilePath(path, bookId);
+        const scope = authorizeReadFilePath(path, bookId, {
+          shareAnnotations: context.shareAnnotations,
+        });
         if (!scope.ok) return { ...scope, path };
         if (isExtractWorkspacePath(path)) {
           const gate = booksExtractGate(() => booksRoot, bookId);
@@ -714,6 +734,64 @@ export function createReadingTools() {
         } catch (err) {
           return { ok: false, error: 'unavailable', message: errorMessage(err), hits: [] };
         }
+      },
+    }),
+
+    search_library: tool({
+      description:
+        "Ranked search (BM25, local) over what the reader wrote about OTHER books in their library: notes packages, highlights/notes exports and book memories. Never searches other books' text. Returns bookId, bookTitle, kind, path, heading and a snippet; read_file a hit path for more. Use when the user relates this book to others or asks what they noted elsewhere. Counts toward the ≤8 parallel read/search tools per step.",
+      inputSchema: z.object({
+        query: z.string().describe("Keywords or a short question, in the language the reader's notes are likely written in"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(LIBRARY_SEARCH_MAX_LIMIT)
+          .optional()
+          .describe('Max hits (default 8)'),
+      }),
+      contextSchema: readingToolContextSchema,
+      execute: async ({ query, limit }, { context }) => {
+        const blocked = parallelGate(context.parallelBudget, 'search_library', { hits: [] });
+        if (blocked) return blocked;
+        try {
+          return searchLibrary({
+            booksRoot: context.booksRoot,
+            bookId: context.bookId,
+            query,
+            limit,
+            includeAnnotations: context.shareAnnotations !== false,
+          });
+        } catch (err) {
+          return { ok: false, error: 'unavailable', message: errorMessage(err), hits: [] };
+        }
+      },
+    }),
+
+    remember: tool({
+      description:
+        `Save or remove short durable memory entries (one fact per entry, ≤280 chars, ≤${MEMORY_ENTRIES_MAX} per scope). scope reader: who the reader is (background, level, goals, language/style preferences). scope book: their reading of the current book (what they found hard, what they understood, questions to revisit). remove takes the exact entry text from <reader_memory>. Never store book text or one-off requests.`,
+      inputSchema: z.object({
+        scope: z.enum(['reader', 'book']),
+        add: z.array(z.string()).max(10).optional().describe('New entries, each a self-contained sentence'),
+        remove: z
+          .array(z.string())
+          .max(10)
+          .optional()
+          .describe('Exact text of entries to delete (outdated or wrong)'),
+      }),
+      contextSchema: readingToolContextSchema,
+      execute: async ({ scope, add, remove }, { context }) => {
+        const blocked = parallelGate(context.parallelBudget, 'remember');
+        if (blocked) return blocked;
+        return updateReaderMemory({
+          booksRoot: context.booksRoot,
+          bookId: context.bookId,
+          bookTitle: context.bookTitle,
+          scope,
+          add,
+          remove,
+        });
       },
     }),
 

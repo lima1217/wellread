@@ -135,7 +135,7 @@ describe('createSpoilerGuard', () => {
 });
 
 describe('annotations export', () => {
-  it('counts ### blocks and scopes read_file to the current book', () => {
+  it('counts ### blocks; other books readable only while sharing is on', () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'eve-annot-')));
     try {
       assert.equal(readAnnotationsStatus(root, 'bk1'), null);
@@ -149,7 +149,20 @@ describe('annotations export', () => {
         count: 2,
       });
       assert.equal(authorizeReadFilePath('/workspace/.wellread/annotations/bk1.md', 'bk1').ok, true);
-      assert.equal(authorizeReadFilePath('/workspace/.wellread/annotations/bk2.md', 'bk1').ok, false);
+      assert.equal(authorizeReadFilePath('/workspace/.wellread/annotations/bk2.md', 'bk1').ok, true);
+      assert.equal(
+        authorizeReadFilePath('/workspace/.wellread/annotations/bk2.md', 'bk1', {
+          shareAnnotations: false,
+        }).ok,
+        false,
+      );
+      assert.equal(
+        authorizeReadFilePath('/workspace/.wellread/annotations/bk1.md', 'bk1', {
+          shareAnnotations: false,
+        }).ok,
+        true,
+      );
+      assert.equal(authorizeReadFilePath('/workspace/.wellread/annotations/x/bk2.md', 'bk1').ok, false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

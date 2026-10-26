@@ -44,6 +44,18 @@ Canonical: 选区进 Pending Quote，不进 composer 草稿。
 
 每轮发送前，宿主把当前书的高亮/笔记/书签写到 `Books/.wellread/annotations/<bookId>.md`（设置「共享高亮和笔记」关闭时写空）；`<reading_context>` 只列路径和条数，模型按需 `read_file` / `grep`。
 
+## Reader Memory（读者记忆）
+
+助手用 `remember` 工具保存的简短长期条目：`Books/.wellread/memory/reader.md`（读者本人：背景、水平、目标、偏好）与 `memory/books/<bookId>.md`（读者对某本书的阅读：难点、已理解、待回顾问题）。每行 `- ` 一条，用户可直接编辑；每轮作为 `<reader_memory>` 注入 system。
+
+## Library Search（书库检索）
+
+`search_library`：在**其他书**中检索读者自己写下的内容（OKF 笔记、标注导出、书籍记忆），不检索其他书正文；结果去掉 cfi（指向的是别的书）。「共享高亮和笔记」关闭时（turn 发送 `shareAnnotations: false`）不含标注。
+
+## Citation Guard（引用校验）
+
+回复中 `[标题](<epubcfi(…)>)` 引用的 cfi 必须出现在工具结果、`<reading_context>` 或本书 section index 的 chunk 边界里，否则在流式输出中删除该引用。
+
 ## Thinking Mode（Think/Fast）
 
 Composer 二档：Think = 思考开，Fast = 思考关。默认 Fast；写入用户全局设置。请求侧只发协议标准字段：Responses 模式 Think → `reasoning.effort: high`、Fast → `reasoning.effort: none`；chat 模式不注入厂商私有 `thinking` 字段（推理模型默认思考，显示与否由 sidecar 决定）。思考内容的展示按响应实际形状自适应：`reasoning_content`（chat）/ `response.reasoning_text.*`（DeepSeek 方言 Responses）转发给 UI，`reasoning_summary_text.*`（OpenAI 方言）原样放行；Fast 模式模型可能仍在思考，只是 UI 不显示。

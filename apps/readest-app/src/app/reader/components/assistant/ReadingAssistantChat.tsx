@@ -131,6 +131,7 @@ export const ReadingAssistantChat = ({
     sessionId,
     thinkingMode,
     spoilerGuard,
+    shareAnnotations,
     beforeTurn,
     getReaderState: () => {
       const progress = useReaderStore.getState().getProgress(bookKey);

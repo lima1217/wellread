@@ -589,6 +589,7 @@ describe('useEveAgent', () => {
         bookTitle: 'Middlemarch',
         sessionId: 'ses_existing',
         spoilerGuard: true,
+        shareAnnotations: false,
         beforeTurn,
       }),
     );
@@ -604,6 +605,7 @@ describe('useEveAgent', () => {
     expect(streamEveTurn).toHaveBeenCalledWith('ses_existing', 'Who?', expect.any(AbortSignal), {
       thinkingMode: 'fast',
       spoilerGuard: true,
+      shareAnnotations: false,
       truncateFrom: 'u1',
     });
     expect(result.current.messages.map((m) => m.content)).toEqual(['Who?', 'New answer.']);

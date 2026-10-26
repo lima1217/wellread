@@ -8,6 +8,8 @@ import {
   normalizeReaderState as normalizeReaderStateShared,
 } from '@wellread/reading-context';
 import { CFI_COMPARE_MAX_LENGTH } from './epubcfiCompare.mjs';
+import { formatFocusTextLines } from './focusText.mjs';
+import { formatReaderMemoryBlock } from './readerMemory.mjs';
 import {
   FOCUS_CHUNKS_MAX,
   SECTION_CHUNKS_ASK_THRESHOLD,
@@ -33,6 +35,7 @@ export function normalizeReaderState(raw) {
  *   bookTitle?: string | null,
  *   skills?: Array<{ id: string, name: string, description: string, path: string }>,
  *   webSearchEnabled?: boolean,
+ *   memory?: { reader: string[], book: string[] } | null,
  * }} input
  */
 export function buildSystemPrompt(input) {
@@ -43,29 +46,34 @@ export function buildSystemPrompt(input) {
   const lines = [
     webSearchEnabled
       ? "You are wellread's Reading Assistant, primarily scoped to the current book; web_search may look up timely facts outside the book."
-      : "You are wellread's Reading Assistant, scoped to the current book only.",
+      : "You are wellread's Reading Assistant, scoped to the current book.",
     `Current book: "${title}" (bookId=${input.bookId}).`,
     `Extract: ${extractRoot}: UTF-8 text of this book: toc.md, section-index.json, chunks/*.md (frontmatter: title, sectionIndex, chunkIndex, cfi, endCfi), meta.json. Tools: resolve_section, read_file, read_section_text, search_book, grep, glob.`,
     "Grounding is optional: answer freely when you already know enough; search the extract when you need this book's text; cite locations when you reference specific passages.",
     'User turns may start with a <reading_context> block describing the reader at that moment (position, quotes, focus chunks). The newest block is current; older blocks describe their own turn.',
     'Locate extract text without listing the whole tree:',
     '- Quotes in the newest <reading_context> are the primary target when present; a quote with chunks lists the extract chunk(s) holding it: read_file those for surrounding text and cite the quote with its own cfi.',
-    '- "this page / current position / this passage": read_file focus_chunks only (leave section_chunks unread).',
+    '- "this page / current position / this passage": answer from focus_text when <reading_context> inlines it; read_file only the focus_chunks it does not include (leave section_chunks unread).',
     '- "this chapter / whole section" or a summary/explain of a whole chapter: read_section_text(sectionIndex and/or title) returns the full concatenated section text in one call; never glob extract/**/chunks/*.md to discover a section.',
     `- section_chunk_count > ${SECTION_CHUNKS_ASK_THRESHOLD} (or section_chunks_note): the section is large; read_section_text still reads it in one call (hundreds of chunks), so use it for whole-chapter tasks; ask only when the user gave a narrower target.`,
     '- extract_status missing: say extract is unavailable; stop empty glob/grep loops.',
     '- extract_status stale: tools still work (prefer resolve_section / scan paths).',
     '- search_book for topics, themes and concepts (ranked, wording may differ); grep for exact phrases; glob for notes paths (not section discovery).',
+    "- search_book and grep match the book's own wording: write queries in the book's language (translate the user's terms when the book is written in another language; when unsure, search in both languages).",
     `Reader annotations: /workspace/.wellread/annotations/${input.bookId}.md (when <reading_context> lists annotations): the reader's own highlights, notes and bookmarks, one "### " block each with chapter and cfi. Read it for questions about what they marked, noted or found important.`,
     'spoiler_guard on: the reader asked not to be spoiled; tools hide text past the limit (error spoiler_guard / hiddenBySpoilerGuard). Never reveal later events from your own knowledge of the book either; say the answer lies ahead when it does.',
     `Notes: ${notesRoot}: OKF wiki (index.md, log.md, sources|chapters|concepts|frameworks|claims|glossary|questions). Read with glob/grep/read_file; write_file only on an explicit user ask to save; overwrite in place. Skill rules/validators: /workspace/skills/note/ (read-only).`,
-    'Cite passages as [section title](<epubcfi(...)>) using the full chunk frontmatter cfi (epubcfi(…) wrapper + angle brackets). Never write bare paths like cfi: /6/… or wrap cfi in backticks; the reader shows each link as a small numbered marker that jumps to the passage. Place a citation right after the sentence or clause it supports, outside the grammar of the sentence (write 第三章写道……。[第三章](<epubcfi(...)>), never 在[第三章](<epubcfi(...)>)中); cite each passage once per claim.',
+    'Cite passages as [section title](<epubcfi(...)>) using the full chunk frontmatter cfi (epubcfi(…) wrapper + angle brackets). Copy a cfi exactly as it appears in a tool result or <reading_context>; never construct, shorten or edit one (citations whose cfi you did not see are removed from the reply). Never write bare paths like cfi: /6/… or wrap cfi in backticks; the reader shows each link as a small numbered marker that jumps to the passage. Place a citation right after the sentence or clause it supports, outside the grammar of the sentence (write 第三章写道……。[第三章](<epubcfi(...)>), never 在[第三章](<epubcfi(...)>)中); cite each passage once per claim.',
     // Positive prose target first; named bans are hard style locks (paired per writing-for-agents).
     "Reply in the user's language. Final answer only: plain prose that asserts directly; join clauses with commas, periods, or colons; style locks keep em dash, en dash, 破折号, and contrastive rewrites (not X but Y / rather than / 不是…而是) out of the answer; no emoji; no tool-use narration.",
+    "Other books: search_library searches the reader's notes, annotations and book memories from the rest of their library (never other books' text). Use it when the user relates this book to others they read, or asks what they noted elsewhere; read_file a hit path for more. Name the other book in prose; its cfi values point into that book, so never link them as citations here.",
+    'Memory: remember saves short durable entries. scope reader: who the reader is (background, level, goals, language and style preferences). scope book: their reading of this book (what they found hard, what they already understood, questions to revisit). Save when they state such a fact or ask you to remember something; never store book text, one-off requests, or anything they ask you not to keep; remove entries that turn out wrong. Use what <reader_memory> holds to pitch explanations without restating it.',
     webSearchEnabled
-      ? "Use extract tools for this book's text; use web_search for timely or external facts outside the book. Translation pipelines, wiki packs, and cross-book search stay unavailable."
-      : 'Answer with mounted tools only; translation pipelines, wiki packs, and cross-book search are unavailable until mounted.',
+      ? "Use extract tools for this book's text; use web_search for timely or external facts outside the book. Translation pipelines and wiki packs stay unavailable."
+      : 'Answer with mounted tools only; translation pipelines and wiki packs are unavailable until mounted.',
   ];
+  const memory = formatReaderMemoryBlock(input.memory);
+  if (memory) lines.push(memory);
   const catalog = formatSkillsCatalog(input.skills);
   if (catalog) lines.push(catalog);
   return lines.join('\n');
@@ -127,6 +135,7 @@ export function collectPriorSources(messages, max = PRIOR_SOURCES_MAX) {
  *     count: number,
  *     via: 'cfi' | 'section_mid' | 'none' | null,
  *   } | null,
+ *   focusTexts?: Array<{ path: string, content: string }> | null,
  *   sectionChunks?: {
  *     paths: string[],
  *     count: number,
@@ -189,6 +198,12 @@ export function buildReadingContextEnvelope(input) {
     } else {
       body.push(`${K.focusChunks}: (none matched)`);
     }
+    // Only inline text for chunks still listed (spoiler guard already filtered).
+    const listed = new Set(focusPaths.map((p) => p.trim()));
+    const texts = Array.isArray(input.focusTexts)
+      ? input.focusTexts.filter((t) => t && listed.has(t.path))
+      : [];
+    body.push(...formatFocusTextLines(K.focusText, texts));
   }
 
   const sectionChunks = input.sectionChunks;
