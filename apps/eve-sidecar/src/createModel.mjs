@@ -108,11 +108,14 @@ export function createLanguageModel(config, deps = {}) {
 /**
  * Hide chat vs Responses streamText / tool-step system wiring from the turn loop.
  *
+ * `instructions` is the stable per-book system prompt. The per-turn
+ * `<reading_context>` envelope rides the user message instead, so the system
+ * prefix (and every prior turn) stays byte-identical for provider prompt
+ * caching.
+ *
  * @param {{
  *   apiMode?: string,
  *   thinkingMode?: ThinkingMode,
- *   system: string,
- *   envelope: string,
  *   instructions: string,
  * }} input
  * @returns {{
@@ -125,14 +128,13 @@ export function resolveTurnModelPresentation(input) {
   const thinkingMode = normalizeThinkingMode(input.thinkingMode);
   if (apiMode === 'responses') {
     return {
-      toolSystem: input.envelope || '',
+      // Base prompt already rides the Responses `instructions` field; the
+      // exhaustion step only adds its own note as a top-level system message.
+      toolSystem: '',
       streamTextOptions: {
         // Top-level reasoning maps to provider effort (@ai-sdk/openai).
         reasoning:
           thinkingMode === 'think' ? THINK_MODE_REASONING_EFFORT : 'none',
-        // Envelope stays as top-level instructions; book base prompt rides
-        // providerOptions.openai.instructions (Responses API field).
-        instructions: input.envelope || undefined,
         providerOptions: {
           openai: {
             store: false,
@@ -143,7 +145,7 @@ export function resolveTurnModelPresentation(input) {
     };
   }
   return {
-    toolSystem: input.system,
-    streamTextOptions: { instructions: input.system },
+    toolSystem: input.instructions,
+    streamTextOptions: { instructions: input.instructions },
   };
 }

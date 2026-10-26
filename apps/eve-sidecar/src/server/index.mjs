@@ -20,6 +20,7 @@ import { createHttpAbort } from '../agent/httpAbort.mjs';
 import {
   createSessionStore,
   isSafeSessionId,
+  truncateSessionFrom,
 } from '../agent/sessionStore.mjs';
 import { isSafeBookIdSegment } from '../agent/notesOkf.mjs';
 import { normalizeReaderState } from '../agent/prompt.mjs';
@@ -318,6 +319,15 @@ const server = http.createServer(async (req, res) => {
         }
         const thinkingMode = normalizeThinkingMode(body.thinkingMode);
         const readerState = normalizeReaderState(body.readerState);
+        const spoilerGuard = body.spoilerGuard === true;
+        // Regenerate / edit-and-resend: drop the named user turn and everything
+        // after it before running this turn in its place.
+        if (typeof body.truncateFrom === 'string' && body.truncateFrom) {
+          if (!truncateSessionFrom(session, body.truncateFrom)) {
+            sendJson(res, 409, { error: 'truncate_target_not_found' }, req);
+            return;
+          }
+        }
 
         // Client AbortController cancels the fetch; propagate into streamText.
         const { signal: abortSignal, settle: settleAbort, cancel: cancelTurn } =
@@ -336,6 +346,7 @@ const server = http.createServer(async (req, res) => {
             apiMode: modelConfig.apiMode,
             baseURL: modelConfig.baseURL,
             readerState,
+            spoilerGuard,
             // runTurn owns mid-turn + onFinish persistence via this callback.
             persistSession: (s) => sessions.save(s),
           });

@@ -20,6 +20,8 @@ export declare const ENVELOPE_KEYS: Readonly<{
   quotes: 'quotes';
   priorSources: 'prior_sources';
   notesIndex: 'notes_index';
+  annotations: 'annotations';
+  spoilerGuard: 'spoiler_guard';
 }>;
 
 export type ReaderState = {

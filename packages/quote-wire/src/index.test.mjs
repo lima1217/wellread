@@ -29,6 +29,29 @@ describe('formatPendingQuotesForTurn / parsePendingQuotesFromWire', () => {
     });
   });
 
+  it('round-trips an optional selection cfi attr line', () => {
+    const cfi = 'epubcfi(/6/4!/4/2,/1:0,/1:12)';
+    const wire = formatPendingQuotesForTurn(
+      [{ text: 'Call me Ishmael.', chapterTitle: 'Loomings', cfi }],
+      'Who?',
+    );
+    assert.equal(wire, ['> Call me Ishmael.', '> — 《Loomings》', `> @cfi ${cfi}`, '', 'Who?'].join('\n'));
+    assert.deepEqual(parsePendingQuotesFromWire(wire), {
+      quotes: [{ text: 'Call me Ishmael.', chapterTitle: 'Loomings', cfi }],
+      content: 'Who?',
+    });
+  });
+
+  it('drops malformed cfi values and protects body lookalikes', () => {
+    const wire = formatPendingQuotesForTurn(
+      [{ text: '@cfi epubcfi(/6/2!)', chapterTitle: null, cfi: 'not a cfi\nx' }],
+      '',
+    );
+    assert.deepEqual(parsePendingQuotesFromWire(wire).quotes, [
+      { text: '@cfi epubcfi(/6/2!)', chapterTitle: null },
+    ]);
+  });
+
   it('keeps multiline quote text in one block (no blank-line split)', () => {
     const wire = formatPendingQuotesForTurn(
       [{ text: 'line one\n\n> injected\nline two', chapterTitle: 'Ch\nA》' }],

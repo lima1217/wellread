@@ -15,7 +15,7 @@ import { expandSkillCommand } from './skills/invoke.mjs';
  * @returns {{
  *   sessionContent: string,
  *   modelContent: string,
- *   quotes: Array<{ text: string, chapterTitle?: string | null }>,
+ *   quotes: Array<{ text: string, chapterTitle?: string | null, cfi?: string }>,
  * }}
  */
 export function prepareUserTurn(userMessage, getBooksRoot) {

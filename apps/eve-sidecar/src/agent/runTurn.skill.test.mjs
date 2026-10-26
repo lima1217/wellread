@@ -99,6 +99,13 @@ function userTextsFromPrompt(prompt) {
   return texts;
 }
 
+/** Split this turn's leading <reading_context> envelope from the user text. */
+function splitEnvelope(text) {
+  const m = /^<reading_context>[\s\S]*?<\/reading_context>(?:\n\n)?/.exec(text || '');
+  if (!m) return { envelope: '', body: text || '' };
+  return { envelope: m[0], body: text.slice(m[0].length) };
+}
+
 describe('runTurn skill expansion', () => {
   it('puts Pending Quotes into reading_context and expands /skill: without quote blocks', async () => {
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-runturn-skill-')));
@@ -122,13 +129,14 @@ describe('runTurn skill expansion', () => {
         generateTextFn: async () => ({ text: '', usage: {} }),
       });
       const system = systemTextFromPrompt(sink.prompt);
-      assert.match(system, /<reading_context>/);
-      assert.match(system, /Call me Ishmael/);
-      assert.match(system, /position: \(client-reported, may be stale\)/);
-      assert.match(system, /epubcfi\(\/6\/2!\)/);
+      assert.doesNotMatch(system, /<reading_context>\n/);
+      assert.doesNotMatch(system, /Call me Ishmael/);
 
       const userTexts = userTextsFromPrompt(sink.prompt);
-      const modelUser = userTexts[userTexts.length - 1] || '';
+      const { envelope, body: modelUser } = splitEnvelope(userTexts.at(-1));
+      assert.match(envelope, /Call me Ishmael/);
+      assert.match(envelope, /position: \(client-reported, may be stale\)/);
+      assert.match(envelope, /epubcfi\(\/6\/2!\)/);
       assert.match(modelUser, /^<skill name="summarize"/);
       assert.doesNotMatch(modelUser, /^>/);
       assert.doesNotMatch(modelUser, /Call me Ishmael/);
@@ -153,9 +161,10 @@ describe('runTurn skill expansion', () => {
         generateTextFn: async () => ({ text: 'ok', usage: {} }),
       });
       const system = systemTextFromPrompt(sink.prompt);
-      assert.match(system, /Call me Ishmael/);
+      assert.doesNotMatch(system, /Call me Ishmael/);
       const userTexts = userTextsFromPrompt(sink.prompt);
-      const modelUser = userTexts[userTexts.length - 1] || '';
+      const { envelope, body: modelUser } = splitEnvelope(userTexts.at(-1));
+      assert.match(envelope, /Call me Ishmael/);
       assert.equal(modelUser, '');
       assert.doesNotMatch(modelUser, /Call me Ishmael/);
     } finally {
@@ -189,7 +198,7 @@ describe('runTurn skill expansion', () => {
 
       const userTexts = userTextsFromPrompt(sink.prompt);
       assert.equal(userTexts.length >= 1, true);
-      const modelUser = userTexts[userTexts.length - 1] || '';
+      const modelUser = splitEnvelope(userTexts.at(-1)).body;
       assert.match(modelUser, /^<skill name="summarize"/);
       assert.match(modelUser, /Be concise about the chapter/);
       assert.match(modelUser, /\n\nthis chapter$/);
@@ -236,7 +245,7 @@ describe('runTurn skill expansion', () => {
       assert.doesNotMatch(system, /Ask one question at a time/);
 
       const userTexts = userTextsFromPrompt(sink.prompt);
-      assert.equal(userTexts.at(-1), 'I pick network effects, score 5.');
+      assert.equal(splitEnvelope(userTexts.at(-1)).body, 'I pick network effects, score 5.');
       assert.equal(
         userTexts.some((t) => t.includes('Ask one question at a time')),
         false,
@@ -263,7 +272,7 @@ describe('runTurn skill expansion', () => {
       assert.doesNotMatch(system, /## Active skill/);
       assert.doesNotMatch(system, /- nope:/);
       const userTexts = userTextsFromPrompt(sink.prompt);
-      assert.equal(userTexts.at(-1), '/skill:nope');
+      assert.equal(splitEnvelope(userTexts.at(-1)).body, '/skill:nope');
       assert.equal(
         userTexts.some((t) => t.includes('<skill name="nope"')),
         false,

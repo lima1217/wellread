@@ -87,7 +87,7 @@ describe('runTurn visible model output', () => {
 
     assert.ok(assistant);
     assert.match(assistant.content, /让我继续搜/);
-    assert.doesNotMatch(assistant.content, /工具调用次数已用尽/);
+    assert.doesNotMatch(assistant.content, /Tool budget is spent/);
   });
 
   it('surfaces degenerate soft-landing prose as-is', async () => {
@@ -111,7 +111,7 @@ describe('runTurn visible model output', () => {
 
     assert.ok(assistant);
     assert.match(assistant.content, /让我继续/);
-    assert.doesNotMatch(assistant.content, /工具调用次数已用尽/);
+    assert.doesNotMatch(assistant.content, /Tool budget is spent/);
     assert.equal(
       chunks.some((c) => c.type === 'error'),
       false,

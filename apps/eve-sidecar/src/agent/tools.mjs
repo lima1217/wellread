@@ -28,6 +28,8 @@ import {
   okfDraftMatchesDir,
 } from './notesOkf.mjs';
 import { contextWindowToMaxReadBytes, readSectionText, resolveSectionQuery } from './resolveSectionChunks.mjs';
+import { SPOILER_GUARD_MESSAGE } from './spoilerGuard.mjs';
+import { BOOK_SEARCH_MAX_LIMIT, searchBook } from './bookSearch.mjs';
 import {
   MAX_PARALLEL_COMPOSE,
   composeGate,
@@ -85,6 +87,16 @@ export function authorizeReadFilePath(path, bookId) {
     };
   }
   if (ws === '/workspace/skills' || ws.startsWith('/workspace/skills/')) return { ok: true };
+  if (ws === '/workspace/.wellread/annotations' || ws.startsWith('/workspace/.wellread/annotations/')) {
+    return ws === `/workspace/.wellread/annotations/${bookId}.md`
+      ? { ok: true }
+      : {
+          ok: false,
+          error: 'denied',
+          message: "read_file is scoped to the current book's annotations",
+          path: ws,
+        };
+  }
   const notesPrefix = `/workspace/.wellread/notes/${bookId}`;
   const extractPrefix = `/workspace/.wellread/extract/${bookId}`;
   if (ws === notesPrefix || ws.startsWith(`${notesPrefix}/`)) return { ok: true };
@@ -116,6 +128,7 @@ export function wellreadBookSearchRoots(bookId) {
   return [
     `/workspace/.wellread/notes/${bookId}`,
     `/workspace/.wellread/extract/${bookId}`,
+    `/workspace/.wellread/annotations/${bookId}.md`,
   ];
 }
 
@@ -307,6 +320,15 @@ export const readingToolContextSchema = z.object({
   abortSignal: z.custom((v) => v == null || typeof v === 'object').optional(),
   /** Optional: read_section_text byte budget scales with the model context window. */
   contextWindowTokens: z.number().optional(),
+  /** Optional: hides extract chunks past the reader's position (spoilerGuard.mjs). */
+  spoilerGuard: z
+    .custom(
+      (v) =>
+        v == null ||
+        (typeof v === 'object' &&
+          typeof /** @type {{ isPathHidden?: unknown }} */ (v).isPathHidden === 'function'),
+    )
+    .optional(),
 });
 
 /**
@@ -318,8 +340,43 @@ export const readingToolContextSchema = z.object({
  *   composeGenerateTextFn?: typeof import('ai').generateText,
  *   abortSignal?: AbortSignal,
  *   contextWindowTokens?: number,
+ *   spoilerGuard?: import('./spoilerGuard.mjs').SpoilerGuard | null,
  * }} ReadingToolContext
  */
+
+/**
+ * @param {ReadingToolContext} context
+ * @param {string} path
+ */
+function spoilerHidden(context, path) {
+  const guard = context.spoilerGuard;
+  if (!guard || typeof path !== 'string') return false;
+  let ws;
+  try {
+    ws = normalizeAbsolute(path.startsWith('/') ? path : `/workspace/${path}`);
+  } catch {
+    return false;
+  }
+  return guard.isPathHidden(ws);
+}
+
+/**
+ * Drop search hits that point at chunks past the reader's position.
+ * @template {{ path?: string } | string} T
+ * @param {ReadingToolContext} context
+ * @param {T[]} hits
+ * @returns {{ hits: T[], hiddenBySpoilerGuard?: number }}
+ */
+function filterSpoilerHits(context, hits) {
+  if (!context.spoilerGuard) return { hits };
+  const kept = hits.filter(
+    (h) => !spoilerHidden(context, typeof h === 'string' ? h : (h?.path ?? '')),
+  );
+  const hidden = hits.length - kept.length;
+  return hidden ? { hits: kept, hiddenBySpoilerGuard: hidden } : { hits: kept };
+}
+
+export { filterSpoilerHits };
 
 /**
  * Reading-assistant tools. Inject turn state via streamText `toolsContext`
@@ -343,6 +400,9 @@ export function createReadingTools() {
         if (isExtractWorkspacePath(path)) {
           const gate = booksExtractGate(() => booksRoot, bookId);
           if (gate) return { ...gate, path };
+          if (spoilerHidden(context, path)) {
+            return { ok: false, path, error: 'spoiler_guard', message: SPOILER_GUARD_MESSAGE };
+          }
         }
         const session = createBooksFsSession({ getBooksRoot: () => booksRoot });
         try {
@@ -542,12 +602,21 @@ export function createReadingTools() {
             readExtractStatus(booksRoot, bookId).status,
           );
           if (gate) return { ...gate, count: 0, paths: [] };
-          return resolveSectionQuery({
+          const result = resolveSectionQuery({
             booksRoot,
             bookId,
             sectionIndex,
             title,
           });
+          if (!result.ok || !context.spoilerGuard) return result;
+          const filtered = context.spoilerGuard.filterPaths(result.paths);
+          if (!filtered.hidden) return result;
+          return {
+            ...result,
+            paths: filtered.paths,
+            count: filtered.paths.length,
+            hiddenBySpoilerGuard: filtered.hidden,
+          };
         } catch (err) {
           return {
             ok: false,
@@ -590,6 +659,9 @@ export function createReadingTools() {
             sectionIndex,
             title,
             maxBytes: contextWindowToMaxReadBytes(context.contextWindowTokens),
+            ...(context.spoilerGuard
+              ? { pathFilter: context.spoilerGuard.filterPaths }
+              : {}),
           });
         } catch (err) {
           return {
@@ -597,6 +669,50 @@ export function createReadingTools() {
             error: 'unavailable',
             message: errorMessage(err),
           };
+        }
+      },
+    }),
+
+    search_book: tool({
+      description:
+        "Ranked passage search over this book's text (BM25, local). Use for topic/concept questions where the exact wording is unknown (\"what does the author say about freedom\"); use grep for exact phrases. Returns chunk path, title, sectionIndex, cfi and a snippet; read_file a hit for full text. Counts toward the ≤8 parallel read/search tools per step.",
+      inputSchema: z.object({
+        query: z.string().describe('Keywords or a short natural-language question'),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(BOOK_SEARCH_MAX_LIMIT)
+          .optional()
+          .describe('Max hits (default 8)'),
+        sectionIndex: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe('Restrict to one spine section'),
+      }),
+      contextSchema: readingToolContextSchema,
+      execute: async ({ query, limit, sectionIndex }, { context }) => {
+        const blocked = parallelGate(context.parallelBudget, 'search_book', { hits: [] });
+        if (blocked) return blocked;
+        const { bookId, booksRoot } = context;
+        try {
+          const gate = extractUnavailableEnvelope(
+            readExtractStatus(booksRoot, bookId).status,
+          );
+          if (gate) return { ...gate, hits: [] };
+          const guard = context.spoilerGuard;
+          return searchBook({
+            booksRoot,
+            bookId,
+            query,
+            limit,
+            sectionIndex,
+            ...(guard ? { isPathHidden: guard.isPathHidden } : {}),
+          });
+        } catch (err) {
+          return { ok: false, error: 'unavailable', message: errorMessage(err), hits: [] };
         }
       },
     }),
@@ -622,7 +738,7 @@ export function createReadingTools() {
         }
         try {
           const hits = globWellread(context.booksRoot, pattern, { under });
-          return { ok: true, hits };
+          return { ok: true, ...filterSpoilerHits(context, hits) };
         } catch (err) {
           return {
             ok: false,
@@ -636,7 +752,7 @@ export function createReadingTools() {
 
     grep: tool({
       description:
-        'Search file contents under the current book extract/notes packages in /workspace/.wellread/ (returns path, line, matching text). Counts toward the ≤8 parallel read/search tools per step.',
+        "Search file contents under the current book extract/notes packages and the reader's annotations file in /workspace/.wellread/ (returns path, line, matching text). Exact phrases only; use search_book for topics/concepts. Counts toward the ≤8 parallel read/search tools per step.",
       inputSchema: z.object({
         pattern: z.string().describe('Substring or regex to match against file lines'),
         path: z
@@ -675,7 +791,10 @@ export function createReadingTools() {
             regex: regex !== false,
             maxHits: GREP_MODEL_HIT_MAX,
           });
-          return { ok: true, hits: hits.map(projectGrepHitForModel) };
+          return {
+            ok: true,
+            ...filterSpoilerHits(context, hits.map(projectGrepHitForModel)),
+          };
         } catch (err) {
           const msg = errorMessage(err);
           if (msg.startsWith('invalid_grep_pattern:')) {
