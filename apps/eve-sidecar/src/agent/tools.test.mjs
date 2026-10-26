@@ -119,7 +119,7 @@ describe('authorizeReadFilePath', () => {
     assert.equal(authorizeReadFilePath('/workspace/Some Book.epub', bookId).ok, true);
   });
 
-  it('denies other books even when raw path starts with current-book or skills prefixes', () => {
+  it("denies other books' extract even when raw path starts with current-book or skills prefixes", () => {
     assert.equal(
       authorizeReadFilePath(`/workspace/.wellread/notes/${bookId}/../../extract/other/a.md`, bookId)
         .ok,
@@ -132,6 +132,34 @@ describe('authorizeReadFilePath', () => {
     assert.equal(
       authorizeReadFilePath('/workspace/.wellread/extract/other/a.md', bookId).ok,
       false,
+    );
+  });
+  it("allows what the reader wrote about other books, normalized before the check", () => {
+    for (const path of [
+      '/workspace/.wellread/notes/other/concepts/trust.md',
+      '/workspace/.wellread/memory/books/other.md',
+      '/workspace/.wellread/memory/reader.md',
+      '/workspace/.wellread/annotations/other.md',
+      `/workspace/.wellread/notes/${bookId}/../other/index.md`,
+    ]) {
+      assert.equal(authorizeReadFilePath(path, bookId).ok, true, path);
+    }
+    // A bare package directory is not a file to read.
+    assert.equal(authorizeReadFilePath('/workspace/.wellread/notes/other', bookId).ok, false);
+  });
+
+  it("keeps other books' annotations out when sharing is off, even via ..", () => {
+    const off = { shareAnnotations: false };
+    assert.equal(authorizeReadFilePath('/workspace/.wellread/annotations/other.md', bookId, off).ok, false);
+    assert.equal(
+      authorizeReadFilePath(`/workspace/.wellread/notes/${bookId}/../../annotations/other.md`, bookId, off)
+        .ok,
+      false,
+    );
+    assert.equal(authorizeReadFilePath(`/workspace/.wellread/annotations/${bookId}.md`, bookId, off).ok, true);
+    assert.equal(
+      authorizeReadFilePath('/workspace/.wellread/notes/other/index.md', bookId, off).ok,
+      true,
     );
   });
 });
