@@ -38,6 +38,7 @@ vi.mock('@/services/nav', () => ({
   findTocItemBS: () => ({ href: 'ch1.xhtml', label: 'Chapter One', id: 1 }),
 }));
 
+import { useNotebookStore } from '@/store/notebookStore';
 import AnnotationsView from '@/app/reader/components/assistant/AnnotationsView';
 
 const note = (overrides: Partial<BookNote>): BookNote => ({
@@ -94,6 +95,18 @@ describe('AnnotationsView', () => {
       cfi: booknotes[0]!.cfi,
     });
     expect(onQuote).toHaveBeenCalled();
+  });
+
+  it('opens the note editor for a highlight', () => {
+    booknotes.push(note({ id: 'a', text: 'Highlighted passage', note: 'My thought' }));
+    render(<AnnotationsView bookKey='book-1' onQuote={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit note' }));
+
+    expect(useNotebookStore.getState().notebookEditAnnotation).toMatchObject({
+      id: 'a',
+      note: 'My thought',
+    });
   });
 
   it('shows an empty state when the book has no highlights', () => {

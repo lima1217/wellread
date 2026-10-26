@@ -7,6 +7,7 @@ import { useBookDataStore } from '@/store/bookDataStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { useAssistantPanelStore } from '@/store/assistantPanelStore';
+import { useNotebookStore } from '@/store/notebookStore';
 import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useThemeStore } from '@/store/themeStore';
@@ -19,9 +20,11 @@ import { getPanelTopInset } from '@/utils/insets';
 import { Overlay } from '@/components/Overlay';
 import { saveSysSettings } from '@/helpers/settings';
 import useShortcuts from '@/hooks/useShortcuts';
+import { useAnnotationNoteFlow } from '../../hooks/useAnnotationNoteFlow';
 import AIAssistant from './AIAssistant';
 import AssistantHeader from './Header';
 import AnnotationsView from './AnnotationsView';
+import NoteEditor from './NoteEditor';
 import AINotesView from './AINotesView';
 import ChatHistoryView from '../sidebar/ChatHistoryView';
 
@@ -49,6 +52,9 @@ const AssistantPanel: React.FC = ({}) => {
   } = useAssistantPanelStore();
   const setActiveSession = useReadingAssistantStore((s) => s.setActiveSession);
   const clearPendingQuotes = useReadingAssistantStore((s) => s.clearPendingQuotes);
+  const { notebookNewAnnotation, notebookEditAnnotation } = useNotebookStore();
+  const { handleSaveNote, handleEditNote, handleCancelNewAnnotation } =
+    useAnnotationNoteFlow(sideBarBookKey);
 
   const isMobile = useMediaQuery({ maxWidth: 639 });
   const [isFullHeightInMobile, setIsFullHeightInMobile] = useState(isMobile);
@@ -71,6 +77,30 @@ const AssistantPanel: React.FC = ({}) => {
   useEffect(() => {
     if (isAssistantPanelVisible) setPane('chat');
   }, [isAssistantPanelVisible]);
+
+  // The toolbar's Annotate action (or editing a note) opens the editor on the
+  // highlights pane. Declared after the effect above so it wins on open.
+  useEffect(() => {
+    if (notebookNewAnnotation || notebookEditAnnotation) setPane('notes');
+  }, [notebookNewAnnotation, notebookEditAnnotation]);
+
+  // The "Annotate" action keeps a placeholder highlight alive only while its
+  // editor is on screen. The moment that creation flow stops being presented —
+  // Cancel/Escape (selection cleared), the panel closing, swipe-dismiss, or a
+  // navigate — clean the placeholder up (#4791). Save clears the tracked id (and
+  // the placeholder gains note text), so this no-ops for saved annotations.
+  useEffect(() => {
+    if (!(isAssistantPanelVisible && notebookNewAnnotation)) {
+      handleCancelNewAnnotation(sideBarBookKey);
+    }
+  }, [isAssistantPanelVisible, notebookNewAnnotation, sideBarBookKey, handleCancelNewAnnotation]);
+
+  // Switching books (panel pinned, so it stays presented) or closing the reader
+  // leaves the placeholder behind; clean it up against the book we are leaving
+  // on the way out (#4791).
+  useEffect(() => {
+    return () => handleCancelNewAnnotation(sideBarBookKey);
+  }, [sideBarBookKey, handleCancelNewAnnotation]);
 
   const {
     panelRef: assistantPanelRef,
@@ -284,6 +314,11 @@ const AssistantPanel: React.FC = ({}) => {
           </div>
           {pane === 'history' && (
             <ChatHistoryView bookKey={sideBarBookKey} onSessionOpen={() => setPane('chat')} />
+          )}
+          {pane === 'notes' && (notebookNewAnnotation || notebookEditAnnotation) && (
+            <div className='flex-shrink-0 px-2'>
+              <NoteEditor onSave={handleSaveNote} onEdit={(item) => handleEditNote(item, false)} />
+            </div>
           )}
           {pane === 'notes' && (
             <AnnotationsView bookKey={sideBarBookKey} onQuote={() => setPane('chat')} />

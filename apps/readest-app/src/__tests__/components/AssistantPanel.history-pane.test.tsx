@@ -179,6 +179,15 @@ vi.mock('@/app/reader/components/assistant/AINotesView', () => ({
   },
 }));
 
+vi.mock('@/app/reader/components/assistant/NoteEditor', () => ({
+  default: function MockNoteEditor() {
+    return <div data-testid='note-editor'>Note editor</div>;
+  },
+}));
+
+import { act } from '@testing-library/react';
+import { useNotebookStore } from '@/store/notebookStore';
+import type { TextSelection } from '@/utils/sel';
 import AssistantPanel from '@/app/reader/components/assistant/AssistantPanel';
 
 describe('AssistantPanel chat↔history pane', () => {
@@ -234,6 +243,22 @@ describe('AssistantPanel chat↔history pane', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
     expect(screen.queryByTestId('ai-notes')).toBeNull();
+  });
+
+  it('opens the note editor on the highlights pane when a note is started', () => {
+    render(<AssistantPanel />);
+    expect(screen.queryByTestId('note-editor')).toBeNull();
+
+    act(() => {
+      useNotebookStore
+        .getState()
+        .setNotebookNewAnnotation({ key: 's', text: 'Hello', page: 1 } as TextSelection);
+    });
+
+    expect(screen.getByTestId('note-editor')).toBeTruthy();
+    expect(screen.getByTestId('annotations')).toBeTruthy();
+    expect(chatLifecycle.unmounts).toBe(0);
+    act(() => useNotebookStore.getState().setNotebookNewAnnotation(null));
   });
 
   it('keeps AIAssistant mounted when the panel is closed after opening', () => {
