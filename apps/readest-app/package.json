@@ -1,6 +1,6 @@
 {
   "name": "@wellread/wellread-app",
-  "version": "1.2.6",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -39,7 +39,7 @@
     "format": "pnpm -w format",
     "format:check": "pnpm -w format:check",
     "prepare-public-vendor": "mkdirp ./public/vendor/pdfjs ./public/vendor/simplecc ./public/vendor/jieba",
-    "copy-pdfjs-js": "cpx \"../../packages/foliate-js/node_modules/pdfjs-dist/legacy/build/{pdf.worker.min.mjs,pdf.min.mjs,pdf.d.mts}\" ./public/vendor/pdfjs",
+    "copy-pdfjs-js": "cpx \"../../packages/foliate-js/node_modules/pdfjs-dist/legacy/build/{pdf.worker.min.mjs,pdf.min.mjs,pdf.d.mts}\" ./public/vendor/pdfjs && node -e \"require('fs').writeFileSync('public/vendor/pdfjs/pdf.min.d.mts','export type * from \\\"pdfjs-dist\\\";\\nexport * from \\\"pdfjs-dist\\\";\\n')\"",
     "copy-pdfjs-wasm": "cpx \"../../packages/foliate-js/node_modules/pdfjs-dist/wasm/*\" ./public/vendor/pdfjs",
     "copy-pdfjs-fonts": "cpx \"../../packages/foliate-js/node_modules/pdfjs-dist/{cmaps,standard_fonts}/*\" ./public/vendor/pdfjs",
     "copy-flatten-pdfjs-annotation-layer-css": "npx postcss \"../../packages/foliate-js/vendor/pdfjs/annotation_layer_builder.css\" --no-map -u postcss-nested > ./public/vendor/pdfjs/annotation_layer_builder.css",
@@ -202,6 +202,7 @@
     "jsdom": "^28.1.0",
     "mkdirp": "^3.0.1",
     "node-env-run": "file:../../patches/vendor/node-env-run",
+    "pdfjs-dist": "6.2.108",
     "playwright": "^1.58.2",
     "postcss": "^8.4.49",
     "postcss-cli": "^11.0.0",

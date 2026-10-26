@@ -1,5 +1,15 @@
 {
   "releases": {
+    "1.3.0": {
+      "date": "2026-10-27",
+      "notes": [
+        "Reader: 100+ upstream Readest fixes — embedded fonts, footnote popups, tables, cross-page selection, PDF highlights, dark-mode rendering, comics and TXT chapter detection",
+        "Assistant: Highlights & Notes pane beside Chat History, with virtualized lists and a tab row",
+        "Assistant: AI Notes pane to read and edit note-skill pages, the upstream note editor restored and safer AI-note edits",
+        "Security: sanitize book markup and note Markdown rendered in the app window, hardened ebook content and proxy trust boundaries",
+        "Skills: bundled skills now reply in the user's language"
+      ]
+    },
     "1.2.6": {
       "date": "2026-10-26",
       "notes": [
