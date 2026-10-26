@@ -1,17 +1,18 @@
 import clsx from 'clsx';
 import React from 'react';
 
-import { LuHistory, LuPlus } from 'react-icons/lu';
+import { LuHighlighter, LuHistory, LuPlus } from 'react-icons/lu';
 import { MdArrowBackIosNew, MdOutlinePushPin, MdPushPin } from 'react-icons/md';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 
 const AssistantHeader: React.FC<{
   isPinned: boolean;
-  pane: 'chat' | 'history';
+  pane: 'chat' | 'history' | 'notes';
   handleClose: () => void;
   handleTogglePin: () => void;
   onOpenHistory: () => void;
+  onOpenNotes: () => void;
   onBackToChat: () => void;
   onNewSession: () => void;
 }> = ({
@@ -20,12 +21,13 @@ const AssistantHeader: React.FC<{
   handleClose,
   handleTogglePin,
   onOpenHistory,
+  onOpenNotes,
   onBackToChat,
   onNewSession,
 }) => {
   const _ = useTranslation();
   const iconSize15 = useResponsiveSize(15);
-  const isHistory = pane === 'history';
+  const isChat = pane === 'chat';
   const pressScaleClass =
     'not-eink:active:scale-[0.96] not-eink:transition-transform not-eink:duration-150 not-eink:ease-out';
 
@@ -39,10 +41,14 @@ const AssistantHeader: React.FC<{
         <h2
           className={clsx(
             'assistant-title truncate text-center text-base font-medium tracking-tight',
-            isHistory && 'text-base-content/60',
+            !isChat && 'text-base-content/60',
           )}
         >
-          {isHistory ? _('Chat History') : _('Reading Assistant')}
+          {pane === 'history'
+            ? _('Chat History')
+            : pane === 'notes'
+              ? _('Highlights & Notes')
+              : _('Reading Assistant')}
         </h2>
       </div>
       <div className='relative z-10 flex w-full items-center gap-x-1.5'>
@@ -76,7 +82,7 @@ const AssistantHeader: React.FC<{
         >
           <MdArrowBackIosNew aria-hidden='true' />
         </button>
-        {isHistory ? (
+        {!isChat ? (
           <button
             type='button'
             title={_('Back to chat')}
@@ -91,15 +97,26 @@ const AssistantHeader: React.FC<{
             ← {_('Chat')}
           </button>
         ) : (
-          <button
-            type='button'
-            title={_('Chat History')}
-            aria-label={_('Chat History')}
-            onClick={onOpenHistory}
-            className={clsx('btn btn-ghost btn-circle h-8 min-h-8 w-8', pressScaleClass)}
-          >
-            <LuHistory size={iconSize15} aria-hidden='true' />
-          </button>
+          <>
+            <button
+              type='button'
+              title={_('Chat History')}
+              aria-label={_('Chat History')}
+              onClick={onOpenHistory}
+              className={clsx('btn btn-ghost btn-circle h-8 min-h-8 w-8', pressScaleClass)}
+            >
+              <LuHistory size={iconSize15} aria-hidden='true' />
+            </button>
+            <button
+              type='button'
+              title={_('Highlights & Notes')}
+              aria-label={_('Highlights & Notes')}
+              onClick={onOpenNotes}
+              className={clsx('btn btn-ghost btn-circle h-8 min-h-8 w-8', pressScaleClass)}
+            >
+              <LuHighlighter size={iconSize15} aria-hidden='true' />
+            </button>
+          </>
         )}
         <div className='flex-1' />
         <button
