@@ -8,8 +8,6 @@ import {
   DEFAULT_BOOK_LANGUAGE,
   DEFAULT_BOOK_STYLE,
   DEFAULT_VIEW_CONFIG,
-  DEFAULT_TTS_CONFIG,
-  DEFAULT_TRANSLATOR_CONFIG,
   DEFAULT_ANNOTATOR_CONFIG,
   DEFAULT_SCREEN_CONFIG,
 } from '@/services/constants';
@@ -23,8 +21,6 @@ function makeViewSettings(overrides: Partial<ViewSettings> = {}): ViewSettings {
     ...DEFAULT_BOOK_LANGUAGE,
     ...DEFAULT_BOOK_STYLE,
     ...DEFAULT_VIEW_CONFIG,
-    ...DEFAULT_TTS_CONFIG,
-    ...DEFAULT_TRANSLATOR_CONFIG,
     ...DEFAULT_ANNOTATOR_CONFIG,
     ...DEFAULT_SCREEN_CONFIG,
     ...overrides,

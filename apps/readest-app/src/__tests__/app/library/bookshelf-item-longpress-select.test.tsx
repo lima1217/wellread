@@ -82,16 +82,12 @@ const Harness = ({ onToggle }: { onToggle: (id: string) => void }) => {
       coverFit='crop'
       isSelectMode={isSelectMode}
       itemSelected={selected}
-      transferProgress={null}
       setLoading={vi.fn()}
       toggleSelection={(id: string) => {
         setSelected((prev) => !prev);
         onToggle(id);
       }}
       handleGroupBooks={vi.fn()}
-      handleBookDownload={vi.fn(async () => true)}
-      handleBookUpload={vi.fn(async () => true)}
-      handleBookDelete={vi.fn(async () => true)}
       handleSetSelectMode={setIsSelectMode}
       handleShowDetailsBook={vi.fn()}
       handleLibraryNavigation={vi.fn()}

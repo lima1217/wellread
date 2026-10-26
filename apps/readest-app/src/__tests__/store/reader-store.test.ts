@@ -69,7 +69,7 @@ vi.mock('@/services/rss/feedReader', () => ({
 }));
 
 import { useReaderStore } from '@/store/readerStore';
-import { useBookDataStore } from '@/store/bookDataStore';
+import { useBookDataStore, type BookData } from '@/store/bookDataStore';
 
 /**
  * Helper to seed a minimal ViewState in the store for a given key.
@@ -257,12 +257,12 @@ describe('readerStore', () => {
 
       // The sidebar writes its tab to the book config only (#6836)...
       useBookDataStore.setState({ booksData: bookData('annotations') });
-      // ...then Read Aloud saves the next sentence through the live settings.
-      useReaderStore.getState().setViewSettings(key, { ...live, ttsLocation: 'cfi-2' });
+      // ...then a live setting (upstream: Read Aloud's position) is saved through the live settings.
+      useReaderStore.getState().setViewSettings(key, { ...live, defaultFontSize: 21 });
 
       const saved = useBookDataStore.getState().booksData['bookid']!.config!.viewSettings!;
       expect(saved.sideBarTab).toBe('annotations');
-      expect(saved.ttsLocation).toBe('cfi-2');
+      expect(saved.defaultFontSize).toBe(21);
     });
 
     test('setViewSettings does nothing for empty key', () => {

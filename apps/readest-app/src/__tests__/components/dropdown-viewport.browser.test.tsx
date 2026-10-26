@@ -142,10 +142,11 @@ describe('Dropdown menu viewport layout', () => {
   });
 
   it('preserves an explicit consumer width', async () => {
-    renderMenu(['Revoke share'], { menuClassName: 'w-44' });
+    // w-64 (256px): a width utility wellread's own components generate.
+    renderMenu(['Revoke share'], { menuClassName: 'w-64' });
 
     await waitFor(() => {
-      expect(openMenu().getBoundingClientRect().width).toBe(176);
+      expect(openMenu().getBoundingClientRect().width).toBe(256);
     });
   });
 

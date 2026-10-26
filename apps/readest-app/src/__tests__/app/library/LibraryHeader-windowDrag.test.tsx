@@ -37,6 +37,11 @@ vi.mock('@/hooks/useResponsiveSize', () => ({
 
 vi.mock('@/hooks/useShortcuts', () => ({ default: () => {} }));
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 vi.mock('@/services/environment', () => ({
   isTauriAppPlatform: () => true,
   needsPointerWindowControls: () => false,
@@ -66,12 +71,6 @@ const renderHeader = (isSelectMode: boolean) =>
       onToggleSelectMode={vi.fn()}
       onSelectAll={vi.fn()}
       onDeselectAll={vi.fn()}
-      searchQuery=''
-      searchTarget='books'
-      searchConfig={{} as never}
-      onSearchConfigChange={vi.fn()}
-      onSearchQueryChange={vi.fn()}
-      onSearchTargetChange={vi.fn()}
     />,
   );
 
@@ -115,12 +114,6 @@ describe('LibraryHeader window drag (#6917)', () => {
         onToggleSelectMode={vi.fn()}
         onSelectAll={vi.fn()}
         onDeselectAll={vi.fn()}
-        searchQuery=''
-        searchTarget='books'
-        searchConfig={{} as never}
-        onSearchConfigChange={vi.fn()}
-        onSearchQueryChange={vi.fn()}
-        onSearchTargetChange={vi.fn()}
       />,
     );
     await pressHeader(container.querySelector('.titlebar')!);

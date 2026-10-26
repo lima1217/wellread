@@ -1104,7 +1104,6 @@ describe('proofreadTransformer', () => {
           caseSensitive: true,
           order: 1,
           wholeWord: false,
-          onlyForTTS: true,
         },
       ];
       const ctx = createMockContext(rules, '<speak xml:lang="ru">«Привет»</speak>');

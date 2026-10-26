@@ -20,16 +20,11 @@ const renderActions = () =>
       selectedBooks={['0123456789abcdef0123456789abcdef']}
       safeAreaBottom={0}
       sendEnabled
-      sendNearbyEnabled
-      canDownload
       onOpen={noop}
       onGroup={noop}
-      onTag={noop}
       onDetails={noop}
       onStatus={noop}
-      onDownload={noop}
       onSend={noop}
-      onSendNearby={noop}
       onDelete={noop}
       onCancel={noop}
     />,
@@ -46,7 +41,8 @@ describe('library select-mode actions', () => {
         document.documentElement.dir = dir;
         const { getAllByRole } = renderActions();
         const buttons = getAllByRole('button');
-        expect(buttons).toHaveLength(10);
+        // wellread's bar: Open, Group, Details, Status, Send, Delete, Cancel.
+        expect(buttons).toHaveLength(7);
         for (const button of buttons) {
           const rect = button.getBoundingClientRect();
           expect(rect.left, button.textContent ?? '').toBeGreaterThanOrEqual(0);

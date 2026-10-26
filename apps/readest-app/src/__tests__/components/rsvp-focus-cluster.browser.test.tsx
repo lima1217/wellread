@@ -90,7 +90,7 @@ describe('RSVPOverlay — focus cluster (#7024)', () => {
   test('measures the focus when Highlight Word is turned off', () => {
     // Under Highlight Word a CJK word renders whole, with no focus span to
     // measure; turning it off splits the word around ক্ষ্মী.
-    localStorage.setItem('readest_rsvp_cjk_highlight_word', '1');
+    localStorage.setItem('wellread_rsvp_cjk_highlight_word', '1');
     const { container } = renderWord('ক্ষ্মী中', 0, true);
     expect(container.querySelector('.rsvp-word-orp')).toBeNull();
     fireEvent.click(container.querySelector('[aria-label="Settings"]') as HTMLElement);

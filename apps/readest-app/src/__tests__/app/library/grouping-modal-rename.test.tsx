@@ -28,14 +28,13 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-// Selecting the `A` tile selects every book in its subtree.
+// In wellread, selecting the `A` tile passes the group's id as the selection.
 const renameA = (onConfirm = vi.fn()) => {
   render(
     <GroupingModal
       libraryBooks={library}
-      selectedBooks={['direct', 'nested', 'deep']}
+      selectedBooks={[md5Fingerprint('A')]}
       parentGroupName=''
-      renameGroupName='A'
       onCancel={vi.fn()}
       onConfirm={onConfirm}
     />,
