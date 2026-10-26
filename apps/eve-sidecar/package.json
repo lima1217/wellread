@@ -12,13 +12,13 @@
     "test": "node --test 'src/**/*.test.mjs' 'eval/**/*.test.mjs' scripts/build.test.mjs"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^4.0.27",
+    "@ai-sdk/openai": "^4.0.102",
     "@wellread/eve-message": "workspace:*",
     "@wellread/extract-contract": "workspace:*",
     "@wellread/quote-wire": "workspace:*",
     "@wellread/reading-context": "workspace:*",
     "@wellread/skill-contract": "workspace:*",
-    "ai": "^7.0.48",
+    "ai": "^7.0.153",
     "zod": "^3.25.0"
   },
   "engines": {
