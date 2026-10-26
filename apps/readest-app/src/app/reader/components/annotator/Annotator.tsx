@@ -1205,6 +1205,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
       bookId,
       selectionText: selection.text,
       chapterTitle,
+      selectionCfi: selection.cfi,
     });
     handleDismissPopupAndSelection();
   };

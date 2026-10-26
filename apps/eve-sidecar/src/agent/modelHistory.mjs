@@ -3,7 +3,11 @@
  * reasoning + tool-call/tool-result parts when available.
  *
  * DeepSeek Responses is stateless — the client must resend structured items.
+ * Large tool results from earlier turns are compacted on replay
+ * (historyCompact.mjs); the current turn's tool steps stay verbatim.
  */
+
+import { compactHistoryToolResults } from './historyCompact.mjs';
 
 /**
  * @typedef {{
@@ -51,11 +55,13 @@ export function buildModelMessages(input) {
  */
 export function assistantToModelMessages(message) {
   if (Array.isArray(message.modelMessages) && message.modelMessages.length > 0) {
-    return /** @type {import('ai').ModelMessage[]} */ (
-      message.modelMessages.filter((row) => row && typeof row === 'object')
+    return compactHistoryToolResults(
+      /** @type {import('ai').ModelMessage[]} */ (
+        message.modelMessages.filter((row) => row && typeof row === 'object')
+      ),
     );
   }
-  return legacyAssistantToModelMessages(message);
+  return compactHistoryToolResults(legacyAssistantToModelMessages(message));
 }
 
 /**

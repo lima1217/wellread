@@ -165,6 +165,10 @@ export async function* streamEveTurn(
   options?: {
     thinkingMode?: ThinkingMode;
     readerState?: ReaderState | null;
+    /** Hide book text past readerState.cfi from the assistant's tools. */
+    spoilerGuard?: boolean;
+    /** Replace this user turn and everything after it (regenerate / edit). */
+    truncateFrom?: string;
   },
 ): AsyncGenerator<EveStreamEvent> {
   const { baseUrl, token } = base();
@@ -173,6 +177,12 @@ export async function* streamEveTurn(
   const body: Record<string, unknown> = { message, thinkingMode };
   if (readerState) {
     body['readerState'] = readerState;
+  }
+  if (options?.spoilerGuard) {
+    body['spoilerGuard'] = true;
+  }
+  if (options?.truncateFrom) {
+    body['truncateFrom'] = options.truncateFrom;
   }
   const res = await eveFetch(`${baseUrl}/eve/v1/sessions/${encodeURIComponent(sessionId)}/turns`, {
     method: 'POST',

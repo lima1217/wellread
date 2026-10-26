@@ -33,6 +33,8 @@ export const ENVELOPE_KEYS = Object.freeze({
   quotes: 'quotes',
   priorSources: 'prior_sources',
   notesIndex: 'notes_index',
+  annotations: 'annotations',
+  spoilerGuard: 'spoiler_guard',
 });
 
 /**

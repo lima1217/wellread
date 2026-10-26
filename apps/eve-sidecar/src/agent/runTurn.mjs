@@ -63,6 +63,7 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   apiMode?: 'chat' | 'responses',
  *   baseURL?: string | null,
  *   readerState?: { chapter?: string | null, cfi?: string | null, sectionIndex?: number | null } | null,
+ *   spoilerGuard?: boolean,
  *   generateTextFn?: import('ai').generateText, // context compression only
  *   composeGenerateTextFn?: import('ai').generateText, // write_file(draft) only
  *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
@@ -114,6 +115,7 @@ export function runTurn(input) {
     apiMode: input.apiMode,
     baseURL: input.baseURL,
     readerState: input.readerState,
+    spoilerGuard: input.spoilerGuard,
     maxToolRounds: input.maxToolRounds,
     finalMaxOutputTokens: input.finalMaxOutputTokens,
     tools: input.tools,
@@ -227,6 +229,17 @@ export function runTurn(input) {
         }
       } catch {
         modelMessages = undefined;
+      }
+      // Last request's provider-reported size calibrates the next turn's
+      // compression trigger (the char estimate undercounts some scripts).
+      try {
+        const steps = streamResult ? await streamResult.steps : [];
+        const usage = steps.at(-1)?.usage;
+        const observed =
+          (Number(usage?.inputTokens) || 0) + (Number(usage?.outputTokens) || 0);
+        if (observed > 0) session.lastContextTokens = observed;
+      } catch {
+        // usage is best-effort
       }
 
       const assistantMsg = uiMessageToSession(responseMessage, {

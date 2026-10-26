@@ -19,7 +19,7 @@ export const MIN_FINAL_MAX_OUTPUT_TOKENS = 1024;
 export const HARD_FINAL_MAX_OUTPUT_TOKENS = 32_768;
 
 export const TOOLS_EXHAUSTED_SYSTEM_PROMPT =
-  '工具调用次数已用尽。不要再调用工具；根据已有工具结果直接给出完整回答。';
+  'Tool budget is spent. Do not call tools again; give the complete answer from the tool results you already have.';
 
 /**
  * @param {unknown} [limit]
@@ -73,7 +73,9 @@ export function prepareToolExhaustionStep(input) {
   return {
     toolChoice: /** @type {const} */ ('none'),
     activeTools: /** @type {[]} */ ([]),
-    instructions: `${input.instructions}\n\n${TOOLS_EXHAUSTED_SYSTEM_PROMPT}`,
+    instructions: [input.instructions, TOOLS_EXHAUSTED_SYSTEM_PROMPT]
+      .filter((part) => typeof part === 'string' && part.trim())
+      .join('\n\n'),
     maxOutputTokens,
   };
 }

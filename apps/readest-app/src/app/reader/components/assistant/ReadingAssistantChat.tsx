@@ -1,12 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
-import { ArrowUpIcon, ChevronUpIcon } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ArrowUpIcon,
+  ChevronUpIcon,
+  NotebookPenIcon,
+  PencilIcon,
+  RotateCcwIcon,
+  XIcon,
+} from 'lucide-react';
+import type { PendingQuoteForTurn } from '@wellread/quote-wire';
 import clsx from 'clsx';
 
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useReaderStore } from '@/store/readerStore';
+import { useBookDataStore } from '@/store/bookDataStore';
+import { uniqueId } from '@/utils/misc';
+import { exportBookAnnotations } from '@/services/wellread/assistant/annotationsExport';
+import { createAppServiceExtractFs } from '@/services/wellread/extract/ensureExtractForOpenedBook';
+import { buildSpineChapterTitleLookup } from '@/services/wellread/extract/spineChapterTitles';
 import { useEnv } from '@/context/EnvContext';
 import { saveSysSettings } from '@/helpers/settings';
 import {
@@ -23,12 +36,16 @@ import {
   shouldPushAgentSessionToStore,
   shouldShowPendingReply,
 } from '@/services/wellread/assistant/sessionUi';
-import { useEveAgent } from '@/services/wellread/assistant/useEveAgent';
-import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
+import { isPersistedMessageId, useEveAgent } from '@/services/wellread/assistant/useEveAgent';
+import {
+  useReadingAssistantStore,
+  type PendingQuote,
+} from '@/services/wellread/assistant/readingAssistantStore';
 import { AssistantPartsView } from './AssistantPartsView';
 import {
   assistantWorkedMs,
   CopyMessageButton,
+  MessageActionButton,
   PendingQuoteBar,
   PendingReplyDots,
   QuoteStack,
@@ -50,6 +67,16 @@ const composerPrimaryBtn =
 const composerPrimaryBtnLive = 'bg-base-content text-base-100 hover:opacity-90';
 const composerPrimaryBtnIdle = 'bg-base-200/70 text-base-content/30';
 
+/** Quotes stored on a sent user message → live-bar shape for a resend. */
+function toPendingQuotes(quotes: PendingQuoteForTurn[] | undefined): PendingQuote[] {
+  return (quotes ?? []).map((q) => ({
+    id: q.id ?? uniqueId(),
+    text: q.text,
+    chapterTitle: q.chapterTitle ?? null,
+    ...(q.cfi ? { cfi: q.cfi } : {}),
+  }));
+}
+
 export const ReadingAssistantChat = ({
   bookKey,
   bookId,
@@ -62,7 +89,7 @@ export const ReadingAssistantChat = ({
   isActive?: boolean;
 }) => {
   const _ = useTranslation();
-  const { envConfig } = useEnv();
+  const { envConfig, appService } = useEnv();
   const settings = useSettingsStore((s) => s.settings);
   const setSettings = useSettingsStore((s) => s.setSettings);
   const saveSettings = useSettingsStore((s) => s.saveSettings);
@@ -78,12 +105,31 @@ export const ReadingAssistantChat = ({
   const modelConfig = mergeModelConfig(settings.modelConfig);
   const activeProfile = getActiveProfile(modelConfig);
   const thinkingMode = settings.thinkingMode === 'think' ? 'think' : 'fast';
+  const spoilerGuard = settings.assistantSpoilerGuard === true;
+  const shareAnnotations = settings.assistantShareAnnotations !== false;
+
+  // Refresh Books/.wellread/annotations/<bookId>.md before each turn; when
+  // sharing is off the export is emptied so the sidecar stops advertising it.
+  const beforeTurn = useCallback(async () => {
+    if (!appService) return;
+    const { getConfig, getBookData } = useBookDataStore.getState();
+    const bookDoc = getBookData(bookKey)?.bookDoc;
+    await exportBookAnnotations({
+      fs: createAppServiceExtractFs(appService),
+      bookId,
+      bookTitle,
+      booknotes: shareAnnotations ? (getConfig(bookKey)?.booknotes ?? []) : [],
+      getChapterTitle: bookDoc ? buildSpineChapterTitleLookup(bookDoc) : undefined,
+    });
+  }, [appService, bookId, bookKey, bookTitle, shareAnnotations]);
 
   const agent = useEveAgent({
     bookId,
     bookTitle,
     sessionId,
     thinkingMode,
+    spoilerGuard,
+    beforeTurn,
     getReaderState: () => {
       const progress = useReaderStore.getState().getProgress(bookKey);
       if (!progress?.location && !progress?.sectionLabel) return null;
@@ -127,15 +173,64 @@ export const ReadingAssistantChat = ({
   const canSend = Boolean(agent.composer.trim()) && !shouldBlockComposerSubmit(busy);
   const showPendingReply = shouldShowPendingReply(busy, agent.messages);
 
+  /** Edit-and-resend target: the user turn being replaced and its quotes. */
+  const [editing, setEditing] = useState<{ id: string; quotes: PendingQuote[] } | null>(null);
+  useEffect(() => {
+    setEditing(null);
+  }, [sessionId]);
+
   const handleSend = useCallback(() => {
     if (!agent.composer.trim() || shouldBlockComposerSubmit(busy)) return;
-    const quotes = useReadingAssistantStore.getState().pendingQuotes;
+    const pending = useReadingAssistantStore.getState().pendingQuotes;
     clearPendingQuotes();
+    const target = editing;
+    setEditing(null);
     void agent.send({
-      quotes,
+      quotes: target ? [...target.quotes, ...pending] : pending,
       onSendFailed: restorePendingQuotes,
+      ...(target ? { truncateFrom: target.id } : {}),
     });
-  }, [agent, busy, clearPendingQuotes, restorePendingQuotes]);
+  }, [agent, busy, clearPendingQuotes, editing, restorePendingQuotes]);
+
+  /** One-click turns (starters, save note): attach the live Pending Quotes. */
+  const sendPreset = useCallback(
+    (message: string) => {
+      if (shouldBlockComposerSubmit(busy)) return;
+      const quotes = useReadingAssistantStore.getState().pendingQuotes;
+      clearPendingQuotes();
+      void agent.send({ message, quotes, onSendFailed: restorePendingQuotes });
+    },
+    [agent, busy, clearPendingQuotes, restorePendingQuotes],
+  );
+
+  const lastUser = [...agent.messages].reverse().find((m) => m.role === 'user');
+  const canRegenerate = Boolean(lastUser && isPersistedMessageId(lastUser.id)) && !busy;
+  const handleRegenerate = useCallback(() => {
+    if (!lastUser || !isPersistedMessageId(lastUser.id) || shouldBlockComposerSubmit(busy)) return;
+    setEditing(null);
+    void agent.send({
+      message: lastUser.content,
+      quotes: toPendingQuotes(lastUser.quotes),
+      truncateFrom: lastUser.id,
+    });
+  }, [agent, busy, lastUser]);
+
+  const starters = [
+    { label: _('Summarize this chapter'), message: _('Summarize the chapter I am reading.') },
+    {
+      label: _('Explain this page'),
+      message: `/skill:explain ${_('the passage I am reading now')}`,
+    },
+    { label: _('Quiz me'), message: '/skill:socratic-check' },
+    ...(shareAnnotations
+      ? [
+          {
+            label: _('Review my highlights'),
+            message: _('What do my highlights and notes in this book add up to?'),
+          },
+        ]
+      : []),
+  ];
 
   const slash = useComposerSlash({
     composer: agent.composer,
@@ -195,6 +290,26 @@ export const ReadingAssistantChat = ({
           stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
         }}
       >
+        {agent.messages.length === 0 && !busy ? (
+          <div className='flex flex-col items-start gap-2 pt-2 font-sans'>
+            <p className='text-base-content/50 text-sm'>{_('Ask about this book, or try:')}</p>
+            <div className='flex flex-wrap gap-1.5'>
+              {starters.map((s) => (
+                <button
+                  key={s.label}
+                  type='button'
+                  className={clsx(
+                    'eink-bordered border-base-content/15 hover:bg-base-200 rounded-full border px-3 py-1 text-sm transition-colors',
+                    focusRing,
+                  )}
+                  onClick={() => sendPreset(s.message)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {agent.messages.map((msg, index) => {
           const isLiveAssistant =
             busy && msg.role === 'assistant' && index === agent.messages.length - 1;
@@ -222,8 +337,44 @@ export const ReadingAssistantChat = ({
               ) : (
                 <div>{msg.content}</div>
               )}
+              {msg.role === 'user' && !busy && isPersistedMessageId(msg.id) ? (
+                <div className='text-base-content/40 -mb-1 mt-1 flex justify-end'>
+                  <MessageActionButton
+                    label={_('Edit and resend')}
+                    onClick={() => {
+                      setEditing({ id: msg.id, quotes: toPendingQuotes(msg.quotes) });
+                      agent.setComposer(msg.content);
+                      slash.composerRef.current?.focus();
+                    }}
+                  >
+                    <PencilIcon size={12} aria-hidden='true' />
+                  </MessageActionButton>
+                </div>
+              ) : null}
               {msg.role === 'assistant' && msg.content.trim() ? (
-                <CopyMessageButton content={msg.content} workedMs={workedMs} />
+                <CopyMessageButton content={msg.content} workedMs={workedMs}>
+                  {index === agent.messages.length - 1 && !busy ? (
+                    <>
+                      <MessageActionButton
+                        label={_('Regenerate')}
+                        disabled={!canRegenerate}
+                        onClick={handleRegenerate}
+                      >
+                        <RotateCcwIcon size={12} aria-hidden='true' />
+                      </MessageActionButton>
+                      <MessageActionButton
+                        label={_('Save to notes')}
+                        onClick={() =>
+                          sendPreset(
+                            `/skill:note ${_('Save your previous answer to my notes (write directly).')}`,
+                          )
+                        }
+                      >
+                        <NotebookPenIcon size={12} aria-hidden='true' />
+                      </MessageActionButton>
+                    </>
+                  ) : null}
+                </CopyMessageButton>
               ) : null}
             </div>
           );
@@ -242,6 +393,23 @@ export const ReadingAssistantChat = ({
           handleSend();
         }}
       >
+        {editing ? (
+          <div className='text-base-content/60 flex items-center gap-1.5 px-1.5 pb-1 font-sans text-xs'>
+            <PencilIcon size={11} aria-hidden='true' />
+            <span className='flex-1'>
+              {_('Editing: sending replaces this message and later replies')}
+            </span>
+            <MessageActionButton
+              label={_('Cancel editing')}
+              onClick={() => {
+                setEditing(null);
+                agent.setComposer('');
+              }}
+            >
+              <XIcon size={12} aria-hidden='true' />
+            </MessageActionButton>
+          </div>
+        ) : null}
         <div className='bg-base-100 eink-bordered focus-within:ring-base-content/15 relative flex flex-col rounded-xl focus-within:ring-2'>
           <ComposerSlashMenu
             open={slash.slashOpen}

@@ -57,6 +57,7 @@ function hasReadingContextSchema(def) {
  *   composeGenerateTextFn?: typeof import('ai').generateText,
  *   abortSignal?: AbortSignal,
  *   contextWindowTokens?: number,
+ *   spoilerGuard?: import('./spoilerGuard.mjs').SpoilerGuard | null,
  * }} input
  * @returns {{
  *   tools: import('ai').ToolSet,
@@ -93,6 +94,7 @@ export function bindTurnTools(input) {
     ...(typeof input.contextWindowTokens === 'number'
       ? { contextWindowTokens: input.contextWindowTokens }
       : {}),
+    ...(input.spoilerGuard ? { spoilerGuard: input.spoilerGuard } : {}),
   };
   return {
     tools,

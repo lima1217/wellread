@@ -10,6 +10,7 @@ import {
   type ModelConfig,
 } from '@/services/wellread/modelConfig';
 import { reloadEveIfNeeded } from '@/services/wellread/assistant/reloadEveIfNeeded';
+import { saveSysSettings } from '@/helpers/settings';
 import { eventDispatcher } from '@/utils/event';
 import BoxedList from './primitives/BoxedList';
 import NavigationRow from './primitives/NavigationRow';
@@ -102,6 +103,35 @@ const AIPanel: React.FC = () => {
           checked={saved.enabled}
           onChange={() => void handleToggleEnabled()}
           disabled={saving}
+        />
+      </BoxedList>
+
+      <BoxedList title={_('Reading Assistant')} data-setting-id='settings.ai.readingAssistant'>
+        <SettingsSwitchRow
+          label={_('Spoiler guard')}
+          description={_('Hide text after your current position from the assistant')}
+          checked={settings.assistantSpoilerGuard === true}
+          onChange={() =>
+            void saveSysSettings(
+              envConfig,
+              'assistantSpoilerGuard',
+              settings.assistantSpoilerGuard !== true,
+            )
+          }
+          data-setting-id='settings.ai.spoilerGuard'
+        />
+        <SettingsSwitchRow
+          label={_('Share highlights and notes')}
+          description={_('Let the assistant read your annotations for the current book')}
+          checked={settings.assistantShareAnnotations !== false}
+          onChange={() =>
+            void saveSysSettings(
+              envConfig,
+              'assistantShareAnnotations',
+              settings.assistantShareAnnotations === false,
+            )
+          }
+          data-setting-id='settings.ai.shareAnnotations'
         />
       </BoxedList>
 

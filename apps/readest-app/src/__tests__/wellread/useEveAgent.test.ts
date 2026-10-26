@@ -564,6 +564,51 @@ describe('useEveAgent', () => {
     });
   });
 
+  it('regenerates from a user turn with spoiler guard and a pre-turn export', async () => {
+    const prior = [
+      { id: 'u1', role: 'user', content: 'Who?', createdAt: 1 },
+      { id: 'a1', role: 'assistant', content: 'Old answer.', createdAt: 2 },
+    ];
+    streamEveTurn.mockImplementation(async function* () {
+      yield assistantUi('a2', [textPart('New answer.')]);
+    });
+    getEveSession
+      .mockResolvedValueOnce({ ...sessionMeta('ses_existing'), messages: prior })
+      .mockResolvedValueOnce({
+        ...sessionMeta('ses_existing'),
+        messages: [
+          { id: 'u2', role: 'user', content: 'Who?', createdAt: 3 },
+          { id: 'a2', role: 'assistant', content: 'New answer.', createdAt: 4 },
+        ],
+      });
+    const beforeTurn = vi.fn(async () => {});
+
+    const { result } = renderHook(() =>
+      useEveAgent({
+        bookId: 'book-1',
+        bookTitle: 'Middlemarch',
+        sessionId: 'ses_existing',
+        spoilerGuard: true,
+        beforeTurn,
+      }),
+    );
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(2);
+    });
+
+    await act(async () => {
+      await result.current.send({ message: 'Who?', truncateFrom: 'u1' });
+    });
+
+    expect(beforeTurn).toHaveBeenCalledTimes(1);
+    expect(streamEveTurn).toHaveBeenCalledWith('ses_existing', 'Who?', expect.any(AbortSignal), {
+      thinkingMode: 'fast',
+      spoilerGuard: true,
+      truncateFrom: 'u1',
+    });
+    expect(result.current.messages.map((m) => m.content)).toEqual(['Who?', 'New answer.']);
+  });
+
   it('exposes in-flight tools before assistant text arrives and clears them when done', async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {

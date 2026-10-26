@@ -7,8 +7,10 @@ import { parseExtractChunkFrontmatter } from './extractChunk.mjs';
 import {
   FOCUS_CHUNKS_MAX,
   SECTION_CHUNKS_ASK_THRESHOLD,
+  resolveChunksForCfi,
   resolveFocusChunks,
   resolveSectionChunksByIndex,
+  spineIndexFromCfi,
   resolveSectionChunksByTitle,
   resolveSectionChunksForReader,
   contextWindowToMaxReadBytes,
@@ -359,6 +361,61 @@ describe('section-index resolve', () => {
     assert.equal(resolved.fromIndex, true);
     assert.equal(resolved.count, 1);
     assert.match(resolved.paths[0], /00001-a/);
+  });
+});
+
+function seedThreeChunkSection(prefix) {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  mkdirSync(join(root, '.wellread', 'extract', 'bk1', 'chunks'), { recursive: true });
+  const row = (n, start, end) => ({
+    fileName: `0000${n}-${'abc'[n - 1]}.md`,
+    chunkIndex: n - 1,
+    sectionIndex: 1,
+    title: 'A',
+    cfi: `epubcfi(/6/4!/4/2/1:${start})`,
+    endCfi: `epubcfi(/6/4!/4/2/1:${end})`,
+  });
+  writeSectionIndex(root, 'bk1', {
+    schemaVersion: 2,
+    sections: { '1': [row(1, 0, 10), row(2, 11, 30), row(3, 31, 50)] },
+    titles: { a: [1] },
+  });
+  return root;
+}
+
+describe('spineIndexFromCfi', () => {
+  it('maps the first step to a spine index', () => {
+    assert.equal(spineIndexFromCfi('epubcfi(/6/4!/4/2/1:15)'), 1);
+    assert.equal(spineIndexFromCfi('epubcfi(/6/2!/4,/1:0,/1:5)'), 0);
+    assert.equal(spineIndexFromCfi('garbage'), null);
+  });
+});
+
+describe('resolveFocusChunks range + quotes', () => {
+  it('covers every chunk a visible range CFI spans', () => {
+    const root = seedThreeChunkSection('eve-focus-range-');
+    const focus = resolveFocusChunks({
+      booksRoot: root,
+      bookId: 'bk1',
+      readerState: { sectionIndex: 1, cfi: 'epubcfi(/6/4!/4/2,/1:5,/1:40)' },
+    });
+    assert.equal(focus?.via, 'cfi');
+    assert.equal(focus?.count, 3);
+  });
+
+  it('resolves a quote cfi to only its own chunk', () => {
+    const root = seedThreeChunkSection('eve-focus-quote-');
+    const paths = resolveChunksForCfi({
+      booksRoot: root,
+      bookId: 'bk1',
+      cfi: 'epubcfi(/6/4!/4/2,/1:12,/1:20)',
+    });
+    assert.equal(paths.length, 1);
+    assert.match(paths[0], /00002-b/);
+    assert.deepEqual(
+      resolveChunksForCfi({ booksRoot: root, bookId: 'bk1', cfi: 'epubcfi(/6/8!/4/2/1:1)' }),
+      [],
+    );
   });
 });
 

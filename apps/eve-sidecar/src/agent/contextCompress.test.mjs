@@ -31,24 +31,32 @@ describe('contextCompress estimates', () => {
     assert.equal(tokens, estimateTokens('abcd') + 4 + estimateTokens('abcd') + 4);
   });
 
-  it('counts reasoning, tools, and modelMessages in the estimate', () => {
+  it('counts reasoning and tools for legacy assistant rows', () => {
     const tokens = estimateMessagesTokens([
       {
         role: 'assistant',
         content: 'abcd',
         reasoning: 'abcd',
         tools: [{ id: 't1' }],
-        modelMessages: [{ role: 'assistant', content: 'wire' }],
       },
     ]);
     const toolsTokens = estimateTokens(JSON.stringify([{ id: 't1' }]));
-    const modelTokens = estimateTokens(
-      JSON.stringify([{ role: 'assistant', content: 'wire' }]),
-    );
-    assert.equal(
-      tokens,
-      estimateTokens('abcd') + 4 + estimateTokens('abcd') + toolsTokens + modelTokens,
-    );
+    assert.equal(tokens, estimateTokens('abcd') + 4 + estimateTokens('abcd') + toolsTokens);
+  });
+
+  it('counts persisted modelMessages instead of display fields when present', () => {
+    const modelMessages = [{ role: 'assistant', content: 'wire' }];
+    const tokens = estimateMessagesTokens([
+      { role: 'assistant', content: 'abcd'.repeat(50), modelMessages },
+    ]);
+    assert.equal(tokens, 4 + estimateTokens(JSON.stringify(modelMessages)));
+  });
+
+  it('counts user modelContent (envelope + skill) over display content', () => {
+    const tokens = estimateMessagesTokens([
+      { role: 'user', content: 'q', modelContent: 'x'.repeat(400) },
+    ]);
+    assert.equal(tokens, 4 + estimateTokens('x'.repeat(400)));
   });
 });
 
@@ -144,6 +152,35 @@ describe('planCompression', () => {
     // Newest user kept; fat assistant should not sneak into keep via content-only estimate.
     assert.ok(plan.keepIds.includes('u2'));
     assert.ok(plan.dropIds.includes('fat_a'));
+  });
+
+  it('triggers on provider-observed tokens even when the estimate is small', () => {
+    const messages = [msg('user', 300, 'a'), msg('assistant', 300, 'b'), msg('user', 300, 'c')];
+    assert.equal(
+      planCompression({ messages, systemPrompt, contextWindowTokens: window }),
+      null,
+    );
+    const plan = planCompression({
+      messages,
+      systemPrompt,
+      contextWindowTokens: window,
+      observedTokens: 900,
+    });
+    assert.ok(plan);
+    assert.ok(plan.beforeTokens >= 900);
+  });
+
+  it('scales the summary budget with the window', () => {
+    const big = 100_000;
+    const messages = [
+      msg('user', 300_000, 'old'),
+      msg('assistant', 10, 'old_a'),
+      msg('user', 10, 'new'),
+    ];
+    const plan = planCompression({ messages, systemPrompt, contextWindowTokens: big });
+    assert.ok(plan);
+    assert.ok(plan.summaryBudgetTokens > 512);
+    assert.ok(plan.summaryBudgetTokens <= 4096);
   });
 
   it('returns null when only one oversized message (nothing to summarize)', () => {
