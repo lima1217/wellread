@@ -397,7 +397,7 @@ const FootnotePopup: React.FC<FootnotePopupProps> = ({ bookKey, bookDoc }) => {
     return () => {
       window.removeEventListener('resize', handleDismissPopup);
       eventDispatcher.off('footnote-popup', handleFootnotePopupEvent);
-    stopTrackingPopupContentSize();
+      stopTrackingPopupContentSize();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

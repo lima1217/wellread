@@ -125,7 +125,6 @@ describe('highlight style marker swatch', () => {
 
     expect(getStyleGlyph(container, 'highlight').style.backgroundColor).toBe('rgb(0, 255, 0)');
   });
-
 });
 
 describe('highlight selection dismissal', () => {
