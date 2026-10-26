@@ -21,31 +21,26 @@ async function consumeWithOnFinish(execute) {
 }
 
 describe('createReasoningEmitter', () => {
-  it('reproduces AI SDK crash when reasoning continues after finish-step without a new segment', async () => {
-    await assert.rejects(
-      () =>
-        consumeWithOnFinish(({ writer }) => {
-          writer.write({ type: 'start', messageId: 'a1' });
-          writer.write({ type: 'reasoning-start', id: 'reasoning_a1' });
-          writer.write({
-            type: 'reasoning-delta',
-            id: 'reasoning_a1',
-            delta: 'step1 ',
-          });
-          writer.write({ type: 'finish-step' });
-          writer.write({
-            type: 'reasoning-delta',
-            id: 'reasoning_a1',
-            delta: 'step2',
-          });
-          writer.write({ type: 'finish' });
-        }),
-      (err) =>
-        // AI SDK 7 throws UIMessageStreamError; older SDKs threw TypeError.
-        /missing reasoning part|Cannot read properties of undefined/i.test(
-          err instanceof Error ? err.message : String(err),
-        ),
-    );
+  // AI SDK <= 7.0.48 threw "missing reasoning part" here; current releases
+  // tolerate a reused reasoning id across finish-step. Fresh segment ids from
+  // createReasoningEmitter stay as a defense against regressions.
+  it('tolerates reasoning that continues after finish-step without a new segment', async () => {
+    await consumeWithOnFinish(({ writer }) => {
+      writer.write({ type: 'start', messageId: 'a1' });
+      writer.write({ type: 'reasoning-start', id: 'reasoning_a1' });
+      writer.write({
+        type: 'reasoning-delta',
+        id: 'reasoning_a1',
+        delta: 'step1 ',
+      });
+      writer.write({ type: 'finish-step' });
+      writer.write({
+        type: 'reasoning-delta',
+        id: 'reasoning_a1',
+        delta: 'step2',
+      });
+      writer.write({ type: 'finish' });
+    });
   });
 
   it('survives finish-step when each segment gets a fresh reasoning id', async () => {
