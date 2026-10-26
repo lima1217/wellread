@@ -1107,6 +1107,9 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
           });
         }
       } else {
+        // The teardown above only drops the highlight; a note bubble drawn for
+        // the same record would stay on the page (#6540).
+        views.forEach((view) => removeBookNoteOverlays(view, existing));
         existing.deletedAt = Date.now();
         handleDismissPopup();
       }
