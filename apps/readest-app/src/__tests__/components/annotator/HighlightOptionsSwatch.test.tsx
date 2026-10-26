@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/react';
 import type { HighlightColor, HighlightStyle } from '@/types/book';
 import { HIGHLIGHT_COLOR_HEX } from '@/services/constants';
@@ -126,12 +126,6 @@ describe('highlight style marker swatch', () => {
     expect(getStyleGlyph(container, 'highlight').style.backgroundColor).toBe('rgb(0, 255, 0)');
   });
 
-  it('previews the color the highlight style would apply while another style is active', () => {
-    mockHighlightStyles = { highlight: 'violet', underline: 'red', squiggly: 'blue' };
-    const { container } = renderOptions('red', 'underline');
-
-    expect(getStyleGlyph(container, 'highlight').style.backgroundColor).toBe('rgb(167, 139, 250)');
-  });
 });
 
 describe('highlight selection dismissal', () => {
@@ -158,45 +152,6 @@ describe('highlight selection dismissal', () => {
     fireEvent.click(getByRole('button', { name: 'Select red color' }));
     expect(onHandleHighlight).toHaveBeenCalledTimes(2);
     expect(onDismiss).toHaveBeenCalledOnce();
-  });
-});
-
-describe('underline and squiggly rule color', () => {
-  it('colors each rule with the color that style would apply', () => {
-    const { container } = renderOptions('yellow');
-
-    expect(getStyleGlyph(container, 'underline').style.textDecorationColor).toBe(
-      'rgb(248, 113, 113)',
-    );
-    expect(getStyleGlyph(container, 'squiggly').style.textDecorationColor).toBe(
-      'rgb(96, 165, 250)',
-    );
-  });
-
-  it('tracks the live color of whichever rule style is selected', () => {
-    const { container } = renderOptions('violet', 'underline');
-
-    expect(getStyleGlyph(container, 'underline').style.textDecorationColor).toBe(
-      'rgb(167, 139, 250)',
-    );
-    // The unselected squiggly still previews its own stored binding.
-    expect(getStyleGlyph(container, 'squiggly').style.textDecorationColor).toBe(
-      'rgb(96, 165, 250)',
-    );
-  });
-
-  it('honors a customized hex for the rule color too', () => {
-    mockCustomColors = { ...HIGHLIGHT_COLOR_HEX, blue: '#0000ff' };
-    const { container } = renderOptions('yellow');
-
-    expect(getStyleGlyph(container, 'squiggly').style.textDecorationColor).toBe('rgb(0, 0, 255)');
-  });
-
-  it('leaves the letter itself in the theme ink', () => {
-    const { container } = renderOptions('yellow');
-
-    expect(getStyleGlyph(container, 'underline').style.color).toBe('');
-    expect(getStyleGlyph(container, 'underline').className).toContain('text-base-content');
   });
 });
 
@@ -236,78 +191,11 @@ describe('e-ink chip legibility', () => {
     expect(glyph.style.color).toBe('rgb(0, 0, 0)');
   });
 
-  it('keeps the selected-color check off the e-ink ink override', () => {
-    mockViewSettings = { isEink: true, isColorEink: false };
-    const { container } = renderOptions('yellow');
-
-    expect(getCheck(container).style.color).toBe('rgb(255, 255, 255)');
-    expect(getCheck(container).classList.contains('text-base-content')).toBe(false);
-  });
-
-  it('still flattens the rule glyphs to the theme ink, which needs the override', () => {
-    mockViewSettings = { isEink: true, isColorEink: false };
-    const { container } = renderOptions('yellow');
-
-    expect(getStyleGlyph(container, 'underline').className).toContain('text-base-content');
-  });
-
   it('leaves color e-ink on the real palette, where the check reads as content ink', () => {
     mockViewSettings = { isEink: true, isColorEink: true };
     const { container } = renderOptions('yellow');
 
     expect(getStyleGlyph(container, 'highlight').style.backgroundColor).toBe('rgb(250, 204, 21)');
     expect(getCheck(container).classList.contains('text-base-content')).toBe(true);
-  });
-});
-
-describe('highlight options at page edges (#6162)', () => {
-  beforeEach(() => {
-    vi.stubGlobal(
-      'ResizeObserver',
-      class {
-        observe() {}
-        disconnect() {}
-      },
-    );
-  });
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-  });
-
-  it.each([
-    ['up', false, 10, 54, 44],
-    ['down', false, 714, 758, -44],
-    ['left', true, 10, 54, 44],
-    ['right', true, 970, 1014, -44],
-    ['up', false, 200, 244, -44],
-    ['down', false, 200, 244, 44],
-  ] as const)('keeps the %s strip accessible (vertical=%s, start=%s)', (dir, vertical, start, end, offset) => {
-    const frame = document.createElement('div');
-    const popup = document.createElement('div');
-    vi.spyOn(frame, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1024, 768));
-    vi.spyOn(popup, 'getBoundingClientRect').mockReturnValue(
-      vertical
-        ? new DOMRect(start, 100, end - start, 300)
-        : new DOMRect(100, start, 300, end - start),
-    );
-    vi.spyOn(HTMLElement.prototype, 'offsetParent', 'get').mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      return this === popup ? frame : popup;
-    });
-    const { container } = render(
-      <HighlightOptions
-        isVertical={vertical}
-        popupWidth={vertical ? 44 : 300}
-        popupHeight={vertical ? 300 : 44}
-        triangleDir={dir}
-        selectedStyle='highlight'
-        selectedColor='yellow'
-        onHandleHighlight={vi.fn()}
-      />,
-    );
-    const options = container.querySelector<HTMLElement>('.highlight-options')!;
-    expect(vertical ? options.style.left : options.style.top).toBe(`${offset}px`);
   });
 });

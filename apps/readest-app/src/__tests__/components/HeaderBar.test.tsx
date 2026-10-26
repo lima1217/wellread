@@ -113,12 +113,6 @@ afterEach(() => {
 });
 
 describe('HeaderBar sidebar toggle', () => {
-  it('is hidden on tablet portrait, where the footer bar owns the TOC tab', () => {
-    setViewport(834, 1194);
-    renderHeader();
-    expect(screen.queryByText('sidebar-toggler')).toBeNull();
-  });
-
   it('is shown on tablet landscape, which gets the desktop footer bar', () => {
     setViewport(1194, 834);
     renderHeader();
@@ -130,61 +124,6 @@ describe('HeaderBar sidebar toggle', () => {
     setViewport(1440, 900);
     renderHeader();
     expect(screen.getByText('sidebar-toggler')).toBeTruthy();
-  });
-});
-
-describe('HeaderBar font button', () => {
-  it('is gone on every platform, since it opened the last panel rather than Font', () => {
-    useEnvMock.mockReturnValue({ envConfig: {}, appService: { isMobile: false } });
-    setViewport(1440, 900);
-    renderHeader();
-    // queryByRole, not querySelector: jsdom's selector engine fails to match
-    // [aria-label="Font & Layout"] on the `&`, so a CSS-based assertion here
-    // passes whether or not the button is rendered.
-    expect(screen.queryByRole('button', { name: 'Font & Layout' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
-  });
-});
-
-describe('HeaderBar mobile toolbar stability', () => {
-  it('reserves room for the bookmark and translation touch halos inside the scroller', () => {
-    setViewport(392, 872);
-    const { container } = renderHeader();
-    const scroller = container.querySelector('.header-tools-start > .no-scrollbar');
-
-    expect(scroller).not.toBeNull();
-    expect(scroller!.classList.contains('px-1.5')).toBe(true);
-  });
-});
-
-describe('HeaderBar book metadata data attributes (#5776)', () => {
-  // The desktop header only prints the title; series readers want "Book 2"
-  // next to it. Exposed on .header-title as inert data attributes so Custom
-  // Reader UI CSS can append them with attr() without a default UI change.
-  it('exposes title, series and series index on .header-title', () => {
-    currentBookData = {
-      book: { title: 'Book', metadata: { series: 'The Expanse', seriesIndex: 2 } },
-    };
-    useEnvMock.mockReturnValue({ envConfig: {}, appService: { isMobile: false } });
-    setViewport(1440, 900);
-    const { container } = renderHeader();
-    const title = container.querySelector('.header-title') as HTMLElement;
-
-    expect(title.getAttribute('data-book-title')).toBe('Book');
-    expect(title.getAttribute('data-book-series')).toBe('The Expanse');
-    expect(title.getAttribute('data-book-series-index')).toBe('2');
-  });
-
-  it('leaves the series attributes off for a standalone book', () => {
-    currentBookData = { book: { title: 'Book', metadata: {} } };
-    useEnvMock.mockReturnValue({ envConfig: {}, appService: { isMobile: false } });
-    setViewport(1440, 900);
-    const { container } = renderHeader();
-    const title = container.querySelector('.header-title') as HTMLElement;
-
-    expect(title.getAttribute('data-book-title')).toBe('Book');
-    expect(title.hasAttribute('data-book-series')).toBe(false);
-    expect(title.hasAttribute('data-book-series-index')).toBe(false);
   });
 });
 

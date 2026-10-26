@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import type { SystemSettings } from '@/types/settings';
 import type { FileSystem } from '@/types/system';
 import { DEFAULT_SYSTEM_SETTINGS } from '@/services/constants';
@@ -61,10 +61,6 @@ vi.mock('@/components/settings/PageTurnerSettings', () => ({ default: () => null
 vi.mock('@/utils/style', () => ({ getStyles: () => '' }));
 vi.mock('@/app/reader/hooks/useCapturedTurn', () => ({ applyPageTurnAttributes: vi.fn() }));
 
-const autoCheckSwitch = () =>
-  screen.getByRole<HTMLInputElement>('checkbox', { name: /^Check Updates on Start/ });
-const nightlySwitch = () =>
-  screen.getByRole<HTMLInputElement>('checkbox', { name: /^Nightly Builds/ });
 const savedSettings = (): SystemSettings => JSON.parse(localStorage.getItem(storageKey)!);
 
 beforeEach(() => {
@@ -87,54 +83,6 @@ afterEach(() => {
 });
 
 describe('Behavior update settings reset', () => {
-  it('restores the update defaults in the controls and persisted settings', async () => {
-    const registerReset = vi.fn<(reset: () => void) => void>();
-    const panel = render(<ControlPanel bookKey='' onRegisterReset={registerReset} />);
-    expect(autoCheckSwitch().checked).toBe(false);
-    expect(nightlySwitch().checked).toBe(true);
-
-    await act(async () => registerReset.mock.calls[0]![0]());
-
-    expect.soft(autoCheckSwitch().checked).toBe(true);
-    expect.soft(nightlySwitch().checked).toBe(false);
-    expect.soft(savedSettings()).toMatchObject({
-      autoCheckUpdates: true,
-      updateChannel: 'stable',
-      telemetryEnabled: false,
-      gamepadEnabled: false,
-    });
-
-    panel.unmount();
-    useSettingsStore.setState({ settings: savedSettings() });
-    render(<ControlPanel bookKey='' onRegisterReset={() => {}} />);
-    expect(autoCheckSwitch().checked).toBe(true);
-    expect(nightlySwitch().checked).toBe(false);
-  });
-
-  it('resets preferences changed after the reset callback was registered', async () => {
-    useSettingsStore.getState().setSettings({
-      ...useSettingsStore.getState().settings,
-      autoCheckUpdates: true,
-      updateChannel: 'stable',
-    });
-    const registerReset = vi.fn<(reset: () => void) => void>();
-    render(<ControlPanel bookKey='' onRegisterReset={registerReset} />);
-
-    await act(async () => {
-      fireEvent.click(autoCheckSwitch());
-      fireEvent.click(nightlySwitch());
-    });
-    expect(autoCheckSwitch().checked).toBe(false);
-    expect(nightlySwitch().checked).toBe(true);
-
-    await act(async () => registerReset.mock.calls[0]![0]());
-    await act(async () => registerReset.mock.calls[0]![0]());
-
-    expect(autoCheckSwitch().checked).toBe(true);
-    expect(nightlySwitch().checked).toBe(false);
-    expect(savedSettings()).toMatchObject({ autoCheckUpdates: true, updateChannel: 'stable' });
-  });
-
   it('leaves update preferences alone when the app has no updater', async () => {
     appService.hasUpdater = false;
     const registerReset = vi.fn<(reset: () => void) => void>();

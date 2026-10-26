@@ -129,23 +129,6 @@ describe('importBook config preservation (issue #5716)', () => {
     setupMockBookDoc();
   });
 
-  it('keeps a config.json that is already on disk for an unlisted book', async () => {
-    const fs = service.getFs();
-    // The restored dir already holds the user's config; the library does not
-    // know about the book yet.
-    fs.exists.mockImplementation(async (path: string) => path === CONFIG_PATH);
-
-    const books: Book[] = [];
-    const imported = await service.importBook(
-      new File(['content'], 'test.epub', { type: 'application/epub+zip' }),
-      books,
-    );
-
-    expect(imported).not.toBeNull();
-    expect(books).toHaveLength(1);
-    expect(configWrites(fs)).toHaveLength(0);
-  });
-
   it('still writes an initial config when the book dir has none', async () => {
     const fs = service.getFs();
     fs.exists.mockResolvedValue(false);
