@@ -37,7 +37,7 @@ vi.mock('@/store/readerStore', () => ({
   }),
 }));
 
-import { useNotebookStore } from '@/store/notebookStore';
+import { useAnnotationNoteStore } from '@/store/annotationNoteStore';
 import { useAnnotationNoteFlow } from '@/app/reader/hooks/useAnnotationNoteFlow';
 
 const CFI = 'epubcfi(/6/4!/4/2,/1:0,/1:5)';
@@ -61,10 +61,10 @@ describe('useAnnotationNoteFlow', () => {
     h.view.getCFI.mockReset().mockReturnValue(CFI);
     h.view.addAnnotation.mockReset();
     h.saveConfig.mockReset();
-    useNotebookStore.setState({
-      notebookNewAnnotation: selection,
-      notebookNewHighlightId: 'hl-1',
-      notebookEditAnnotation: null,
+    useAnnotationNoteStore.setState({
+      newAnnotation: selection,
+      newHighlightId: 'hl-1',
+      editAnnotation: null,
     });
   });
 
@@ -80,8 +80,8 @@ describe('useAnnotationNoteFlow', () => {
       expect.objectContaining({ value: `${NOTE_PREFIX}${CFI}`, note: 'My thought' }),
     );
     expect(h.saveConfig).toHaveBeenCalled();
-    expect(useNotebookStore.getState().notebookNewAnnotation).toBeNull();
-    expect(useNotebookStore.getState().notebookNewHighlightId).toBeNull();
+    expect(useAnnotationNoteStore.getState().newAnnotation).toBeNull();
+    expect(useAnnotationNoteStore.getState().newHighlightId).toBeNull();
   });
 
   it('creates a highlighted note when nothing is highlighted at the selection yet', () => {
@@ -105,7 +105,7 @@ describe('useAnnotationNoteFlow', () => {
       expect.objectContaining({ value: CFI }),
       true,
     );
-    expect(useNotebookStore.getState().notebookNewAnnotation).toBeNull();
+    expect(useAnnotationNoteStore.getState().newAnnotation).toBeNull();
   });
 
   it('keeps a highlight that already carries a note when cancelling', () => {
@@ -120,13 +120,13 @@ describe('useAnnotationNoteFlow', () => {
   it('saves an edited note on an existing highlight', () => {
     const existing = highlight({ note: 'old' });
     h.booknotes.push(existing);
-    useNotebookStore.setState({ notebookNewAnnotation: null, notebookEditAnnotation: existing });
+    useAnnotationNoteStore.setState({ newAnnotation: null, editAnnotation: existing });
     const { result } = renderHook(() => useAnnotationNoteFlow('book-1'));
 
     result.current.handleEditNote({ ...existing, note: 'new' }, false);
 
     expect(h.booknotes[0]!.note).toBe('new');
     expect(h.saveConfig).toHaveBeenCalled();
-    expect(useNotebookStore.getState().notebookEditAnnotation).toBeNull();
+    expect(useAnnotationNoteStore.getState().editAnnotation).toBeNull();
   });
 });

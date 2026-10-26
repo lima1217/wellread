@@ -23,13 +23,29 @@ vi.mock('@/services/wellread/assistant/readerJump', () => ({ jumpToCfi: vi.fn() 
 const notes = vi.hoisted(() => ({
   files: {} as Record<string, string>,
   saveEveNote: vi.fn(),
+  deleteEveNote: vi.fn(),
+  ask: vi.fn(),
 }));
 
-vi.mock('@/services/wellread/assistant/eveClient', () => ({
-  listEveNotes: async () => Object.keys(notes.files),
-  readEveNote: async (_bookId: string, path: string) => notes.files[path] ?? '',
-  saveEveNote: (...args: unknown[]) => notes.saveEveNote(...args),
+vi.mock('@/context/EnvContext', () => ({
+  useEnv: () => ({ appService: { ask: notes.ask } }),
 }));
+
+vi.mock('@/services/wellread/assistant/eveClient', () => {
+  class NoteChangedError extends Error {}
+  return {
+    NoteChangedError,
+    listEveNotes: async () => Object.keys(notes.files),
+    readEveNote: async (_bookId: string, path: string) => ({
+      content: notes.files[path] ?? '',
+      mtimeMs: 100,
+    }),
+    saveEveNote: (...args: unknown[]) => notes.saveEveNote(...args),
+    deleteEveNote: (...args: unknown[]) => notes.deleteEveNote(...args),
+  };
+});
+
+import { NoteChangedError } from '@/services/wellread/assistant/eveClient';
 
 import AINotesView, { resolveNoteLink } from '@/app/reader/components/assistant/AINotesView';
 
@@ -50,7 +66,10 @@ describe('AINotesView', () => {
       'concepts/grace.md': '---\ntype: Concept\ntitle: Grace\n---\n# Grace\n\nUnmerited favour.',
     };
     notes.saveEveNote.mockReset();
-    notes.saveEveNote.mockResolvedValue(undefined);
+    notes.saveEveNote.mockResolvedValue(200);
+    notes.deleteEveNote.mockReset();
+    notes.deleteEveNote.mockResolvedValue(undefined);
+    notes.ask.mockReset();
   });
 
   afterEach(() => cleanup());
@@ -65,13 +84,13 @@ describe('AINotesView', () => {
     expect(screen.queryByText(/type: Concept/)).toBeNull();
   });
 
-  it('edits the raw note and saves it', async () => {
+  it('edits the body only and saves it back under the original frontmatter', async () => {
     render(<AINotesView bookKey='book1-x' />);
 
     fireEvent.click(await screen.findByText('concepts/grace.md'));
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
     const editor = screen.getByRole('textbox') as HTMLTextAreaElement;
-    expect(editor.value).toContain('type: Concept');
+    expect(editor.value).toBe('# Grace\n\nUnmerited favour.');
 
     fireEvent.change(editor, { target: { value: '# Grace\n\nEdited.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -80,10 +99,55 @@ describe('AINotesView', () => {
       expect(notes.saveEveNote).toHaveBeenCalledWith(
         'book1',
         'concepts/grace.md',
-        '# Grace\n\nEdited.',
+        '---\ntype: Concept\ntitle: Grace\n---\n# Grace\n\nEdited.',
+        100,
       ),
     );
     expect(await screen.findByText('Edited.')).toBeTruthy();
+  });
+
+  it('asks before overwriting a page the assistant changed meanwhile', async () => {
+    notes.saveEveNote.mockRejectedValueOnce(new NoteChangedError('changed'));
+    notes.ask.mockResolvedValueOnce(true);
+    render(<AINotesView bookKey='book1-x' />);
+
+    fireEvent.click(await screen.findByText('index.md'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Mine' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(notes.saveEveNote).toHaveBeenCalledTimes(2));
+    expect(notes.ask).toHaveBeenCalled();
+    expect(notes.saveEveNote).toHaveBeenLastCalledWith('book1', 'index.md', 'Mine', undefined);
+  });
+
+  it('keeps the draft when the reader declines to overwrite', async () => {
+    notes.saveEveNote.mockRejectedValueOnce(new NoteChangedError('changed'));
+    notes.ask.mockResolvedValueOnce(false);
+    render(<AINotesView bookKey='book1-x' />);
+
+    fireEvent.click(await screen.findByText('index.md'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Mine' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(notes.ask).toHaveBeenCalled());
+    expect(notes.saveEveNote).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('Mine');
+  });
+
+  it('deletes a page after confirmation and returns to the list', async () => {
+    notes.ask.mockResolvedValueOnce(true);
+    render(<AINotesView bookKey='book1-x' />);
+
+    fireEvent.click(await screen.findByText('concepts/grace.md'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+
+    await waitFor(() =>
+      expect(notes.deleteEveNote).toHaveBeenCalledWith('book1', 'concepts/grace.md'),
+    );
+    expect(await screen.findByText('index.md')).toBeTruthy();
+    expect(screen.queryByText('concepts/grace.md')).toBeNull();
   });
 
   it('shows an empty state when the book has no notes package', async () => {

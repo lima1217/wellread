@@ -4,11 +4,18 @@ import clsx from 'clsx';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { LuArrowLeft, LuFileText, LuPencil } from 'react-icons/lu';
+import { LuArrowLeft, LuFileText, LuPencil, LuTrash2 } from 'react-icons/lu';
 
+import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useBookDataStore } from '@/store/bookDataStore';
-import { listEveNotes, readEveNote, saveEveNote } from '@/services/wellread/assistant/eveClient';
+import {
+  NoteChangedError,
+  deleteEveNote,
+  listEveNotes,
+  readEveNote,
+  saveEveNote,
+} from '@/services/wellread/assistant/eveClient';
 import {
   collectAssistantCitations,
   linkifyBareEpubCfi,
@@ -47,6 +54,7 @@ const pressScaleClass =
 
 const AINotesView: React.FC<{ bookKey: string }> = ({ bookKey }) => {
   const _ = useTranslation();
+  const { appService } = useEnv();
   const { getBookData } = useBookDataStore();
   const ready = useEveConnectionStore((s) => s.ready);
   const refresh = useEveConnectionStore((s) => s.refresh);
@@ -56,6 +64,7 @@ const AINotesView: React.FC<{ bookKey: string }> = ({ bookKey }) => {
   const [files, setFiles] = useState<string[] | null>(null);
   const [openPath, setOpenPath] = useState<string | null>(null);
   const [content, setContent] = useState('');
+  const [mtimeMs, setMtimeMs] = useState<number | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -81,7 +90,9 @@ const AINotesView: React.FC<{ bookKey: string }> = ({ bookKey }) => {
   const openNote = useCallback(
     async (path: string) => {
       try {
-        setContent(await readEveNote(bookId, path));
+        const note = await readEveNote(bookId, path);
+        setContent(note.content);
+        setMtimeMs(note.mtimeMs);
         setOpenPath(path);
         setDraft(null);
       } catch (err) {
@@ -91,12 +102,28 @@ const AINotesView: React.FC<{ bookKey: string }> = ({ bookKey }) => {
     [bookId, toastError, _],
   );
 
+  // The editor shows the body only; the page's OKF frontmatter rides along unchanged.
+  const frontmatter = useMemo(() => FRONTMATTER.exec(content)?.[0] ?? '', [content]);
+  const body = content.slice(frontmatter.length);
+
   const handleSave = async () => {
     if (!openPath || draft === null) return;
+    const next = frontmatter + draft;
     setSaving(true);
     try {
-      await saveEveNote(bookId, openPath, draft);
-      setContent(draft);
+      let saved: number | null;
+      try {
+        saved = await saveEveNote(bookId, openPath, next, mtimeMs);
+      } catch (err) {
+        if (!(err instanceof NoteChangedError)) throw err;
+        const overwrite = await appService?.ask(
+          _('This note changed after you opened it. Replace it with your edit?'),
+        );
+        if (!overwrite) return;
+        saved = await saveEveNote(bookId, openPath, next, undefined);
+      }
+      setContent(next);
+      setMtimeMs(saved);
       setDraft(null);
     } catch (err) {
       toastError(err, _('Failed to save note'));
@@ -105,8 +132,18 @@ const AINotesView: React.FC<{ bookKey: string }> = ({ bookKey }) => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!openPath || !(await appService?.ask(_('Delete this note page?')))) return;
+    try {
+      await deleteEveNote(bookId, openPath);
+      setFiles((prev) => prev?.filter((f) => f !== openPath) ?? prev);
+      setOpenPath(null);
+    } catch (err) {
+      toastError(err, _('Failed to delete note'));
+    }
+  };
+
   const passageLabel = _('Passage');
-  const body = useMemo(() => content.replace(FRONTMATTER, ''), [content]);
   const components = useMemo<Components>(() => {
     const base = createAssistantMarkdownComponents({
       bookKey,
@@ -159,15 +196,29 @@ const AINotesView: React.FC<{ bookKey: string }> = ({ bookKey }) => {
             {openPath}
           </span>
           {draft === null ? (
-            <button
-              type='button'
-              title={_('Edit')}
-              aria-label={_('Edit')}
-              className={clsx('btn btn-ghost btn-circle h-8 min-h-8 w-8', pressScaleClass)}
-              onClick={() => setDraft(content)}
-            >
-              <LuPencil size={15} aria-hidden='true' />
-            </button>
+            <>
+              <button
+                type='button'
+                title={_('Delete')}
+                aria-label={_('Delete')}
+                className={clsx(
+                  'btn btn-ghost btn-circle hover:text-error h-8 min-h-8 w-8',
+                  pressScaleClass,
+                )}
+                onClick={() => void handleDelete()}
+              >
+                <LuTrash2 size={15} aria-hidden='true' />
+              </button>
+              <button
+                type='button'
+                title={_('Edit')}
+                aria-label={_('Edit')}
+                className={clsx('btn btn-ghost btn-circle h-8 min-h-8 w-8', pressScaleClass)}
+                onClick={() => setDraft(body)}
+              >
+                <LuPencil size={15} aria-hidden='true' />
+              </button>
+            </>
           ) : (
             <button
               type='button'

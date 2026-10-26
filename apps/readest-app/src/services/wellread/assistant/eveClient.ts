@@ -147,25 +147,49 @@ export async function listEveNotes(bookId: string): Promise<string[]> {
   return data.files ?? [];
 }
 
-export async function readEveNote(bookId: string, path: string): Promise<string> {
+export type EveNote = { content: string; mtimeMs: number | null };
+
+/** Save refused: the page changed since it was read (e.g. the assistant rewrote it). */
+export class NoteChangedError extends Error {}
+
+export async function readEveNote(bookId: string, path: string): Promise<EveNote> {
   const { baseUrl, token } = base();
-  const qs = `bookId=${encodeURIComponent(bookId)}&path=${encodeURIComponent(path)}`;
-  const res = await eveFetch(`${baseUrl}/eve/v1/notes/file?${qs}`, {
+  const res = await eveFetch(`${baseUrl}/eve/v1/notes/file?${noteQuery(bookId, path)}`, {
     headers: authHeaders(token),
   });
   if (!res.ok) throw new Error(`read note failed: ${res.status}`);
-  const data = (await res.json()) as { content: string };
-  return data.content;
+  return (await res.json()) as EveNote;
 }
 
-export async function saveEveNote(bookId: string, path: string, content: string): Promise<void> {
+/** Returns the page's new mtime. Pass the read's mtime to refuse overwriting newer changes. */
+export async function saveEveNote(
+  bookId: string,
+  path: string,
+  content: string,
+  expectedMtimeMs?: number | null,
+): Promise<number | null> {
   const { baseUrl, token } = base();
   const res = await eveFetch(`${baseUrl}/eve/v1/notes/file`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...authHeaders(token) },
-    body: JSON.stringify({ bookId, path, content }),
+    body: JSON.stringify({ bookId, path, content, expectedMtimeMs }),
   });
+  if (res.status === 409) throw new NoteChangedError('note changed since it was read');
   if (!res.ok) throw new Error(`save note failed: ${res.status}`);
+  return ((await res.json()) as { mtimeMs: number | null }).mtimeMs;
+}
+
+export async function deleteEveNote(bookId: string, path: string): Promise<void> {
+  const { baseUrl, token } = base();
+  const res = await eveFetch(`${baseUrl}/eve/v1/notes/file?${noteQuery(bookId, path)}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(`delete note failed: ${res.status}`);
+}
+
+function noteQuery(bookId: string, path: string): string {
+  return `bookId=${encodeURIComponent(bookId)}&path=${encodeURIComponent(path)}`;
 }
 
 /** Convert Response body → UIMessageChunk stream (AI SDK SSE). */

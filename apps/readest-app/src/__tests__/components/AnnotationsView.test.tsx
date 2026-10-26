@@ -1,3 +1,4 @@
+import type React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import type { BookNote } from '@/types/book';
@@ -34,11 +35,27 @@ vi.mock('@/services/wellread/assistant/readerJump', () => ({
   jumpToCfi: (...args: unknown[]) => jumpToCfi(...args),
 }));
 
+const virtuoso = vi.hoisted(() => ({ totalCount: -1 }));
+
+// jsdom has no layout, so the real Virtuoso renders nothing: render every row.
+vi.mock('react-virtuoso', () => ({
+  Virtuoso: ({
+    totalCount,
+    itemContent,
+  }: {
+    totalCount: number;
+    itemContent: (index: number) => React.ReactNode;
+  }) => {
+    virtuoso.totalCount = totalCount;
+    return <div>{Array.from({ length: totalCount }, (_, i) => itemContent(i))}</div>;
+  },
+}));
+
 vi.mock('@/services/nav', () => ({
   findTocItemBS: () => ({ href: 'ch1.xhtml', label: 'Chapter One', id: 1 }),
 }));
 
-import { useNotebookStore } from '@/store/notebookStore';
+import { useAnnotationNoteStore } from '@/store/annotationNoteStore';
 import AnnotationsView from '@/app/reader/components/assistant/AnnotationsView';
 
 const note = (overrides: Partial<BookNote>): BookNote => ({
@@ -80,6 +97,16 @@ describe('AnnotationsView', () => {
     expect(screen.queryByText('Bookmark text')).toBeNull();
   });
 
+  it('renders the chapter header and highlights as rows of a virtualized list', () => {
+    booknotes.push(
+      note({ id: 'a', text: 'First' }),
+      note({ id: 'b', text: 'Second', cfi: 'epubcfi(/6/4!/4/4,/1:0,/1:5)' }),
+    );
+    render(<AnnotationsView bookKey='book-1' onQuote={vi.fn()} />);
+
+    expect(virtuoso.totalCount).toBe(3);
+  });
+
   it('jumps to a highlight and quotes it into the chat', () => {
     const onQuote = vi.fn();
     booknotes.push(note({ id: 'a', text: 'Highlighted passage', note: 'My thought' }));
@@ -103,7 +130,7 @@ describe('AnnotationsView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit note' }));
 
-    expect(useNotebookStore.getState().notebookEditAnnotation).toMatchObject({
+    expect(useAnnotationNoteStore.getState().editAnnotation).toMatchObject({
       id: 'a',
       note: 'My thought',
     });

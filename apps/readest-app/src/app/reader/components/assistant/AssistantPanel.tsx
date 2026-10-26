@@ -7,7 +7,7 @@ import { useBookDataStore } from '@/store/bookDataStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
 import { useAssistantPanelStore } from '@/store/assistantPanelStore';
-import { useNotebookStore } from '@/store/notebookStore';
+import { useAnnotationNoteStore } from '@/store/annotationNoteStore';
 import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useThemeStore } from '@/store/themeStore';
@@ -22,7 +22,7 @@ import { saveSysSettings } from '@/helpers/settings';
 import useShortcuts from '@/hooks/useShortcuts';
 import { useAnnotationNoteFlow } from '../../hooks/useAnnotationNoteFlow';
 import AIAssistant from './AIAssistant';
-import AssistantHeader from './Header';
+import AssistantHeader, { type AssistantPane } from './Header';
 import AnnotationsView from './AnnotationsView';
 import NoteEditor from './NoteEditor';
 import AINotesView from './AINotesView';
@@ -30,8 +30,6 @@ import ChatHistoryView from '../sidebar/ChatHistoryView';
 
 const MIN_ASSISTANT_PANEL_WIDTH = 0.15;
 const MAX_ASSISTANT_PANEL_WIDTH = 0.45;
-
-type AssistantPane = 'chat' | 'history' | 'notes' | 'aiNotes';
 
 const AssistantPanel: React.FC = ({}) => {
   const _ = useTranslation();
@@ -52,7 +50,7 @@ const AssistantPanel: React.FC = ({}) => {
   } = useAssistantPanelStore();
   const setActiveSession = useReadingAssistantStore((s) => s.setActiveSession);
   const clearPendingQuotes = useReadingAssistantStore((s) => s.clearPendingQuotes);
-  const { notebookNewAnnotation, notebookEditAnnotation } = useNotebookStore();
+  const { newAnnotation, editAnnotation } = useAnnotationNoteStore();
   const { handleSaveNote, handleEditNote, handleCancelNewAnnotation } =
     useAnnotationNoteFlow(sideBarBookKey);
 
@@ -81,8 +79,8 @@ const AssistantPanel: React.FC = ({}) => {
   // The toolbar's Annotate action (or editing a note) opens the editor on the
   // highlights pane. Declared after the effect above so it wins on open.
   useEffect(() => {
-    if (notebookNewAnnotation || notebookEditAnnotation) setPane('notes');
-  }, [notebookNewAnnotation, notebookEditAnnotation]);
+    if (newAnnotation || editAnnotation) setPane('notes');
+  }, [newAnnotation, editAnnotation]);
 
   // The "Annotate" action keeps a placeholder highlight alive only while its
   // editor is on screen. The moment that creation flow stops being presented —
@@ -90,10 +88,10 @@ const AssistantPanel: React.FC = ({}) => {
   // navigate — clean the placeholder up (#4791). Save clears the tracked id (and
   // the placeholder gains note text), so this no-ops for saved annotations.
   useEffect(() => {
-    if (!(isAssistantPanelVisible && notebookNewAnnotation)) {
+    if (!(isAssistantPanelVisible && newAnnotation)) {
       handleCancelNewAnnotation(sideBarBookKey);
     }
-  }, [isAssistantPanelVisible, notebookNewAnnotation, sideBarBookKey, handleCancelNewAnnotation]);
+  }, [isAssistantPanelVisible, newAnnotation, sideBarBookKey, handleCancelNewAnnotation]);
 
   // Switching books (panel pinned, so it stays presented) or closing the reader
   // leaves the placeholder behind; clean it up against the book we are leaving
@@ -293,10 +291,7 @@ const AssistantPanel: React.FC = ({}) => {
             pane={pane}
             handleClose={() => setAssistantPanelVisible(false)}
             handleTogglePin={handleTogglePin}
-            onOpenHistory={() => setPane('history')}
-            onOpenNotes={() => setPane('notes')}
-            onOpenAINotes={() => setPane('aiNotes')}
-            onBackToChat={() => setPane('chat')}
+            onPaneChange={setPane}
             onNewSession={handleNewSession}
           />
         </div>
@@ -315,7 +310,7 @@ const AssistantPanel: React.FC = ({}) => {
           {pane === 'history' && (
             <ChatHistoryView bookKey={sideBarBookKey} onSessionOpen={() => setPane('chat')} />
           )}
-          {pane === 'notes' && (notebookNewAnnotation || notebookEditAnnotation) && (
+          {pane === 'notes' && (newAnnotation || editAnnotation) && (
             <div className='flex-shrink-0 px-2'>
               <NoteEditor onSave={handleSaveNote} onEdit={(item) => handleEditNote(item, false)} />
             </div>
