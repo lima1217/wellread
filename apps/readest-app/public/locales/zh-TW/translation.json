@@ -1997,5 +1997,6 @@
   "Failed to open note": "無法開啟筆記",
   "Failed to save note": "無法儲存筆記",
   "No AI notes for this book yet": "這本書還沒有 AI 筆記",
-  "Ask the assistant with /note to take notes on a chapter.": "在對話中用 /note 讓助手為章節做筆記。"
+  "Ask the assistant with /note to take notes on a chapter.": "在對話中用 /note 讓助手為章節做筆記。",
+  "Edit note": "編輯批註"
 }

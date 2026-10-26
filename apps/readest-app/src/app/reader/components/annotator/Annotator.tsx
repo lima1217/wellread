@@ -14,6 +14,8 @@ import { useBookProgress } from '@/store/readerProgressStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
+import { useNotebookStore } from '@/store/notebookStore';
+import { useAssistantPanelStore } from '@/store/assistantPanelStore';
 import { useCustomDictionaryStore } from '@/store/customDictionaryStore';
 import { isSystemDictionaryEnabled } from '@/services/dictionaries/registry';
 import { invokeSystemDictionary } from '@/services/dictionaries/systemDictionary';
@@ -114,6 +116,8 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
   useReadwiseSync(bookKey);
   useHardcoverSync(bookKey);
   const { openReadingAssistant } = useOpenReadingAssistant();
+  const { setAssistantPanelVisible } = useAssistantPanelStore();
+  const { setNotebookNewAnnotation, setNotebookNewHighlightId } = useNotebookStore();
 
   useEffect(() => {
     void loadCustomDictionaries(envConfig).catch((error) => {
@@ -1150,10 +1154,16 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
 
   const handleAnnotate = () => {
     if (!selection || !selection.text) return;
-    // Create/update the highlight only. The right-hand Reading Assistant pane
-    // no longer hosts a notes editor (SPEC AC5.3); note text stays editable
-    // from the left annotations list.
-    handleHighlight(true);
+    const { sectionHref: href } = progress;
+    selection.href = href;
+    const created = handleHighlight(true);
+    // The note editor lives on the Reading Assistant panel's highlights pane.
+    setAssistantPanelVisible(true);
+    setNotebookNewAnnotation(selection);
+    // Remember the eagerly-created highlight so the panel can remove it if the
+    // note is never saved. A restyle of an existing highlight returns null — that
+    // record predates this flow and must survive a cancel (#4791).
+    setNotebookNewHighlightId(created?.id ?? null);
     handleDismissPopup();
   };
 

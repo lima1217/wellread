@@ -3,11 +3,12 @@
 import clsx from 'clsx';
 import React, { useCallback, useMemo } from 'react';
 import * as CFI from 'foliate-js/epubcfi.js';
-import { LuMessageSquareQuote } from 'react-icons/lu';
+import { LuMessageSquareQuote, LuPencil } from 'react-icons/lu';
 
 import { useTranslation } from '@/hooks/useTranslation';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useSettingsStore } from '@/store/settingsStore';
+import { useNotebookStore } from '@/store/notebookStore';
 import { useReadingAssistantStore } from '@/services/wellread/assistant/readingAssistantStore';
 import { jumpToCfi } from '@/services/wellread/assistant/readerJump';
 import { findTocItemBS } from '@/services/nav';
@@ -29,6 +30,7 @@ const AnnotationsView: React.FC<AnnotationsViewProps> = ({ bookKey, onQuote }) =
   const { getConfig, getBookData } = useBookDataStore();
   const { settings } = useSettingsStore();
   const appendPendingQuote = useReadingAssistantStore((s) => s.appendPendingQuote);
+  const { setNotebookNewAnnotation, setNotebookEditAnnotation } = useNotebookStore();
 
   const customColors = settings.globalReadSettings.customHighlightColors;
   const booknotes = getConfig(bookKey)?.booknotes;
@@ -94,7 +96,7 @@ const AnnotationsView: React.FC<AnnotationsViewProps> = ({ bookKey, onQuote }) =
                     <button
                       type='button'
                       className={clsx(
-                        'hover:bg-base-300/55 w-full rounded-xl px-2 py-2 pe-9 text-start',
+                        'hover:bg-base-300/55 w-full rounded-xl px-2 py-2 pe-16 text-start',
                         'focus-visible:ring-base-content/15 focus-visible:outline-none focus-visible:ring-2',
                         'transition-colors duration-150',
                       )}
@@ -148,6 +150,23 @@ const AnnotationsView: React.FC<AnnotationsViewProps> = ({ bookKey, onQuote }) =
                       )}
                     >
                       <LuMessageSquareQuote size={15} aria-hidden='true' />
+                    </button>
+                    <button
+                      type='button'
+                      title={_('Edit note')}
+                      aria-label={_('Edit note')}
+                      onClick={() => {
+                        setNotebookNewAnnotation(null);
+                        setNotebookEditAnnotation({ ...note });
+                      }}
+                      className={clsx(
+                        'btn btn-ghost btn-circle absolute end-8 top-1 h-7 min-h-7 w-7',
+                        'text-base-content/50 hover:text-base-content',
+                        'sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100',
+                        pressScaleClass,
+                      )}
+                    >
+                      <LuPencil size={15} aria-hidden='true' />
                     </button>
                   </li>
                 );
