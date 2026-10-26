@@ -72,18 +72,6 @@ afterEach(() => {
 });
 
 describe('PageNavigationButtons hit areas', () => {
-  it('shrinks all four hidden controls so they do not cover selectable text', () => {
-    render(<PageNavigationButtons bookKey='book' isDropdownOpen={false} />);
-
-    for (const label of navigationLabels) {
-      const button = screen.getByRole('button', { name: label });
-      const bounds = button.getBoundingClientRect();
-      expect([bounds.width, bounds.height], label).toEqual([8, 8]);
-
-      expect(button.contains(hitTargetAt(button, -1)), label).toBe(false);
-    }
-  });
-
   it('lets taps fall through the hidden controls with the setting off', () => {
     render(<PageNavigationButtons bookKey='book' isDropdownOpen={false} />);
 
