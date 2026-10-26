@@ -22,12 +22,13 @@ import useShortcuts from '@/hooks/useShortcuts';
 import AIAssistant from './AIAssistant';
 import AssistantHeader from './Header';
 import AnnotationsView from './AnnotationsView';
+import AINotesView from './AINotesView';
 import ChatHistoryView from '../sidebar/ChatHistoryView';
 
 const MIN_ASSISTANT_PANEL_WIDTH = 0.15;
 const MAX_ASSISTANT_PANEL_WIDTH = 0.45;
 
-type AssistantPane = 'chat' | 'history' | 'notes';
+type AssistantPane = 'chat' | 'history' | 'notes' | 'aiNotes';
 
 const AssistantPanel: React.FC = ({}) => {
   const _ = useTranslation();
@@ -264,6 +265,7 @@ const AssistantPanel: React.FC = ({}) => {
             handleTogglePin={handleTogglePin}
             onOpenHistory={() => setPane('history')}
             onOpenNotes={() => setPane('notes')}
+            onOpenAINotes={() => setPane('aiNotes')}
             onBackToChat={() => setPane('chat')}
             onNewSession={handleNewSession}
           />
@@ -286,6 +288,7 @@ const AssistantPanel: React.FC = ({}) => {
           {pane === 'notes' && (
             <AnnotationsView bookKey={sideBarBookKey} onQuote={() => setPane('chat')} />
           )}
+          {pane === 'aiNotes' && <AINotesView bookKey={sideBarBookKey} />}
         </div>
         <div
           className='flex-shrink-0'
