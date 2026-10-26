@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ClipboardEvent, type ReactNode } from 'react';
 import { CheckIcon, CopyIcon, XIcon } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -33,6 +33,30 @@ export function QuoteStack({ quotes }: { quotes: PendingQuoteForTurn[] }) {
       })}
     </div>
   );
+}
+
+/**
+ * Native copy of a selection inside an assistant reply: drop citation markers
+ * and the sources list so pasted text is plain prose.
+ */
+export function copySelectionWithoutCitations(e: ClipboardEvent<HTMLElement>) {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) return;
+  const holder = document.createElement('div');
+  for (let i = 0; i < selection.rangeCount; i += 1) {
+    holder.appendChild(selection.getRangeAt(i).cloneContents());
+  }
+  const citations = holder.querySelectorAll('[data-citation]');
+  if (!citations.length) return;
+  citations.forEach((node) => node.remove());
+  // innerText needs layout to turn blocks into line breaks.
+  holder.style.cssText = 'position:fixed;left:-99999px;top:0;white-space:pre-wrap';
+  document.body.appendChild(holder);
+  const text = holder.innerText.trim();
+  document.body.removeChild(holder);
+  e.preventDefault();
+  e.clipboardData.setData('text/plain', text);
+  e.clipboardData.setData('text/html', holder.innerHTML);
 }
 
 export function PendingReplyDots() {

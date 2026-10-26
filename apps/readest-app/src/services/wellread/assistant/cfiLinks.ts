@@ -202,37 +202,106 @@ export function linkifyBareEpubCfi(
   );
 }
 
+/** Markdown link `[label](<dest>)` or `[label](dest)` with one level of nested parens. */
+const MD_LINK = /(!?)\[([^\]\n]*)\]\((<[^>\n]*>|[^()\s]*(?:\([^()\n]*\)[^()\s]*)*)\)/g;
+/** After a citation: end, newline, closing punctuation, or another link. */
+const CITATION_END_AFTER = /^\s*(?:$|\n|[，。；：！？、,.;:!?）)\]」』"”’'*_]|\[)/;
+/** Before a citation: start, newline, or sentence-ending punctuation. */
+const CITATION_END_BEFORE = /(?:^|\n|[。；！？.;!?])\s*$/;
+
+function isPlaceholderCitationLabel(label: string): boolean {
+  const t = label.trim();
+  return !t || /^passage$/i.test(t) || /^source\s+\d+$/i.test(t) || /epubcfi\(/i.test(t);
+}
+
 /**
- * Plain text for the assistant copy button: drop cfi citations / jump links,
- * keep readable prose (and section titles from markdown citation links).
+ * Rewrite in-book citation links (epubcfi / extract chunk hrefs). `inline` is
+ * true when the link reads as part of the sentence (在[第三章](…)中) rather than
+ * a trailing citation marker. Fenced and inline code are left untouched.
+ */
+function rewriteCitationLinks(
+  markdown: string,
+  rewrite: (m: { raw: string; label: string; href: string; inline: boolean }) => string,
+): string {
+  const slots: string[] = [];
+  const stash = (m: string) => {
+    slots.push(m);
+    return `${LINKIFY_SLOT}${slots.length - 1}${LINKIFY_SLOT}`;
+  };
+  const text = markdown.replace(/```[\s\S]*?```/g, stash).replace(/`[^`\n]+`/g, stash);
+  const out = text.replace(
+    MD_LINK,
+    (raw, bang: string, label: string, dest: string, offset: number, whole: string) => {
+      const href = dest.replace(/^<|>$/g, '');
+      if (bang || !isAssistantSourceHref(href)) return raw;
+      const before = whole.slice(0, offset);
+      const after = whole.slice(offset + raw.length);
+      const inline =
+        !isPlaceholderCitationLabel(label) &&
+        !CITATION_END_AFTER.test(after) &&
+        !CITATION_END_BEFORE.test(before);
+      return rewrite({ raw, label: label.trim(), href, inline });
+    },
+  );
+  return out.replace(
+    new RegExp(`${LINKIFY_SLOT}(\\d+)${LINKIFY_SLOT}`, 'g'),
+    (_m, i: string) => slots[Number(i)]!,
+  );
+}
+
+/**
+ * For display: when a citation link is part of the sentence, keep its label as
+ * prose so the rendered citation marker does not swallow words.
+ */
+export function markInlineCitations(markdown: string): string {
+  if (!markdown) return markdown;
+  return rewriteCitationLinks(markdown, (m) => (m.inline ? `${m.label}${m.raw}` : m.raw));
+}
+
+export type AssistantCitation = { cfi: string; title: string };
+
+/** Unique in-book citations of an assistant reply, in first-appearance order. */
+export function collectAssistantCitations(
+  markdown: string,
+  sources?: EveSourceLike[],
+  fallbackLabel = 'Passage',
+): AssistantCitation[] {
+  const seen = new Set<string>();
+  const list: AssistantCitation[] = [];
+  rewriteCitationLinks(linkifyBareEpubCfi(markdown, sources, fallbackLabel), (m) => {
+    const source = resolveEveSource(sources, { href: m.href, label: m.label });
+    if (source?.cfi && !seen.has(cfiIdentity(source.cfi))) {
+      seen.add(cfiIdentity(source.cfi));
+      const label = isPlaceholderCitationLabel(m.label) ? '' : m.label;
+      list.push({ cfi: source.cfi, title: source.title?.trim() || label });
+    }
+    return m.raw;
+  });
+  return list;
+}
+
+/** Position of a resolved citation in `citations` (1-based), or null. */
+export function citationNumber(citations: AssistantCitation[], cfi: string): number | null {
+  const key = cfiIdentity(cfi);
+  const i = citations.findIndex((c) => cfiIdentity(c.cfi) === key);
+  return i < 0 ? null : i + 1;
+}
+
+/**
+ * Text for the assistant copy button: markdown without in-book citations.
+ * Trailing citation markers are dropped; a link used inside the sentence keeps
+ * its label. External links and formatting stay.
  */
 export function stripAssistantCfiCitations(markdown: string): string {
   if (!markdown) return markdown;
 
-  let text = markdown;
+  let text = rewriteCitationLinks(linkifyBareEpubCfi(markdown), (m) => (m.inline ? m.label : ''));
 
-  // [label](<epubcfi(...)>) — keep meaningful labels, drop placeholder ones.
-  text = text.replace(/\[([^\]]*)\]\(<epubcfi\([^>]+\)>\)/gi, (_m, label: string) => {
-    const t = label.trim();
-    if (!t || /^passage$/i.test(t) || /^source\s+\d+$/i.test(t)) return '';
-    return t;
-  });
-  text = text.replace(/\[([^\]]*)\]\(epubcfi\([^)]+\)\)/gi, (_m, label: string) => {
-    const t = label.trim();
-    if (!t || /^passage$/i.test(t) || /^source\s+\d+$/i.test(t)) return '';
-    return t;
-  });
-
-  // （cfi: …） / (cfi: …) — remove the whole citation parenthesis.
-  text = text.replace(/[（(]\s*cfi\s*[:：]\s*(?:epubcfi\([^)]+\)|\/\d+\/[^）)]+?)\s*[）)]/gi, '');
-
-  // Inline code that is only a cfi token.
-  text = text.replace(/`(?:cfi\s*[:：]\s*)?(?:epubcfi\([^)]+\)|\/\d+\/[^`]+)`/gi, '');
-
-  // Leftover bare epubcfi(...).
+  // Leftover bare epubcfi(...) (e.g. inside inline code that is not cfi-only).
   text = text.replace(/epubcfi\([^)]+\)/gi, '');
 
-  text = text.replace(/（\s*）/g, '').replace(/\(\s*\)/g, '');
+  // Citation groups emptied above: （）, (、), …
+  text = text.replace(/[（(][\s、,，;；]*[）)]/g, '');
   text = text.replace(/[^\S\n]{2,}/g, ' ');
   text = text.replace(/ *([，。；！？、,.!?])/g, '$1');
   text = text.replace(/([（(]) +/g, '$1').replace(/ +([）)])/g, '$1');

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ArrowDownIcon,
   ArrowUpIcon,
   ChevronUpIcon,
   NotebookPenIcon,
@@ -45,6 +46,7 @@ import { AssistantPartsView } from './AssistantPartsView';
 import {
   assistantWorkedMs,
   CopyMessageButton,
+  copySelectionWithoutCitations,
   MessageActionButton,
   PendingQuoteBar,
   PendingReplyDots,
@@ -170,6 +172,8 @@ export const ReadingAssistantChat = ({
   }, [bookId]);
 
   const busy = agent.status === 'submitted' || agent.status === 'streaming';
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
   const canSend = Boolean(agent.composer.trim()) && !shouldBlockComposerSubmit(busy);
   const showPendingReply = shouldShowPendingReply(busy, agent.messages);
 
@@ -185,6 +189,7 @@ export const ReadingAssistantChat = ({
     clearPendingQuotes();
     const target = editing;
     setEditing(null);
+    stickToBottomRef.current = true;
     void agent.send({
       quotes: target ? [...target.quotes, ...pending] : pending,
       onSendFailed: restorePendingQuotes,
@@ -198,6 +203,7 @@ export const ReadingAssistantChat = ({
       if (shouldBlockComposerSubmit(busy)) return;
       const quotes = useReadingAssistantStore.getState().pendingQuotes;
       clearPendingQuotes();
+      stickToBottomRef.current = true;
       void agent.send({ message, quotes, onSendFailed: restorePendingQuotes });
     },
     [agent, busy, clearPendingQuotes, restorePendingQuotes],
@@ -208,6 +214,7 @@ export const ReadingAssistantChat = ({
   const handleRegenerate = useCallback(() => {
     if (!lastUser || !isPersistedMessageId(lastUser.id) || shouldBlockComposerSubmit(busy)) return;
     setEditing(null);
+    stickToBottomRef.current = true;
     void agent.send({
       message: lastUser.content,
       quotes: toPendingQuotes(lastUser.quotes),
@@ -267,16 +274,37 @@ export const ReadingAssistantChat = ({
     [busy, envConfig, modelConfig, saveSettings, setSettings, settings],
   );
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const stickToBottomRef = useRef(true);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !stickToBottomRef.current) return;
     el.scrollTop = el.scrollHeight;
+    setShowJumpToLatest(false);
   }, [agent.messages, showPendingReply, agent.error]);
 
+  const jumpToLatest = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = true;
+    setShowJumpToLatest(false);
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, []);
+
+  // Grow the composer with its content up to a cap, then scroll inside it.
+  useEffect(() => {
+    const el = slash.composerRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [agent.composer, slash.composerRef]);
+
+  const cancelEditing = useCallback(() => {
+    setEditing(null);
+    agent.setComposer('');
+  }, [agent]);
+
   return (
-    <div className='flex h-full min-h-0 flex-col overscroll-contain'>
+    <div className='relative flex h-full min-h-0 flex-col overscroll-contain'>
       <PendingQuoteBar
         quotes={pendingQuotes}
         onRemove={removePendingQuote}
@@ -287,7 +315,9 @@ export const ReadingAssistantChat = ({
         className='min-h-0 flex-1 space-y-8 overflow-y-auto overscroll-contain px-4 py-5 touch-pan-y'
         onScroll={(e) => {
           const el = e.currentTarget;
-          stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+          const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+          stickToBottomRef.current = atBottom;
+          setShowJumpToLatest(!atBottom);
         }}
       >
         {agent.messages.length === 0 && !busy ? (
@@ -331,7 +361,7 @@ export const ReadingAssistantChat = ({
                 <QuoteStack quotes={msg.quotes} />
               ) : null}
               {msg.role === 'assistant' ? (
-                <div className={markdownBodyClass}>
+                <div className={markdownBodyClass} onCopy={copySelectionWithoutCitations}>
                   <AssistantPartsView msg={msg} bookKey={bookKey} isLive={isLiveAssistant} />
                 </div>
               ) : (
@@ -386,6 +416,24 @@ export const ReadingAssistantChat = ({
           </p>
         ) : null}
       </div>
+      {showJumpToLatest && agent.messages.length > 0 ? (
+        <div className='pointer-events-none relative z-10 flex h-0 justify-center'>
+          <button
+            type='button'
+            className={clsx(
+              'bg-base-100 eink-bordered border-base-200 text-base-content/70 hover:text-base-content',
+              'pointer-events-auto absolute -top-10 flex size-8 items-center justify-center rounded-full border',
+              'shadow-[0_1px_2px_oklch(0_0_0/0.06),0_4px_14px_oklch(0_0_0/0.08)] transition-colors',
+              focusRing,
+            )}
+            aria-label={_('Jump to latest')}
+            title={_('Jump to latest')}
+            onClick={jumpToLatest}
+          >
+            <ArrowDownIcon size={15} aria-hidden='true' />
+          </button>
+        </div>
+      ) : null}
       <form
         className='shrink-0 px-2.5 pb-2.5 pt-1'
         onSubmit={(e) => {
@@ -399,13 +447,7 @@ export const ReadingAssistantChat = ({
             <span className='flex-1'>
               {_('Editing: sending replaces this message and later replies')}
             </span>
-            <MessageActionButton
-              label={_('Cancel editing')}
-              onClick={() => {
-                setEditing(null);
-                agent.setComposer('');
-              }}
-            >
+            <MessageActionButton label={_('Cancel editing')} onClick={cancelEditing}>
               <XIcon size={12} aria-hidden='true' />
             </MessageActionButton>
           </div>
@@ -429,13 +471,20 @@ export const ReadingAssistantChat = ({
             spellCheck
             disabled={isComposerTextInputDisabled(busy)}
             className={clsx(
-              'min-h-[48px] w-full resize-none bg-transparent px-3.5 py-2.5 outline-none',
+              'max-h-[200px] min-h-[48px] w-full resize-none overflow-y-auto bg-transparent px-3.5 py-2.5 outline-none',
               messageTypeClass,
             )}
             value={agent.composer}
             onChange={(e) => slash.handleComposerChange(e.target.value)}
             rows={2}
-            onKeyDown={slash.handleComposerKeyDown}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && editing && !slash.slashOpen) {
+                e.preventDefault();
+                cancelEditing();
+                return;
+              }
+              slash.handleComposerKeyDown(e);
+            }}
           />
           <div className='flex items-center gap-0.5 px-2 pb-2 pt-0.5 font-sans text-sm select-none touch-manipulation'>
             <div
