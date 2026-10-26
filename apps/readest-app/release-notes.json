@@ -1,5 +1,16 @@
 {
   "releases": {
+    "1.2.6": {
+      "date": "2026-10-26",
+      "notes": [
+        "Assistant: Answers that cite the book — inline focus text, quote CFIs and citation markers that stay out of copied text",
+        "Assistant: Regenerate, edit and save replies to notes, with conversation starters and readable tool steps",
+        "Assistant: Smoother reading jumps, quote actions, reader memory and library-wide book search",
+        "Assistant: Spoiler guard settings, recoverable errors and reliable Stop",
+        "Sidecar: Cache-stable prompts, leaner history and hardened cross-book file rules",
+        "Upgrade AI SDK to ai 7.0.153 / @ai-sdk/openai 4.0.102; add GitHub Actions CI for lint and unit tests"
+      ]
+    },
     "1.2.5": {
       "date": "2026-08-11",
       "notes": [
