@@ -1,6 +1,6 @@
 ---
 name: Translate
-description: Translate — render a selection, quote, or the current chapter into Simplified Chinese. Use with /skill:translate, or when the user wants to translate a selection/quote/this chapter, or asks for a Chinese translation.
+description: Translates a selection, the current page or a whole chapter into Simplified Chinese. Use when the user asks for a translation of book text.
 ---
 
 # Translate
@@ -12,17 +12,17 @@ Translate the source text into **Simplified Chinese**.
 Pick the source by priority, lock down the scope, then translate:
 
 1. **Pending Quote / parameter selection** (the `>` blockquote above, and/or the argument after `/skill:translate`): translate only this passage.
-2. **"This page / this paragraph / current position"**: only `read_file` `focus_chunks` (at most 2).
+2. **"This page / this paragraph / current position"**: the text at the reader's position (`focus_text`, then any `focus_chunks` it lacks).
 3. **"This chapter / this section / translate 〈chapter name〉"**:
-   - Use `read_section_text` (`sectionIndex` and/or `title`) to read the entire chapter in one go.
+   - Use `read_section_text` (`sectionIndex` and/or `title`) to read the entire chapter in one go, whatever its size, and translate all of it.
    - "This chapter" = the current spine section (same `sectionIndex`) by default.
-   - When `count` is **greater than 64** (or `section_chunks_note`): the section is large; `read_section_text` still reads it all in one go, so translate the whole chapter directly. Only narrow the scope when the user gives a more specific target (e.g., only near the current position).
+   - Narrow the scope only when the user gives a more specific target (e.g., only near the current position).
 
 If the location cannot be determined, state what is missing and ask the user to select text or provide a snippet for locating.
 
 ## Done when
 
-The source scope is locked and the translation covers every sentence in that scope; an overly long chapter-level section has been read in full with `read_section_text` (or narrowed per a more specific user target); the translation has no preamble and no leftover summary.
+The source scope is locked and the translation covers every sentence in that scope; the reply is the translation itself, plus an optional translator's note.
 
 ## Principles
 

@@ -1,5 +1,4 @@
 ## TypeScript
 
-- Never use the `any` type. Use `unknown`, proper types, or generics instead.
-- Strict mode is enabled. Target is ES2022.
-- Unused vars prefixed with `_` are allowed (ESLint configured).
+- Type values with `unknown`, precise types or generics; `any` is banned.
+- Prefix intentionally unused variables with `_`.

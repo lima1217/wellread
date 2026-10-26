@@ -1,11 +1,6 @@
 ---
 name: i18n
-description: >
-  Extract i18n strings, translate missing translations, or add a new language to readest-app.
-  Use when the user invokes /i18n or asks to extract/translate i18n strings or add a new locale.
-  Runs i18next-scanner to extract keys, then translates any __STRING_NOT_TRANSLATED__
-  placeholders across all locale files.
-user_invocable: true
+description: Extract and translate readest-app i18n strings, or add a new locale. Use when UI strings need translations (`__STRING_NOT_TRANSLATED__`) or a language is added.
 ---
 
 Extract/translate i18n strings or add a new language for readest-app. Run from the app directory (either the main repo or a worktree).
@@ -17,7 +12,7 @@ Extract/translate i18n strings or add a new language for readest-app. Run from t
 
 ## Step 1: Determine the working directory
 
-If currently in a PR worktree (e.g., `/Users/chrox/dev/readest-pr-*`), use that. Otherwise use the main repo. The app directory is `<repo-root>/apps/readest-app`.
+Use the checkout you are working in (main repo or a `pnpm worktree:new` worktree). The app directory is `<repo-root>/apps/readest-app`.
 
 ---
 
@@ -76,7 +71,7 @@ For each `__STRING_NOT_TRANSLATED__` found:
 2. Identify the target locale from the file path (e.g., `locales/ja/translation.json` -> Japanese)
 3. Provide an accurate translation for each locale
 
-Use `sed -i ''` on macOS to replace in-place. Handle all locales in one batch:
+Replace in place with `sed -i ''` (macOS) or `sed -i` (GNU). Handle all locales in one batch:
 
 ```bash
 cd <app-dir>/public/locales
@@ -85,7 +80,7 @@ sed -i '' 's/"<Key>": "__STRING_NOT_TRANSLATED__"/"<Key>": "<translation>"/' <lo
 
 ### Locale reference
 
-The canonical, complete list of supported locales lives in `i18n-langs.json` (codes only) and `TRANSLATED_LANGS` in `src/services/constants.ts` (codes → native display names). Read those for the source of truth — translate every locale that appears in `i18n-langs.json`. Don't carry forward older "out-of-scope" exclusions like `pt-BR` or `uz`; if it's in `i18n-langs.json` it ships, and it needs translation.
+The canonical, complete list of supported locales lives in `i18n-langs.json` (codes only) and `TRANSLATED_LANGS` in `src/services/constants.ts` (codes → native display names). Translate every locale that appears in `i18n-langs.json`, `pt-BR` and `uz` included: if it is listed, it ships.
 
 ### Step 5: Verify
 
