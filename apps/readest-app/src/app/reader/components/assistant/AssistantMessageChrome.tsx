@@ -13,7 +13,47 @@ import type { PendingQuote } from '@/services/wellread/assistant/readingAssistan
 import { formatWorkDuration } from '@/services/wellread/assistant/sessionUi';
 import { focusRing, messageTypeClass } from './AssistantMarkdown';
 
-export function QuoteStack({ quotes }: { quotes: PendingQuoteForTurn[] }) {
+/** Quote text that jumps to its passage in the book when it carries a cfi. */
+function QuoteText({
+  cfi,
+  onJump,
+  title,
+  className,
+  children,
+}: {
+  cfi?: string | null;
+  onJump?: (cfi: string) => void;
+  title: string;
+  className: string;
+  children: ReactNode;
+}) {
+  const _ = useTranslation();
+  if (!cfi || !onJump) {
+    return (
+      <span className={className} title={title}>
+        {children}
+      </span>
+    );
+  }
+  return (
+    <button
+      type='button'
+      className={clsx(className, 'hover:text-base-content text-start transition-colors', focusRing)}
+      title={`${title}\n${_('Show in book')}`}
+      onClick={() => onJump(cfi)}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function QuoteStack({
+  quotes,
+  onJump,
+}: {
+  quotes: PendingQuoteForTurn[];
+  onJump?: (cfi: string) => void;
+}) {
   if (!quotes.length) return null;
   return (
     <div className='mb-1.5 flex flex-col gap-1 pb-0.5'>
@@ -21,16 +61,52 @@ export function QuoteStack({ quotes }: { quotes: PendingQuoteForTurn[] }) {
         const chapter = q.chapterTitle?.trim();
         const full = chapter ? `${q.text} — 《${chapter}》` : q.text;
         return (
-          <div
+          <QuoteText
             key={q.id ?? `q-${index}`}
+            cfi={q.cfi}
+            onJump={onJump}
             title={full}
             className='border-base-content/25 text-base-content/70 line-clamp-2 border-s-2 ps-1.5 text-[0.85em] leading-snug'
           >
             {q.text}
             {chapter ? <span className='text-base-content/50'> — 《{chapter}》</span> : null}
-          </div>
+          </QuoteText>
         );
       })}
+    </div>
+  );
+}
+
+export type Suggestion = { label: string; message: string };
+
+/** One-click turns: starters, follow-ups, actions on Pending Quotes. */
+export function SuggestionChips({
+  suggestions,
+  disabled,
+  onPick,
+}: {
+  suggestions: Suggestion[];
+  disabled?: boolean;
+  onPick: (message: string) => void;
+}) {
+  if (!suggestions.length) return null;
+  return (
+    <div className='flex flex-wrap gap-1.5 font-sans'>
+      {suggestions.map((s) => (
+        <button
+          key={s.label}
+          type='button'
+          disabled={disabled}
+          className={clsx(
+            'eink-bordered border-base-content/15 hover:bg-base-200 rounded-full border px-3 py-1 text-sm transition-colors',
+            'disabled:pointer-events-none disabled:opacity-40',
+            focusRing,
+          )}
+          onClick={() => onPick(s.message)}
+        >
+          {s.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -59,7 +135,7 @@ export function copySelectionWithoutCitations(e: ClipboardEvent<HTMLElement>) {
   e.clipboardData.setData('text/html', holder.innerHTML);
 }
 
-export function PendingReplyDots() {
+export function PendingReplyDots({ label }: { label?: string }) {
   const _ = useTranslation();
   return (
     <div
@@ -69,7 +145,9 @@ export function PendingReplyDots() {
       )}
       role='status'
     >
-      <span className='font-sans text-[0.85em] leading-none'>{_('Thinking…')}</span>
+      <span className='min-w-0 truncate font-sans text-[0.85em] leading-none'>
+        {label ?? _('Thinking…')}
+      </span>
       <span className='assistant-pending-dots inline-flex items-center gap-1' aria-hidden='true'>
         <span className='bg-base-content size-1 rounded-full' />
         <span className='bg-base-content size-1 rounded-full' />
@@ -184,10 +262,15 @@ export function PendingQuoteBar({
   quotes,
   onRemove,
   onClear,
+  onJump,
+  children,
 }: {
   quotes: PendingQuote[];
   onRemove: (id: string) => void;
   onClear: () => void;
+  onJump?: (cfi: string) => void;
+  /** Quick actions on the quotes, under the list. */
+  children?: ReactNode;
 }) {
   const _ = useTranslation();
   if (!quotes.length) return null;
@@ -225,7 +308,9 @@ export function PendingQuoteBar({
               >
                 ❝
               </span>
-              <span
+              <QuoteText
+                cfi={q.cfi}
+                onJump={onJump}
                 className='text-base-content/80 line-clamp-2 min-w-0 flex-1 text-[0.85em] leading-snug select-text'
                 title={full}
               >
@@ -233,7 +318,7 @@ export function PendingQuoteBar({
                 {q.chapterTitle ? (
                   <span className='text-base-content/45'> · 《{q.chapterTitle}》</span>
                 ) : null}
-              </span>
+              </QuoteText>
               <button
                 type='button'
                 className={clsx(
@@ -251,6 +336,7 @@ export function PendingQuoteBar({
           );
         })}
       </ul>
+      {children}
     </div>
   );
 }

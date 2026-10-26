@@ -1007,6 +1007,104 @@ describe('useEveAgent', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('puts the question and quotes back after Stop and flags the turn as stopped', async () => {
+    getEveSession.mockResolvedValue({
+      id: 'ses_existing',
+      bookId: 'book-1',
+      title: 'Chat',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [],
+    });
+    streamEveTurn.mockImplementation(async function* (_sid, _msg, signal: AbortSignal) {
+      yield assistantUi('a1', [textPart('partial ')]);
+      await new Promise<never>((_resolve, reject) => {
+        const fail = () => reject(new Error('Request cancelled'));
+        if (signal.aborted) fail();
+        else signal.addEventListener('abort', fail, { once: true });
+      });
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => expect(getEveSession).toHaveBeenCalled());
+
+    const quotes = [{ id: 'q1', text: 'quoted', chapterTitle: null, cfi: 'epubcfi(/6/4!/4/2)' }];
+    const onSendFailed = vi.fn();
+    await act(async () => {
+      result.current.setComposer('stop me');
+    });
+    let sendPromise!: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.send({ quotes, onSendFailed });
+    });
+    expect(result.current.messages[0]).toMatchObject({
+      role: 'user',
+      quotes: [{ id: 'q1', text: 'quoted', cfi: 'epubcfi(/6/4!/4/2)' }],
+    });
+    await act(async () => {
+      result.current.stop();
+    });
+    await act(async () => {
+      await sendPromise;
+    });
+
+    expect(result.current.composer).toBe('stop me');
+    expect(onSendFailed).toHaveBeenCalledWith(quotes);
+    expect(result.current.stopped).toBe(true);
+
+    streamEveTurn.mockImplementation(async function* () {
+      yield assistantUi('a2', [textPart('done')]);
+    });
+    await act(async () => {
+      await result.current.send();
+    });
+    expect(result.current.stopped).toBe(false);
+  });
+
+  it('keeps text typed during the turn when Stop restores the question', async () => {
+    getEveSession.mockResolvedValue({
+      id: 'ses_existing',
+      bookId: 'book-1',
+      title: 'Chat',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [],
+    });
+    streamEveTurn.mockImplementation(async function* (_sid, _msg, signal: AbortSignal) {
+      yield assistantUi('a1', [textPart('partial ')]);
+      await new Promise<never>((_resolve, reject) => {
+        const fail = () => reject(new Error('Request cancelled'));
+        if (signal.aborted) fail();
+        else signal.addEventListener('abort', fail, { once: true });
+      });
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => expect(getEveSession).toHaveBeenCalled());
+    await act(async () => {
+      result.current.setComposer('first');
+    });
+    let sendPromise!: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.send();
+    });
+    await act(async () => {
+      result.current.setComposer('typed next');
+    });
+    await act(async () => {
+      result.current.stop();
+    });
+    await act(async () => {
+      await sendPromise;
+    });
+
+    expect(result.current.composer).toBe('typed next');
+  });
+
   it('keeps the replaced exchange when Stop aborts a regenerate', async () => {
     getEveSession.mockResolvedValue({
       ...sessionMeta('ses_existing'),

@@ -117,7 +117,7 @@ function CitationList({
             'flex min-w-0 items-center gap-2 rounded-md px-1 py-1 text-start transition-colors',
             focusRing,
           )}
-          onClick={() => jumpToCfi(bookKey, c.cfi)}
+          onClick={() => void jumpToCfi(bookKey, c.cfi)}
         >
           <span className={citationBadgeClass}>{i + 1}</span>
           <span className='min-w-0 flex-1 truncate'>{c.title || passageLabel}</span>

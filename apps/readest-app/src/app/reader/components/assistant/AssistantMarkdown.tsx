@@ -4,8 +4,6 @@ import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import clsx from 'clsx';
 import type { Components } from 'react-markdown';
 
-import { useReaderStore } from '@/store/readerStore';
-import { eventDispatcher } from '@/utils/event';
 import type { SessionSource } from '@wellread/eve-message';
 import {
   citationNumber,
@@ -14,6 +12,7 @@ import {
   resolveEveSource,
   type AssistantCitation,
 } from '@/services/wellread/assistant/cfiLinks';
+import { jumpToCfi } from '@/services/wellread/assistant/readerJump';
 import { openExternalUrl } from '@/utils/open';
 
 export const focusRing =
@@ -134,10 +133,7 @@ export function CitationMarker({
   );
 }
 
-export function jumpToCfi(bookKey: string, cfi: string) {
-  eventDispatcher.dispatch('navigate', { bookKey, cfi });
-  useReaderStore.getState().getView(bookKey)?.goTo(cfi);
-}
+export { jumpToCfi };
 
 function externalLinkButton(href: string, children: ReactNode) {
   return (
@@ -172,7 +168,7 @@ export function createAssistantMarkdownComponents(opts: {
       <CitationMarker
         number={citationNumber(opts.citations, target)}
         title={title}
-        onJump={() => jumpToCfi(opts.bookKey, target)}
+        onJump={() => void jumpToCfi(opts.bookKey, target)}
       />
     );
   };
