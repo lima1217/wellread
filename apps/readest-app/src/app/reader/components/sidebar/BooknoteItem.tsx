@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import React, { useMemo, useRef, useState } from 'react';
 import { MdEdit, MdDelete, MdContentCopy } from 'react-icons/md';
 
+import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { useEnv } from '@/context/EnvContext';
 import { BookNote, HighlightColor } from '@/types/book';
@@ -58,7 +59,18 @@ const BooknoteItem: React.FC<BooknoteItemProps> = ({ bookKey, item, isNearest, o
   // marked.parse is heavy when called on every list scroll re-render across
   // hundreds of items. Cache by note text — note edits change item.note and
   // bust the cache automatically.
-  const noteHtml = useMemo(() => (note ? marked.parse(note) : ''), [note]);
+  // Notes can come from annotation imports, not only the local editor, and the
+  // HTML lands in the app window: sanitize it.
+  const noteHtml = useMemo(
+    () =>
+      note
+        ? DOMPurify.sanitize(marked.parse(note) as string, {
+            USE_PROFILES: { html: true },
+            FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select'],
+          })
+        : '',
+    [note],
+  );
 
   // dayjs().fromNow() reformats every render; cache per createdAt.
   const createdAtLabel = useMemo(() => dayjs(item.createdAt).fromNow(), [item.createdAt]);
