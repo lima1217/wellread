@@ -27,6 +27,7 @@ import { useEinkMode } from '@/hooks/useEinkMode';
 import {
   applyFixedlayoutStyles,
   applyImageStyle,
+  applyNamespacedAttributes,
   applyScrollbarStyle,
   applyScrollModeClass,
   applyThemeModeClass,
@@ -206,6 +207,10 @@ const FoliateViewer: React.FC<{
   }, [bookKey, setProgress]);
 
   const progressRelocateHandler = (event: Event) => {
+    // Foliate can emit a late relocation after close() clears its progress
+    // resolver. Keep any valid pending position instead of replacing it.
+    if (!(event as CustomEvent).detail.location) return;
+
     // Always stash the latest detail; if another rAF is already pending
     // it'll pick this up and the intermediate states are skipped.
     pendingRelocateRef.current = event as CustomEvent;
@@ -311,6 +316,9 @@ const FoliateViewer: React.FC<{
     const detail = (event as CustomEvent).detail;
     console.log('doc index loaded:', detail.index);
     if (detail.doc) {
+      // Repair the parsed DOM before anything reads it: the renderer and the
+      // fix-ups below both resolve styles off this document.
+      applyNamespacedAttributes(detail.doc);
       const renderer = viewRef.current?.renderer;
       const writingDir = renderer?.setStyles && getDirection(detail.doc);
       const viewSettings = getViewSettings(bookKey)!;

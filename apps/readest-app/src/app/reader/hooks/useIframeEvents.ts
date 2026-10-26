@@ -144,12 +144,25 @@ export const useTouchEvent = (bookKey: string) => {
   const touchEndTimeRef = useRef<number | null>(null);
   const touchConsumedRef = useRef(false);
   const layeredTurnOwnedRef = useRef(false);
+  const layeredTurnCandidateRef = useRef(false);
   // Two fingers on a fixed-layout book start in a "pending" state: we wait to
   // see whether they spread/converge (pinch) or slide together (scroll) before
   // committing. isPinchingRef only flips true once a pinch is confirmed.
   const pinchPendingRef = useRef(false);
 
   const isLifecycleManagedLayeredTurn = () => isLayeredTurnGestureActive(bookKey);
+  const isLayeredTurnCandidate = () => {
+    const viewSettings = getViewSettings(bookKey);
+    if (!viewSettings || getBookData(bookKey)?.isFixedLayout) return false;
+    const turnStyle = getView(bookKey)?.renderer.getAttribute?.('turn-style');
+    return (
+      (turnStyle === 'slide' || turnStyle === 'curl') &&
+      viewSettings.animated &&
+      !viewSettings.scrolled &&
+      !viewSettings.isEink &&
+      !viewSettings.disableSwipe
+    );
+  };
   const isPinchingRef = useRef(false);
   const initialTouch0Ref = useRef<IframeTouch | null>(null);
   const initialTouch1Ref = useRef<IframeTouch | null>(null);
@@ -183,6 +196,7 @@ export const useTouchEvent = (bookKey: string) => {
 
   const onTouchStart = (e: IframeTouchEvent | React.TouchEvent<HTMLDivElement>) => {
     layeredTurnOwnedRef.current = false;
+    layeredTurnCandidateRef.current = false;
     const t0 = e.targetTouches[0] as IframeTouch | undefined;
     const t1 = e.targetTouches[1] as IframeTouch | undefined;
     if (t0 && t1) {
@@ -201,6 +215,7 @@ export const useTouchEvent = (bookKey: string) => {
       }
     }
     if (!t0) return;
+    layeredTurnCandidateRef.current = isLayeredTurnCandidate();
     touchStartRef.current = t0;
     touchStartTimeRef.current = 'timeStamp' in e ? e.timeStamp : Date.now();
     touchConsumedRef.current = false;
@@ -247,7 +262,14 @@ export const useTouchEvent = (bookKey: string) => {
       }
       const currentDist = getTouchDistance(t0, t1);
       if (initialPinchDistRef.current > 0) {
-        const ratio = currentDist / initialPinchDistRef.current;
+        const rawRatio = currentDist / initialPinchDistRef.current;
+        // Clamp the live preview to the same bounds the release commits, so the
+        // page never previews past the zoom limit.
+        const committed = Math.max(
+          MIN_ZOOM_LEVEL,
+          Math.min(MAX_ZOOM_LEVEL, Math.round(initialZoomRef.current * rawRatio)),
+        );
+        const ratio = committed / initialZoomRef.current;
         lastPinchRatioRef.current = ratio;
         const renderer = getView(bookKey)?.renderer;
         renderer?.pinchZoom?.(ratio);
@@ -279,6 +301,15 @@ export const useTouchEvent = (bookKey: string) => {
     if (layeredTurnOwnedRef.current) return;
     const { current: touchStart } = touchStartRef;
     const { current: touchEnd } = touchEndRef;
+    if (layeredTurnCandidateRef.current && touchEnd) {
+      const deltaX = touchEnd.screenX - touchStart.screenX;
+      const deltaY = touchEnd.screenY - touchStart.screenY;
+      // Browser layered turns use a stricter, direction-aware paginator gate
+      // than native captured turns. Do not hide the toolbar in the gap before
+      // `before-capture`: if the paginator claims later, its snapshot lifecycle
+      // takes over; if it never claims, touchend runs the generic behavior.
+      if (Math.abs(deltaX) > Math.abs(deltaY)) return;
+    }
     if (hoveredBookKey && touchEnd) {
       const viewSettings = getViewSettings(bookKey)!;
       const deltaY = touchEnd.screenY - touchStart.screenY;
@@ -295,6 +326,7 @@ export const useTouchEvent = (bookKey: string) => {
   };
 
   const onTouchEnd = (e: IframeTouchEvent | React.TouchEvent<HTMLDivElement>) => {
+    layeredTurnCandidateRef.current = false;
     if (isPinchingRef.current || pinchPendingRef.current) {
       const t0 = e.targetTouches[0] as IframeTouch | undefined;
       const t1 = e.targetTouches[1] as IframeTouch | undefined;
@@ -424,6 +456,7 @@ export const useTouchEvent = (bookKey: string) => {
   };
 
   const onTouchCancel = (e: IframeTouchEvent | React.TouchEvent<HTMLDivElement>) => {
+    layeredTurnCandidateRef.current = false;
     if (isPinchingRef.current || pinchPendingRef.current) {
       getView(bookKey)?.renderer.pinchEnd?.();
       isPinchingRef.current = false;

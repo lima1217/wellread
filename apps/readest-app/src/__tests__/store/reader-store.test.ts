@@ -69,7 +69,7 @@ vi.mock('@/services/rss/feedReader', () => ({
 }));
 
 import { useReaderStore } from '@/store/readerStore';
-import { useBookDataStore } from '@/store/bookDataStore';
+import { useBookDataStore, type BookData } from '@/store/bookDataStore';
 
 /**
  * Helper to seed a minimal ViewState in the store for a given key.
@@ -237,6 +237,32 @@ describe('readerStore', () => {
 
       const retrieved = useReaderStore.getState().getViewSettings(key);
       expect(retrieved).toEqual(settings);
+    });
+
+    test('keeps the sidebar tab chosen in the book config when a primary view saves settings', () => {
+      const key = 'bookid-0';
+      const live = { sideBarTab: 'toc', ttsLocation: 'cfi-1' } as unknown as ViewSettings;
+      seedViewState(key, { viewSettings: live });
+      const bookData = (sideBarTab: string) => ({
+        bookid: {
+          id: 'bookid',
+          book: null,
+          file: null,
+          config: { updatedAt: Date.now(), viewSettings: { ...live, sideBarTab } },
+          bookDoc: null,
+          isFixedLayout: false,
+        } as BookData,
+      });
+      useBookDataStore.setState({ booksData: bookData('toc') });
+
+      // The sidebar writes its tab to the book config only (#6836)...
+      useBookDataStore.setState({ booksData: bookData('annotations') });
+      // ...then a live setting (upstream: Read Aloud's position) is saved through the live settings.
+      useReaderStore.getState().setViewSettings(key, { ...live, defaultFontSize: 21 });
+
+      const saved = useBookDataStore.getState().booksData['bookid']!.config!.viewSettings!;
+      expect(saved.sideBarTab).toBe('annotations');
+      expect(saved.defaultFontSize).toBe(21);
     });
 
     test('setViewSettings does nothing for empty key', () => {

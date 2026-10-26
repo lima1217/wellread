@@ -16,10 +16,10 @@ describe('transformStylesheet', () => {
   const VERTICAL = false;
 
   describe('text-align center + text-indent 0', () => {
-    it('adds !important to both text-align and text-indent when both present in same rule', () => {
+    it('adds !important only to text-indent when both present in same rule', () => {
       const css = '.centered { text-align: center; text-indent: 0; }';
       const result = transformStylesheet(css, VW, VH, VERTICAL);
-      expect(result).toContain('text-align: center !important');
+      expect(result).not.toContain('text-align: center !important');
       expect(result).toContain('text-indent: 0 !important');
     });
 
@@ -37,16 +37,51 @@ describe('transformStylesheet', () => {
   });
 
   describe('white-space nowrap', () => {
-    it('adds overflow clip !important when no overflow is set', () => {
+    // A nowrapped line must not spill past the column into the margin or the
+    // next page, so it is clipped along the line. Clipping the other axis too
+    // cut off whatever rises above or hangs below the line box, such as a
+    // top-aligned footnote icon in a <sup> on the first line (#6797).
+    it('clips a nowrapped element along the line only', () => {
       const css = '.nowrap { white-space: nowrap; }';
       const result = transformStylesheet(css, VW, VH, VERTICAL);
-      expect(result).toContain('overflow: clip !important');
+      expect(result).toContain('overflow-x: clip !important');
+      expect(result).not.toContain('overflow-y: clip');
+      expect(result).not.toMatch(/[^-]overflow: clip/);
     });
 
-    it('does not add overflow clip when overflow is already set', () => {
+    it('clips a nowrapped element vertically in vertical writing', () => {
+      const css = '.nowrap { white-space: nowrap; }';
+      const result = transformStylesheet(css, VW, VH, true);
+      expect(result).toContain('overflow-y: clip !important');
+      expect(result).not.toContain('overflow-x: clip');
+    });
+
+    // A nowrapped rule that sizes its own box (height, max-height, line clamp)
+    // may rely on the box clipping its content, so it keeps the old clip on
+    // both axes; only unsized nowrapped elements let content rise past the line.
+    it('keeps clipping both axes when the rule sets its own height', () => {
+      for (const sizing of ['height: 2em', 'max-height: 3em', '-webkit-line-clamp: 2']) {
+        const css = `.box { white-space: nowrap; ${sizing}; }`;
+        const result = transformStylesheet(css, VW, VH, VERTICAL);
+        expect(result).toContain('overflow: clip !important');
+        expect(result).not.toContain('overflow-x: clip');
+      }
+    });
+
+    it('treats line-height and min-height as unsized (the #6797 rule)', () => {
+      const css =
+        '.adapt-poem-c { text-indent: 0; text-align: center; font-size: 1.0em; ' +
+        'margin: 0.85em auto; word-break: break-all; white-space: nowrap; ' +
+        'letter-spacing: normal; line-height: 1.7; min-height: 1em; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain('overflow-x: clip !important');
+      expect(result).not.toMatch(/[^-]overflow: clip/);
+    });
+
+    it('does not add a clip when overflow is already set', () => {
       const css = '.nowrap { white-space: nowrap; overflow: hidden; }';
       const result = transformStylesheet(css, VW, VH, VERTICAL);
-      expect(result).not.toContain('overflow: clip !important');
+      expect(result).not.toContain('clip !important');
     });
   });
 
@@ -207,6 +242,22 @@ describe('transformStylesheet', () => {
       const result = transformStylesheet(css, VW, VH, VERTICAL);
       expect(result).toContain('color: var(--theme-fg-color)');
     });
+
+    it('replaces black written with an alpha digit', () => {
+      for (const black of ['#000f', '#000000ff']) {
+        const result = transformStylesheet(`.text { color: ${black}; }`, VW, VH, VERTICAL);
+        expect(result).toContain('color: var(--theme-fg-color);');
+      }
+    });
+
+    // `#000` matched the start of `#0000FF`, leaving `var(--theme-fg-color)0FF`,
+    // which is invalid when computed, so the link fell back to the text color (#6858)
+    it('keeps a color that only starts like black', () => {
+      for (const color of ['#0000FF', '#000080', '#0001', '#00000080']) {
+        const result = transformStylesheet(`a { color: ${color}; }`, VW, VH, VERTICAL);
+        expect(result).toContain(`color: ${color};`);
+      }
+    });
   });
 
   describe('font-weight normal to var(--font-weight)', () => {
@@ -263,6 +314,165 @@ describe('transformStylesheet', () => {
       const result = transformStylesheet(css, VW, VH, true);
       expect(result).not.toContain('margin-left: calc(-1');
       expect(result).not.toContain('margin-right: calc(-1');
+    });
+  });
+
+  describe('background-attachment fixed (issue 5711)', () => {
+    it('rewrites background-attachment: fixed to scroll', () => {
+      const css =
+        '#b1 { background-image: url(../Images/t1.png); background-attachment: fixed; background-position: top left; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain('background-attachment: scroll');
+      expect(result).not.toMatch(/background-attachment\s*:\s*fixed/);
+    });
+
+    it('rewrites the fixed keyword inside the background shorthand', () => {
+      const css = '.hero { background: url(../Images/t2.png) no-repeat fixed bottom right; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain('no-repeat scroll bottom right');
+      expect(result).not.toMatch(/\bfixed\b/);
+    });
+
+    it('rewrites every layer of a multi-layer background-attachment list', () => {
+      const css = '.multi { background-attachment: fixed, scroll, fixed; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain('background-attachment: scroll, scroll, scroll');
+    });
+
+    it('preserves !important when rewriting fixed', () => {
+      const css = '.b { background-attachment: fixed !important; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain('background-attachment: scroll !important');
+    });
+
+    it('does not touch url() values containing the word fixed', () => {
+      const css = '.logo { background: url(images/fixed.png) no-repeat; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain('url(images/fixed.png)');
+    });
+
+    it('does not touch fixed inside var() or other functions', () => {
+      const css = '.b { background-attachment: var(--fixed, fixed); }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain('var(--fixed, fixed)');
+    });
+
+    it('rewrites fixed after a data URI whose semicolons would end the declaration match', () => {
+      const css = '.d { background: url(data:image/png;base64,AAAA) no-repeat fixed top left; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain('url(data:image/png;base64,AAAA)');
+      expect(result).toContain('no-repeat scroll top left');
+    });
+
+    it('does not corrupt a quoted url containing a closing paren and the word fixed', () => {
+      const css = '.q { background: url("weird) fixed.png") fixed; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain('url("weird) fixed.png")');
+      expect(result).toContain('scroll');
+      expect(result).not.toContain('scroll.png');
+    });
+
+    it('rewrites fixed in inline styles', () => {
+      const css = 'background-image: url(t1.png); background-attachment: fixed';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain('background-attachment: scroll');
+    });
+
+    it('does not touch position: fixed', () => {
+      const css = '.pinned { position: fixed; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain('position: fixed');
+    });
+  });
+
+  describe('negative horizontal margins with background (issue 5711)', () => {
+    const OVERRIDE = 'margin-left: 0 !important; margin-right: 0 !important;';
+
+    it('zeroes horizontal margins when the shorthand has negative left/right components', () => {
+      const css =
+        'h1.title { background-color: #0069B7; color: white; margin: -2em -2em 1.5em -2em; padding-top: 3em; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain(OVERRIDE);
+    });
+
+    it('zeroes horizontal margins for a two-value shorthand with a negative horizontal component', () => {
+      const css = '.band { background-color: red; margin: 1em -3em; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain(OVERRIDE);
+    });
+
+    it('zeroes horizontal margins for negative margin-left/right longhands', () => {
+      const css = '.band { background: #333; margin-left: -32px; margin-right: -1.5em; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain(OVERRIDE);
+    });
+
+    it('wins over an authored !important margin via later cascade order', () => {
+      const css = '.band { background-color: blue; margin: -2em -2em 1em -2em !important; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain(OVERRIDE);
+    });
+
+    it('zeroes only the side whose resolved value is negative', () => {
+      const css = '.band { background-color: red; margin: 1em -2em 3em 4em; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain('margin-right: 0 !important');
+      expect(result).not.toContain('margin-left: 0 !important');
+    });
+
+    it('resolves later declarations over earlier ones per side', () => {
+      const css = '.band { background-color: red; margin: -2em; margin-left: 1em; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain('margin-right: 0 !important');
+      expect(result).not.toContain('margin-left: 0 !important');
+    });
+
+    it('detects a painting background declared after background: none', () => {
+      const css = '.band { background: none; background-color: red; margin: 0 -2em; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).toContain(OVERRIDE);
+    });
+
+    it('treats alpha-zero colors as non-painting', () => {
+      const css = '.hang { background-color: rgba(0, 0, 0, 0); margin: 0 -2em; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).not.toContain('margin-right: 0 !important');
+    });
+
+    it('leaves negative margins alone when the rule paints no background', () => {
+      const css = '.hang { margin-left: -1em; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).not.toContain(OVERRIDE);
+    });
+
+    it('leaves negative margins alone when the background is none or transparent', () => {
+      const css = '.hang { background: none; margin-left: -1em; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).not.toContain(OVERRIDE);
+    });
+
+    it('leaves rules alone when only the vertical margin is negative', () => {
+      const css = '.band { background-color: red; margin: -2em 1em 2em; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).not.toContain(OVERRIDE);
+    });
+
+    it('preserves auto centering when the horizontal component is auto', () => {
+      const css = '.pull { background-color: red; margin: -1em auto; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).not.toContain(OVERRIDE);
+    });
+
+    it('skips shorthands containing calc() or var()', () => {
+      const css = '.band { background-color: red; margin: calc(0px - 2em) 0; }';
+      const result = transformStylesheet(css, VW, VH, VERTICAL);
+      expect(result).not.toContain(OVERRIDE);
+    });
+
+    it('does not zero margins when vertical is true', () => {
+      const css = 'h1.title { background-color: blue; margin: -2em -2em 1.5em -2em; }';
+      const result = transformStylesheet(css, VW, VH, true);
+      expect(result).not.toContain(OVERRIDE);
     });
   });
 
@@ -332,6 +542,129 @@ describe('transformStylesheet', () => {
       const result = transformStylesheet(css, VW, VH, VERTICAL);
       expect(result).toContain('background-color: #222');
       localStorage.removeItem('themeMode');
+    });
+  });
+
+  // The paginator sizes the section iframe to the whole multi-column strip, so
+  // `(orientation: ...)` inside a section describes the strip, not a page — and
+  // the strip is derived from the content, so the query and the page count feed
+  // each other and the layout never settles (#6038).
+  describe('orientation media queries', () => {
+    const LANDSCAPE_CSS = '@media screen and (orientation: landscape) { div { column-count: 2; } }';
+    const PORTRAIT_CSS = '@media screen and (orientation:portrait) { div { column-count: 2; } }';
+
+    it('keeps a landscape block when the reader viewport is landscape', () => {
+      const result = transformStylesheet(LANDSCAPE_CSS, 1000, 800, VERTICAL);
+      expect(result).toContain('@media screen and (min-width: 0px)');
+      expect(result).not.toContain('orientation');
+    });
+
+    it('drops a landscape block when the reader viewport is portrait', () => {
+      const result = transformStylesheet(LANDSCAPE_CSS, 800, 1000, VERTICAL);
+      expect(result).toContain('@media screen and (min-width: 999999px)');
+      expect(result).not.toContain('orientation');
+    });
+
+    it('keeps a portrait block when the reader viewport is portrait', () => {
+      const result = transformStylesheet(PORTRAIT_CSS, 800, 1000, VERTICAL);
+      expect(result).toContain('@media screen and (min-width: 0px)');
+    });
+
+    it('drops a portrait block when the reader viewport is landscape', () => {
+      const result = transformStylesheet(PORTRAIT_CSS, 1000, 800, VERTICAL);
+      expect(result).toContain('@media screen and (min-width: 999999px)');
+    });
+
+    it('leaves the rest of the query and its declarations intact', () => {
+      const result = transformStylesheet(LANDSCAPE_CSS, VW, VH, VERTICAL);
+      expect(result).toContain('div { column-count: 2; }');
+      expect(result.startsWith('@media screen and ')).toBe(true);
+    });
+
+    it('leaves a media query with no viewport feature alone', () => {
+      const css = '@media print { div { padding: 1em; } }';
+      expect(transformStylesheet(css, VW, VH, VERTICAL)).toContain('@media print {');
+    });
+
+    it('leaves the literal alone in a declaration value', () => {
+      const css = '.q::after { content: "(orientation: landscape)"; }';
+      expect(transformStylesheet(css, VW, VH, VERTICAL)).toContain(
+        'content: "(orientation: landscape)"',
+      );
+    });
+
+    it('leaves the literal alone in an attribute selector', () => {
+      const css = '[data-q="(orientation: portrait)"] { padding: 1em; }';
+      expect(transformStylesheet(css, VW, VH, VERTICAL)).toContain(
+        '[data-q="(orientation: portrait)"]',
+      );
+    });
+  });
+
+  // Same circular dependency as the orientation feature: a two-page section
+  // makes the strip twice as wide, so a width query can flip on the page count
+  // it is itself deciding. The IDPF sample's `(max-width: 480px)` block does
+  // exactly that through `h1 { margin: 50% auto 0 0 }`.
+  describe('width and height media queries', () => {
+    const small = (feature: string) => `@media screen and (${feature}) { h1 { margin: 50%; } }`;
+
+    it('drops a max-width block when the reader viewport is wider', () => {
+      expect(transformStylesheet(small('max-width: 480px'), 1000, 800, VERTICAL)).toContain(
+        '(min-width: 999999px)',
+      );
+    });
+
+    it('keeps a max-width block when the reader viewport is narrower', () => {
+      expect(transformStylesheet(small('max-width:480px'), 390, 800, VERTICAL)).toContain(
+        '@media screen and (min-width: 0px)',
+      );
+    });
+
+    it('keeps a min-width block when the reader viewport is wide enough', () => {
+      expect(transformStylesheet(small('min-width: 600px'), 1000, 800, VERTICAL)).toContain(
+        '@media screen and (min-width: 0px)',
+      );
+    });
+
+    it('drops a min-width block when the reader viewport is too narrow', () => {
+      expect(transformStylesheet(small('min-width: 600px'), 390, 800, VERTICAL)).toContain(
+        '(min-width: 999999px)',
+      );
+    });
+
+    it('resolves height features against the reader viewport height', () => {
+      expect(transformStylesheet(small('max-height: 500px'), 1000, 800, VERTICAL)).toContain(
+        '(min-width: 999999px)',
+      );
+      expect(transformStylesheet(small('min-height: 500px'), 1000, 800, VERTICAL)).toContain(
+        '@media screen and (min-width: 0px)',
+      );
+    });
+
+    it('leaves a length it cannot resolve to px alone', () => {
+      expect(transformStylesheet(small('max-width: 30em'), 1000, 800, VERTICAL)).toContain(
+        '(max-width: 30em)',
+      );
+    });
+
+    it('leaves the same feature alone outside a media prelude', () => {
+      const css = '[data-q="(max-width: 480px)"] { padding: 1em; }';
+      expect(transformStylesheet(css, VW, VH, VERTICAL)).toContain('[data-q="(max-width: 480px)"]');
+    });
+
+    it('leaves a whole prelude alone when it sits inside a quoted value', () => {
+      const css = '.note::before { content: "@media (orientation: landscape)"; }';
+      expect(transformStylesheet(css, VW, VH, VERTICAL)).toContain(
+        'content: "@media (orientation: landscape)"',
+      );
+    });
+
+    it('does not let a quoted at-rule swallow the rules that follow it', () => {
+      const css =
+        '.note::before { content: "@media screen"; } @media (max-width: 480px) { p { margin: 0; } }';
+      const result = transformStylesheet(css, 390, 800, VERTICAL);
+      expect(result).toContain('content: "@media screen"');
+      expect(result).toContain('@media (min-width: 0px) {');
     });
   });
 });

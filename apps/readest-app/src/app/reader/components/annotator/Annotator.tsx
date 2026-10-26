@@ -48,7 +48,7 @@ import {
 } from '../../utils/deferredAction';
 import { Insets } from '@/types/misc';
 import { runSimpleCC } from '@/utils/simplecc';
-import { getWordCount } from '@/utils/word';
+import { getWordCount, isSingleLookupTerm } from '@/utils/word';
 import { getIndexFromCfi } from '@/utils/cfi';
 import { writeTextToClipboard } from '@/utils/clipboard';
 import { canShareText, shareSelectedText } from '@/utils/share';
@@ -302,6 +302,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
+    handleMouseDown,
     handlePointerDown,
     handlePointerMove,
     handleNativeTouchMove,
@@ -381,6 +382,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
         opts,
       );
     }
+    detail.doc?.addEventListener('mousedown', handleMouseDown);
     detail.doc?.addEventListener('pointerdown', handlePointerDown.bind(null, doc, index), opts);
     detail.doc?.addEventListener('pointermove', handlePointerMove.bind(null, doc, index), opts);
     detail.doc?.addEventListener('pointercancel', handlePointerCancel.bind(null, doc, index));
@@ -869,7 +871,14 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
           handleSearch();
           break;
         case 'dictionary':
-          handleDictionary();
+          // A dictionary lookup only makes sense for a single word (or a short
+          // CJK term); on a longer selection fall back to the annotation
+          // toolbar so highlighting and copying stay reachable (#5213).
+          if (selection && isSingleLookupTerm(selection.text)) {
+            handleDictionary();
+          } else {
+            handleShowAnnotPopup();
+          }
           break;
         case 'ask':
           handleAskAssistant();
