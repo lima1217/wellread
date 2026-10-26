@@ -1998,5 +1998,10 @@
   "Failed to save note": "無法儲存筆記",
   "No AI notes for this book yet": "這本書還沒有 AI 筆記",
   "Ask the assistant with /note to take notes on a chapter.": "在對話中用 /note 讓助手為章節做筆記。",
-  "Edit note": "編輯批註"
+  "Edit note": "編輯批註",
+  "History": "歷史",
+  "Save the quoted passage, with my note on it if I wrote one, to my notes (write directly).": "把引用的段落連同我寫的批註（如果有）儲存到我的筆記（直接寫入）。",
+  "This note changed after you opened it. Replace it with your edit?": "這頁筆記在你開啟後被改動過。要用你的修改覆蓋嗎？",
+  "Delete this note page?": "刪除這頁筆記？",
+  "Failed to delete note": "無法刪除筆記"
 }

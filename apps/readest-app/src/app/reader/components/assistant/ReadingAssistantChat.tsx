@@ -266,6 +266,10 @@ export const ReadingAssistantChat = ({
       label: _('Connect to earlier'),
       message: _('How does the quoted passage connect to what came before?'),
     },
+    {
+      label: _('Save to notes'),
+      message: `/skill:note ${_('Save the quoted passage, with my note on it if I wrote one, to my notes (write directly).')}`,
+    },
   ];
   const followUps: Suggestion[] = [
     { label: _('Tell me more'), message: _('Go deeper on that.') },

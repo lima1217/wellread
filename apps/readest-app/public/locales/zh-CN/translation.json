@@ -1998,5 +1998,10 @@
   "Failed to save note": "无法保存笔记",
   "No AI notes for this book yet": "这本书还没有 AI 笔记",
   "Ask the assistant with /note to take notes on a chapter.": "在对话里用 /note 让助手为章节做笔记。",
-  "Edit note": "编辑批注"
+  "Edit note": "编辑批注",
+  "History": "历史",
+  "Save the quoted passage, with my note on it if I wrote one, to my notes (write directly).": "把引用的段落连同我写的批注（如果有）保存到我的笔记（直接写入）。",
+  "This note changed after you opened it. Replace it with your edit?": "这页笔记在你打开后被改动过。要用你的修改覆盖吗？",
+  "Delete this note page?": "删除这页笔记？",
+  "Failed to delete note": "无法删除笔记"
 }

@@ -186,7 +186,7 @@ vi.mock('@/app/reader/components/assistant/NoteEditor', () => ({
 }));
 
 import { act } from '@testing-library/react';
-import { useNotebookStore } from '@/store/notebookStore';
+import { useAnnotationNoteStore } from '@/store/annotationNoteStore';
 import type { TextSelection } from '@/utils/sel';
 import AssistantPanel from '@/app/reader/components/assistant/AssistantPanel';
 
@@ -212,7 +212,7 @@ describe('AssistantPanel chat↔history pane', () => {
     expect(chatLifecycle.mounts).toBe(1);
     expect(chatLifecycle.unmounts).toBe(0);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Chat History' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'History' }));
 
     expect(screen.getByTestId('chat-history')).toBeTruthy();
     expect(screen.getByTestId('ai-assistant')).toBeTruthy();
@@ -220,28 +220,28 @@ describe('AssistantPanel chat↔history pane', () => {
     expect(chatLifecycle.mounts).toBe(1);
   });
 
-  it('opens Highlights & Notes next to Chat History and returns to chat', () => {
+  it('switches to Highlights from the tab row and back to chat', () => {
     render(<AssistantPanel />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Highlights & Notes' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Highlights' }));
 
     expect(screen.getByTestId('annotations')).toBeTruthy();
     expect(screen.getByTestId('ai-assistant')).toBeTruthy();
     expect(chatLifecycle.unmounts).toBe(0);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
     expect(screen.queryByTestId('annotations')).toBeNull();
   });
 
-  it('opens AI Notes from the chat header and returns to chat', () => {
+  it('switches to AI Notes from the tab row and back to chat', () => {
     render(<AssistantPanel />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI Notes' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'AI Notes' }));
 
     expect(screen.getByTestId('ai-notes')).toBeTruthy();
     expect(chatLifecycle.unmounts).toBe(0);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
     expect(screen.queryByTestId('ai-notes')).toBeNull();
   });
 
@@ -250,15 +250,25 @@ describe('AssistantPanel chat↔history pane', () => {
     expect(screen.queryByTestId('note-editor')).toBeNull();
 
     act(() => {
-      useNotebookStore
+      useAnnotationNoteStore
         .getState()
-        .setNotebookNewAnnotation({ key: 's', text: 'Hello', page: 1 } as TextSelection);
+        .setNewAnnotation({ key: 's', text: 'Hello', page: 1 } as TextSelection);
     });
 
     expect(screen.getByTestId('note-editor')).toBeTruthy();
     expect(screen.getByTestId('annotations')).toBeTruthy();
     expect(chatLifecycle.unmounts).toBe(0);
-    act(() => useNotebookStore.getState().setNotebookNewAnnotation(null));
+    act(() => useAnnotationNoteStore.getState().setNewAnnotation(null));
+  });
+
+  it('marks the active pane in the tab row', () => {
+    render(<AssistantPanel />);
+    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'History' }));
+
+    expect(screen.getByRole('tab', { name: 'History' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('false');
   });
 
   it('keeps AIAssistant mounted when the panel is closed after opening', () => {

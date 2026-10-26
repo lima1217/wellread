@@ -14,7 +14,7 @@ import { useBookProgress } from '@/store/readerProgressStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useReaderStore } from '@/store/readerStore';
 import { useSidebarStore } from '@/store/sidebarStore';
-import { useNotebookStore } from '@/store/notebookStore';
+import { useAnnotationNoteStore } from '@/store/annotationNoteStore';
 import { useAssistantPanelStore } from '@/store/assistantPanelStore';
 import { useCustomDictionaryStore } from '@/store/customDictionaryStore';
 import { isSystemDictionaryEnabled } from '@/services/dictionaries/registry';
@@ -117,7 +117,7 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
   useHardcoverSync(bookKey);
   const { openReadingAssistant } = useOpenReadingAssistant();
   const { setAssistantPanelVisible } = useAssistantPanelStore();
-  const { setNotebookNewAnnotation, setNotebookNewHighlightId } = useNotebookStore();
+  const { setNewAnnotation, setNewHighlightId } = useAnnotationNoteStore();
 
   useEffect(() => {
     void loadCustomDictionaries(envConfig).catch((error) => {
@@ -1159,11 +1159,11 @@ const Annotator: React.FC<{ bookKey: string; contentInsets: Insets }> = ({
     const created = handleHighlight(true);
     // The note editor lives on the Reading Assistant panel's highlights pane.
     setAssistantPanelVisible(true);
-    setNotebookNewAnnotation(selection);
+    setNewAnnotation(selection);
     // Remember the eagerly-created highlight so the panel can remove it if the
     // note is never saved. A restyle of an existing highlight returns null — that
     // record predates this flow and must survive a cancel (#4791).
-    setNotebookNewHighlightId(created?.id ?? null);
+    setNewHighlightId(created?.id ?? null);
     handleDismissPopup();
   };
 

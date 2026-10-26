@@ -26,7 +26,7 @@ import { isSafeBookIdSegment } from '../agent/notesOkf.mjs';
 import { normalizeReaderState } from '../agent/prompt.mjs';
 import { runTurn } from '../agent/runTurn.mjs';
 import { discoverSkills } from '../agent/skills/discover.mjs';
-import { listNotes, readNote, writeNote } from './notesApi.mjs';
+import { deleteNote, listNotes, readNote, writeNote } from './notesApi.mjs';
 import {
   buildAllowedOriginSet,
   corsHeaders as buildCorsHeaders,
@@ -218,7 +218,15 @@ const server = http.createServer(async (req, res) => {
         result = await readNote(booksRootEnv, bookId, url.searchParams.get('path'));
       } else if (req.method === 'POST' && path === '/eve/v1/notes/file') {
         const body = await readJson(req);
-        result = await writeNote(booksRootEnv, body.bookId, body.path, body.content);
+        result = await writeNote(
+          booksRootEnv,
+          body.bookId,
+          body.path,
+          body.content,
+          body.expectedMtimeMs,
+        );
+      } else if (req.method === 'DELETE' && path === '/eve/v1/notes/file') {
+        result = await deleteNote(booksRootEnv, bookId, url.searchParams.get('path'));
       }
       if (result) {
         const { ok, status, ...rest } = result;

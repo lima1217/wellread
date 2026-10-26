@@ -61,7 +61,7 @@ Fail-closed at boot: missing `EVE_LOOPBACK_TOKEN` exits non-zero unless `EVE_ALL
 | `GET` | `/health` | Plain `ok` |
 | `GET` | `/eve/v1/skills` | Skill catalog (`includeDisabled=1` optional) |
 | `GET` | `/eve/v1/notes?bookId=` | Note-skill package pages for a book (`files`, index.md first) |
-| `GET/POST` | `/eve/v1/notes/file` | Read (`?bookId=&path=`) / save (body `bookId`, `path`, `content`) one page; same path gate as `write_file` |
+| `GET/POST/DELETE` | `/eve/v1/notes/file` | Read (`?bookId=&path=`, returns `content`, `mtimeMs`) / save (body `bookId`, `path`, `content`, optional `expectedMtimeMs` → 409 `note_changed` when the page changed since) / delete (`?bookId=&path=`) one page; same path gate as `write_file` |
 | `GET/POST` | `/eve/v1/sessions` | List / create (`bookId` required) |
 | `GET/DELETE` | `/eve/v1/sessions/:id` | Load / remove (turn mutex on DELETE) |
 | `POST` | `/eve/v1/sessions/:id/turns` | Stream UIMessage chunks. Body: `message`, optional `thinkingMode`, `readerState`, `spoilerGuard: true`, `truncateFrom: <user message id>` (regenerate / edit: drops that turn and everything after; 409 `truncate_target_not_found` otherwise) |

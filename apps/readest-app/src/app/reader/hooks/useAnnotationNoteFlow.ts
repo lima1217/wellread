@@ -3,7 +3,7 @@ import { useEnv } from '@/context/EnvContext';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useBookDataStore } from '@/store/bookDataStore';
 import { useReaderStore } from '@/store/readerStore';
-import { useNotebookStore } from '@/store/notebookStore';
+import { useAnnotationNoteStore } from '@/store/annotationNoteStore';
 import { BookNote } from '@/types/book';
 import { NOTE_PREFIX } from '@/types/view';
 import { TextSelection } from '@/utils/sel';
@@ -23,8 +23,7 @@ export function useAnnotationNoteFlow(bookKey: string | null) {
   const { settings } = useSettingsStore();
   const { getConfig, saveConfig, updateBooknotes } = useBookDataStore();
   const { getView, getViewsById, getProgress } = useReaderStore();
-  const { setNotebookNewAnnotation, setNotebookNewHighlightId, setNotebookEditAnnotation } =
-    useNotebookStore();
+  const { setNewAnnotation, setNewHighlightId, setEditAnnotation } = useAnnotationNoteStore();
 
   // Abandon a note-creation flow: tear down the empty highlight the "Annotate"
   // action eagerly created as the note anchor so it doesn't leak into the
@@ -34,13 +33,13 @@ export function useAnnotationNoteFlow(bookKey: string | null) {
   // book-switch cleanup targets the book the placeholder belongs to.
   const handleCancelNewAnnotation = useCallback(
     (bookKey: string | null) => {
-      const { notebookNewHighlightId } = useNotebookStore.getState();
-      if (bookKey && notebookNewHighlightId) {
+      const { newHighlightId } = useAnnotationNoteStore.getState();
+      if (bookKey && newHighlightId) {
         const config = getConfig(bookKey);
         const { booknotes: annotations = [] } = config || {};
         const placeholder = removeEmptyAnnotationPlaceholder(
           annotations,
-          notebookNewHighlightId,
+          newHighlightId,
           Date.now(),
         );
         if (placeholder) {
@@ -54,8 +53,8 @@ export function useAnnotationNoteFlow(bookKey: string | null) {
           }
         }
       }
-      setNotebookNewHighlightId(null);
-      setNotebookNewAnnotation(null);
+      setNewHighlightId(null);
+      setNewAnnotation(null);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -110,10 +109,10 @@ export function useAnnotationNoteFlow(bookKey: string | null) {
     if (updatedConfig) {
       saveConfig(envConfig, bookKey, updatedConfig, settings);
     }
-    setNotebookNewAnnotation(null);
+    setNewAnnotation(null);
     // The placeholder now carries a note (or a fresh unified record was created),
     // so it's a real annotation — drop the cancel-cleanup handle (#4791).
-    setNotebookNewHighlightId(null);
+    setNewHighlightId(null);
   };
 
   const handleEditNote = (note: BookNote, isDelete: boolean) => {
@@ -136,7 +135,7 @@ export function useAnnotationNoteFlow(bookKey: string | null) {
     if (updatedConfig) {
       saveConfig(envConfig, bookKey, updatedConfig, settings);
     }
-    setNotebookEditAnnotation(null);
+    setEditAnnotation(null);
   };
 
   return { handleSaveNote, handleEditNote, handleCancelNewAnnotation };
