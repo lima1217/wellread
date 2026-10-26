@@ -56,6 +56,22 @@ describe('createBooksFsSession', () => {
     }
   });
 
+  it('refuses files over maxBytes without reading them', async () => {
+    const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-books-')));
+    try {
+      writeFileSync(join(booksRoot, 'big.bin'), 'x'.repeat(10));
+      const session = createBooksFsSession({ getBooksRoot: () => booksRoot });
+      await assert.rejects(() => session.readFile({ path: 'big.bin', maxBytes: 9 }), {
+        code: 'FILE_TOO_LARGE',
+      });
+      const ok = await session.readFile({ path: 'big.bin', maxBytes: 10 });
+      assert.equal(ok?.byteLength, 10);
+      assert.equal(await session.readFile({ path: 'missing.bin', maxBytes: 10 }), null);
+    } finally {
+      rmSync(booksRoot, { recursive: true, force: true });
+    }
+  });
+
   it('does not mkdir outside Books via a .wellread symlink before rejecting write', async () => {
     const booksRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-books-')));
     const outside = realpathSync(mkdtempSync(join(tmpdir(), 'wellread-outside-')));

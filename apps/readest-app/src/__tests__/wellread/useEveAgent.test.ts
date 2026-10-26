@@ -1007,6 +1007,45 @@ describe('useEveAgent', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('keeps the replaced exchange when Stop aborts a regenerate', async () => {
+    getEveSession.mockResolvedValue({
+      ...sessionMeta('ses_existing'),
+      messages: [
+        { id: 'u1', role: 'user', content: 'Who?', createdAt: 1 },
+        { id: 'a1', role: 'assistant', content: 'Old answer.', createdAt: 2 },
+      ],
+    });
+    streamEveTurn.mockImplementation(async function* (_sid, _msg, signal: AbortSignal) {
+      yield assistantUi('a2', [textPart('partial ')]);
+      await new Promise<never>((_resolve, reject) => {
+        const fail = () => reject(new Error('Request cancelled'));
+        if (signal.aborted) fail();
+        else signal.addEventListener('abort', fail, { once: true });
+      });
+    });
+
+    const { result } = renderHook(() =>
+      useEveAgent({ bookId: 'book-1', bookTitle: 'Middlemarch', sessionId: 'ses_existing' }),
+    );
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(2);
+    });
+
+    let sendPromise!: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.send({ message: 'Who?', truncateFrom: 'u1' });
+    });
+    await act(async () => {
+      result.current.stop();
+    });
+    await act(async () => {
+      await sendPromise;
+    });
+
+    expect(result.current.messages.map((m) => m.id)).toEqual(['u1', 'a1']);
+    expect(result.current.status).toBe('ready');
+  });
+
   it('asks the sidecar to cancel the active session turn on Stop', async () => {
     getEveSession.mockResolvedValue({
       id: 'ses_existing',

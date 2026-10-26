@@ -6,7 +6,7 @@
 
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -16,6 +16,11 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
 const HEALTH_POLL: Duration = Duration::from_millis(200);
+/// Auto-restarts after unexpected exits before giving up (crash loop guard).
+const MAX_CRASH_RESTARTS: u32 = 5;
+/// A child that ran at least this long resets the crash-restart count.
+const STABLE_UPTIME: Duration = Duration::from_secs(60);
+const RESTART_BACKOFF_MAX: Duration = Duration::from_secs(30);
 pub const EVE_SIDECAR_CHANGED_EVENT: &str = "eve-sidecar-changed";
 
 const DEFAULT_BASE_URL: &str = "https://api.deepseek.com/v1";
@@ -63,6 +68,8 @@ struct EveSidecarInner {
     /// Bumped on each start attempt so a stale health-check finish cannot
     /// overwrite a newer reload (last writer wins by generation).
     generation: u64,
+    /// Consecutive auto-restarts of children that died before `STABLE_UPTIME`.
+    crash_restarts: u32,
 }
 
 pub struct EveSidecarState {
@@ -81,6 +88,7 @@ impl EveSidecarState {
                 last_api_key: None,
                 last_fingerprint: None,
                 generation: 0,
+                crash_restarts: 0,
             }),
             start_lock: Mutex::new(()),
         }
@@ -229,7 +237,7 @@ fn read_model_config_from_settings(app: &AppHandle) -> ModelConfigPayload {
     parse_model_config_from_value(&value)
 }
 
-fn resolve_node_bin(app: &AppHandle) -> PathBuf {
+fn resolve_node_bin(app: &AppHandle) -> Result<PathBuf, String> {
     let triple = env!("WELLREAD_TARGET");
     let sidecar_name = format!("node-{triple}");
 
@@ -239,11 +247,11 @@ fn resolve_node_bin(app: &AppHandle) -> PathBuf {
         if let Some(dir) = exe.parent() {
             let bundled = dir.join("node");
             if bundled.exists() {
-                return bundled;
+                return Ok(bundled);
             }
             let triple_named = dir.join(&sidecar_name);
             if triple_named.exists() {
-                return triple_named;
+                return Ok(triple_named);
             }
         }
     }
@@ -251,16 +259,20 @@ fn resolve_node_bin(app: &AppHandle) -> PathBuf {
     if let Ok(resource) = app.path().resource_dir() {
         let candidate = resource.join("binaries").join(&sidecar_name);
         if candidate.exists() {
-            return candidate;
+            return Ok(candidate);
         }
     }
     let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("binaries")
         .join(&sidecar_name);
     if dev.exists() {
-        return dev;
+        return Ok(dev);
     }
-    PathBuf::from("node")
+    // A shipped app must run its bundled runtime, never whatever `node` is on PATH.
+    if cfg!(debug_assertions) {
+        return Ok(PathBuf::from("node"));
+    }
+    Err(format!("bundled node runtime missing ({sidecar_name})"))
 }
 
 fn resolve_eve_output(app: &AppHandle) -> PathBuf {
@@ -383,7 +395,7 @@ fn start_or_restart_locked(
             return Ok(None);
         }
 
-        let node = resolve_node_bin(app);
+        let node = resolve_node_bin(app)?;
         let entry = resolve_eve_output(app);
         if !entry.exists() {
             return Err(format!("eve sidecar entry missing: {}", entry.display()));
@@ -424,8 +436,10 @@ fn start_or_restart_locked(
                 fingerprint.context_window_tokens.to_string(),
             )
             .env("EVE_MODEL_API_MODE", &fingerprint.api_mode)
-            .env("EVE_MODEL_API_KEY", api_key)
+            // Key goes over stdin, not env, so `ps -E` cannot read it.
+            .env("EVE_MODEL_API_KEY_STDIN", "1")
             .env("EVE_BOOKS_ROOT", resolve_books_root(app))
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
@@ -438,6 +452,14 @@ fn start_or_restart_locked(
         }
 
         let mut child = cmd.spawn().map_err(|e| format!("spawn eve sidecar: {e}"))?;
+        // Dropping stdin after the write sends EOF, which the sidecar waits for.
+        if let Some(mut stdin) = child.stdin.take() {
+            if let Err(err) = stdin.write_all(api_key.as_bytes()) {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("write eve sidecar api key: {err}"));
+            }
+        }
         let stdout = child.stdout.take().ok_or("missing sidecar stdout")?;
         if let Some(stderr) = child.stderr.take() {
             thread::spawn(move || {
@@ -519,8 +541,16 @@ fn start_or_restart_locked(
     Ok(Some(info))
 }
 
-/// Poll the managed child; on unexpected exit, clear info and `ensure` again.
+/// Delay before auto-restart attempt `attempt` (1-based): 1s, 2s, 4s, … capped.
+fn restart_backoff(attempt: u32) -> Duration {
+    let secs = 1u64 << attempt.saturating_sub(1).min(16);
+    Duration::from_secs(secs).min(RESTART_BACKOFF_MAX)
+}
+
+/// Poll the managed child; on unexpected exit, clear info and `ensure` again
+/// with exponential backoff, giving up after `MAX_CRASH_RESTARTS` quick deaths.
 fn spawn_child_watch(app: AppHandle, generation: u64) {
+    let started = Instant::now();
     thread::spawn(move || {
         loop {
             thread::sleep(Duration::from_millis(500));
@@ -539,8 +569,36 @@ fn spawn_child_watch(app: AppHandle, generation: u64) {
             if !dead {
                 continue;
             }
-            log::warn!("eve sidecar exited unexpectedly; restarting");
             emit_sidecar_changed(&app, None);
+            let attempt = {
+                let Ok(mut inner) = state.inner.lock() else {
+                    return;
+                };
+                if started.elapsed() >= STABLE_UPTIME {
+                    inner.crash_restarts = 0;
+                }
+                inner.crash_restarts += 1;
+                inner.crash_restarts
+            };
+            if attempt > MAX_CRASH_RESTARTS {
+                log::error!(
+                    "eve sidecar exited {MAX_CRASH_RESTARTS} times in a row; not restarting automatically"
+                );
+                return;
+            }
+            let delay = restart_backoff(attempt);
+            log::warn!(
+                "eve sidecar exited unexpectedly; restarting in {delay:?} (attempt {attempt})"
+            );
+            thread::sleep(delay);
+            // A reload or shutdown during the backoff owns the next start.
+            if !state
+                .inner
+                .lock()
+                .is_ok_and(|inner| inner.generation == generation)
+            {
+                return;
+            }
             let model = read_model_config_from_settings(&app);
             match ensure(&app, model) {
                 Ok(info) => emit_sidecar_changed(&app, info.as_ref()),
@@ -682,12 +740,14 @@ pub fn bootstrap(app: &AppHandle) {
 mod tests {
     use super::{
         fingerprint_of, health_ok, parse_listen_url, parse_model_config_from_value,
-        ModelConfigPayload, DEFAULT_BASE_URL, DEFAULT_CONTEXT_WINDOW, DEFAULT_MODEL_ID,
+        restart_backoff, ModelConfigPayload, DEFAULT_BASE_URL, DEFAULT_CONTEXT_WINDOW,
+        DEFAULT_MODEL_ID, RESTART_BACKOFF_MAX,
     };
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::Mutex;
     use std::thread;
+    use std::time::Duration;
 
     static PROXY_ENV_LOCK: Mutex<()> = Mutex::new(());
 
@@ -730,6 +790,15 @@ mod tests {
         assert_eq!(fp.context_window_tokens, DEFAULT_CONTEXT_WINDOW);
         assert_eq!(fp.api_mode, "chat");
         assert!(fp.enabled);
+    }
+
+    #[test]
+    fn restart_backoff_doubles_then_caps() {
+        assert_eq!(restart_backoff(1), Duration::from_secs(1));
+        assert_eq!(restart_backoff(2), Duration::from_secs(2));
+        assert_eq!(restart_backoff(4), Duration::from_secs(8));
+        assert_eq!(restart_backoff(6), RESTART_BACKOFF_MAX);
+        assert_eq!(restart_backoff(u32::MAX), RESTART_BACKOFF_MAX);
     }
 
     #[test]

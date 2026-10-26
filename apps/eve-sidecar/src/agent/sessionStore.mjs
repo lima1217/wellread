@@ -3,7 +3,15 @@
  * Each session is bound to a bookId (issue #7 / 05 §5.2).
  */
 
-import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { stripLeadingQuoteBlocks, stripQuoteWireProtection } from '@wellread/quote-wire';
@@ -44,18 +52,34 @@ export function isSafeSessionId(id) {
 /**
  * Drop the user message `messageId` and everything after it (regenerate /
  * edit-and-resend). Only user turns are valid targets so a turn boundary is
- * never split. Returns false (session untouched) when the id is not found.
+ * never split. Returns null (session untouched) when the id is not found.
+ *
+ * The returned `restore()` appends the dropped tail back so a replacement
+ * turn that is stopped or fails does not lose the original exchange.
+ * Idempotent; call it only after the replacement user turn is removed.
  * @param {Session} session
  * @param {string} messageId
- * @returns {boolean}
+ * @returns {{ restore: () => void } | null}
  */
 export function truncateSessionFrom(session, messageId) {
   const idx = session.messages.findIndex((m) => m.id === messageId);
-  if (idx < 0 || session.messages[idx].role !== 'user') return false;
+  if (idx < 0 || session.messages[idx].role !== 'user') return null;
+  const removed = session.messages.slice(idx);
+  const lastContextTokens = session.lastContextTokens;
   session.messages = session.messages.slice(0, idx);
   // Observed size described the longer history.
   delete session.lastContextTokens;
-  return true;
+  let restored = false;
+  return {
+    restore() {
+      if (restored) return;
+      restored = true;
+      session.messages = [...session.messages, ...removed];
+      if (lastContextTokens !== undefined && session.lastContextTokens === undefined) {
+        session.lastContextTokens = lastContextTokens;
+      }
+    },
+  };
 }
 
 /** Default title stamped at create time (History distinguishes after first turn). */
@@ -204,6 +228,12 @@ export function normalizeSession(raw) {
 export function createSessionStore(dataDir) {
   const root = join(dataDir, 'sessions');
   mkdirSync(root, { recursive: true });
+  /**
+   * list() metadata per file name, reused while mtime + size are unchanged so
+   * History does not re-parse every full transcript on each open.
+   * @type {Map<string, { stamp: string, meta: SessionMeta | null }>}
+   */
+  const metaCache = new Map();
 
   function pathFor(id) {
     if (!isSafeSessionId(id)) {
@@ -224,6 +254,7 @@ export function createSessionStore(dataDir) {
     const tmp = `${target}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(session, null, 2));
     renameSync(tmp, target);
+    metaCache.delete(`${session.id}.json`);
   }
 
   return {
@@ -267,25 +298,47 @@ export function createSessionStore(dataDir) {
     list(bookId) {
       /** @type {SessionMeta[]} */
       const out = [];
+      const seen = new Set();
       for (const name of readdirSync(root)) {
         if (!name.endsWith('.json')) continue;
+        seen.add(name);
+        let stamp;
         try {
-          const session = normalizeSession(
-            JSON.parse(readFileSync(join(root, name), 'utf8')),
-          );
-          if (!session) continue;
-          if (bookId && session.bookId !== bookId) continue;
-          out.push({
-            id: session.id,
-            bookId: session.bookId,
-            bookTitle: session.bookTitle,
-            title: session.title,
-            createdAt: session.createdAt,
-            updatedAt: session.updatedAt,
-          });
+          const st = statSync(join(root, name));
+          stamp = `${st.mtimeMs}:${st.size}`;
         } catch {
-          // skip corrupt
+          continue;
         }
+        let entry = metaCache.get(name);
+        if (!entry || entry.stamp !== stamp) {
+          /** @type {SessionMeta | null} */
+          let meta = null;
+          try {
+            const session = normalizeSession(
+              JSON.parse(readFileSync(join(root, name), 'utf8')),
+            );
+            if (session) {
+              meta = {
+                id: session.id,
+                bookId: session.bookId,
+                bookTitle: session.bookTitle,
+                title: session.title,
+                createdAt: session.createdAt,
+                updatedAt: session.updatedAt,
+              };
+            }
+          } catch {
+            // corrupt: cached as null and skipped until the file changes
+          }
+          entry = { stamp, meta };
+          metaCache.set(name, entry);
+        }
+        if (!entry.meta) continue;
+        if (bookId && entry.meta.bookId !== bookId) continue;
+        out.push({ ...entry.meta });
+      }
+      for (const name of metaCache.keys()) {
+        if (!seen.has(name)) metaCache.delete(name);
       }
       return out.sort((a, b) => b.updatedAt - a.updatedAt);
     },
@@ -306,6 +359,7 @@ export function createSessionStore(dataDir) {
       if (!isSafeSessionId(id)) return false;
       try {
         rmSync(pathFor(id));
+        metaCache.delete(`${id}.json`);
         return true;
       } catch {
         return false;

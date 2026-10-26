@@ -319,21 +319,23 @@ export function useEveAgent(options: UseEveAgentOptions) {
         setStatus('submitted');
         setComposer('');
         const truncateFrom = input?.truncateFrom;
-        setMessages((prev) => [
-          ...(truncateFrom && prev.some((m) => m.id === truncateFrom)
-            ? prev.slice(
-                0,
-                prev.findIndex((m) => m.id === truncateFrom),
-              )
-            : prev),
-          {
-            id: optimisticUserId,
-            role: 'user',
-            content: displayContent,
-            createdAt: Date.now(),
-            ...(optimisticQuotes ? { quotes: optimisticQuotes } : {}),
-          },
-        ]);
+        // Replaced exchange, put back locally if Stop aborts the replacement
+        // (the server restores it on disk the same way).
+        let truncatedTail: EveMessage[] = [];
+        setMessages((prev) => {
+          const cut = truncateFrom ? prev.findIndex((m) => m.id === truncateFrom) : -1;
+          truncatedTail = cut >= 0 ? prev.slice(cut) : [];
+          return [
+            ...(cut >= 0 ? prev.slice(0, cut) : prev),
+            {
+              id: optimisticUserId,
+              role: 'user',
+              content: displayContent,
+              createdAt: Date.now(),
+              ...(optimisticQuotes ? { quotes: optimisticQuotes } : {}),
+            },
+          ];
+        });
 
         const controller = new AbortController();
         abortRef.current = controller;
@@ -425,7 +427,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
             // fetch before the server may have re-persisted after dropInFlightUser,
             // and a stale getEveSession would resurrect the unanswered user.
             const dropIds = new Set([optimisticUserId, assistantId].filter(Boolean) as string[]);
-            setMessages((prev) => prev.filter((m) => !dropIds.has(m.id)));
+            setMessages((prev) => [...prev.filter((m) => !dropIds.has(m.id)), ...truncatedTail]);
             setStatus('ready');
             return;
           }

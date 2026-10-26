@@ -6,7 +6,7 @@
  * wire this into defineSandbox({ backend }) later.
  */
 
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { isSafeBookIdSegment } from '../agent/notesOkf.mjs';
 import { createNodeRealpathLookup } from './nodeLookup.mjs';
@@ -53,7 +53,11 @@ export function createBooksFsSession(options) {
       // no-op — Books backend does not gate network (model has no shell/network tools)
     },
 
-    async readFile({ path }) {
+    /**
+     * @param {{ path: string, maxBytes?: number }} input
+     * `maxBytes` refuses larger files (code FILE_TOO_LARGE) before reading them.
+     */
+    async readFile({ path, maxBytes }) {
       const workspacePath = resolveWorkspacePath(path);
       const booksRoot = normalizeAbsolute(options.getBooksRoot());
 
@@ -65,6 +69,11 @@ export function createBooksFsSession(options) {
       const auth = authorizeRead(workspacePath, booksRoot, lookup);
       if (!auth.ok) throw new Error(auth.reason);
       try {
+        if (maxBytes !== undefined && statSync(auth.realPath).size > maxBytes) {
+          throw Object.assign(new Error(`file exceeds ${maxBytes} bytes`), {
+            code: 'FILE_TOO_LARGE',
+          });
+        }
         return new Uint8Array(readFileSync(auth.realPath));
       } catch (err) {
         if (err.code === 'ENOENT') return null;
