@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
@@ -14,6 +15,11 @@ export default defineConfig({
   },
   resolve: {
     conditions: ['development'],
+    alias: {
+      // The tsconfig @pdfjs path only covers the app's own sources; foliate-js
+      // imports it too (pdf.js), so alias it here as vite.config.ts does.
+      '@pdfjs': resolve(import.meta.dirname, 'public/vendor/pdfjs'),
+    },
   },
   optimizeDeps: {
     include: [
