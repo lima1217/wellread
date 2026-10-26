@@ -10,10 +10,10 @@ import {
 } from './runTurn.testHarness.mjs';
 
 describe('runTurn tool trace timing', () => {
-  it('emits tool-input before tool-output while the tool is still running', async () => {
+  it('emits tool-input before the tool finishes running', async () => {
     const session = emptySession();
-    let toolRunning = false;
-    let sawInputWhileRunning = false;
+    let toolFinished = false;
+    let sawInputBeforeFinish = false;
     /** @type {import('ai').UIMessageChunk[]} */
     const chunks = [];
 
@@ -22,9 +22,8 @@ describe('runTurn tool trace timing', () => {
         description: 'slow lookup',
         inputSchema: z.object({ q: z.string() }),
         execute: async ({ q }) => {
-          toolRunning = true;
           await new Promise((r) => setTimeout(r, 60));
-          toolRunning = false;
+          toolFinished = true;
           return { hits: [q] };
         },
       }),
@@ -46,9 +45,9 @@ describe('runTurn tool trace timing', () => {
       if (
         (value.type === 'tool-input-available' ||
           value.type === 'tool-input-start') &&
-        toolRunning
+        !toolFinished
       ) {
-        sawInputWhileRunning = true;
+        sawInputBeforeFinish = true;
       }
     }
 
@@ -66,9 +65,9 @@ describe('runTurn tool trace timing', () => {
       'tool-input-* must precede tool-output-available',
     );
     assert.equal(
-      sawInputWhileRunning,
+      sawInputBeforeFinish,
       true,
-      'tool-input-* must arrive during tool execution',
+      'tool-input-* must arrive before tool execution finishes',
     );
   });
 

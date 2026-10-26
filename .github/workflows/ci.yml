@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  js:
+    name: Lint & test (JS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only the submodules the web app needs for lint and unit tests;
+      # the Rust ones (tauri, tao, tauri-plugins) are large and unused here.
+      - name: Init submodules
+        run: >
+          git submodule update --init --depth 1 --
+          packages/foliate-js
+          packages/js-mdict
+          packages/simplecc-wasm
+          apps/readest-app/src-tauri/plugins/tauri-plugin-turso
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Copy vendor assets
+        run: pnpm --filter @wellread/wellread-app setup-vendors
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint (tsgo + Biome)
+        run: pnpm lint
+
+      - name: Unit tests (wellread-app)
+        run: pnpm --filter @wellread/wellread-app test --run
+
+      - name: Unit tests (eve-sidecar)
+        run: pnpm --filter @wellread/eve-sidecar test
+
+      - name: Unit tests (shared packages)
+        run: >
+          pnpm
+          --filter @wellread/eve-message
+          --filter @wellread/extract-contract
+          --filter @wellread/quote-wire
+          --filter @wellread/reading-context
+          --filter @wellread/skill-contract
+          test

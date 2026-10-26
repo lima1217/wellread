@@ -5,8 +5,13 @@ import { testModelConnection } from './testModelConnection.mjs';
 /** @type {typeof fetch} */
 function jsonFetch(url, init, options = {}) {
   return new Promise((resolve, reject) => {
-    if (options.onSignal) options.onSignal(init?.signal);
-    if (options.neverResolve) return;
+    if (options.neverResolve) {
+      // Real fetch rejects on abort; without this the promise never settles.
+      init?.signal?.addEventListener('abort', () =>
+        reject(new DOMException('aborted', 'AbortError')),
+      );
+      return;
+    }
     if (options.rejectWith) {
       reject(options.rejectWith);
       return;
@@ -100,14 +105,7 @@ describe('testModelConnection', () => {
       apiKey: 'sk-test',
       timeoutMs: 20,
       baseFetch: (url, init) =>
-        jsonFetch(url, init, {
-          neverResolve: true,
-          onSignal: (signal) => {
-            signal?.addEventListener('abort', () => {
-              // Real fetch rejects on abort; emulate it.
-            });
-          },
-        }),
+        jsonFetch(url, init, { neverResolve: true }),
     });
     assert.equal(result.ok, false);
     if (!result.ok) assert.match(result.error, /timed out/i);
