@@ -24,7 +24,7 @@ function truncateJson(value: unknown): string {
   }
 }
 
-function useToolStepLabel() {
+export function useToolStepLabel() {
   const _ = useTranslation();
   return (d: ToolStepDescription): string => {
     const detail = d.detail ?? '';

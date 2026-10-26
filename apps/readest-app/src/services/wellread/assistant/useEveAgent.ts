@@ -89,6 +89,8 @@ export type UseEveAgentOptions = {
   shareAnnotations?: boolean;
   /** Runs before each turn is posted (e.g. annotations export); failures are ignored. */
   beforeTurn?: () => Promise<void>;
+  /** Composer text on mount (e.g. a saved draft). */
+  initialComposer?: string;
 };
 
 export type SendTurnInput = {
@@ -116,13 +118,17 @@ export function useEveAgent(options: UseEveAgentOptions) {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionId ?? null);
   const [status, setStatus] = useState<UseEveAgentStatus>('ready');
   const [error, setError] = useState<Error | null>(null);
-  const [composer, setComposer] = useState('');
+  const [composer, setComposer] = useState(options.initialComposer ?? '');
   const [inFlightTools, setInFlightTools] = useState<SessionToolTrace[]>([]);
+  /** The last turn was cancelled by Stop (its question went back to the composer). */
+  const [stopped, setStopped] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   /** In-flight send promise — Stop → resend awaits teardown before the next POST. */
   const turnPromiseRef = useRef<Promise<void> | null>(null);
   /** True after Stop until the aborted turn fully settles. */
   const stoppingRef = useRef(false);
+  /** Stop came from the user (not a session switch / unmount): restore the question. */
+  const userStopRef = useRef(false);
   /** Mirrors activeSessionId for async reconcile — ignore stale disk loads after switch. */
   const activeSessionIdRef = useRef<string | null>(sessionId ?? null);
   /** Session this hook instance created during send — skip disk reload for that id. */
@@ -161,6 +167,8 @@ export function useEveAgent(options: UseEveAgentOptions) {
     // against New chat / History (sessionId → null or another id).
     if (sessionChanged) {
       activeSessionIdRef.current = sessionId ?? null;
+      userStopRef.current = false;
+      setStopped(false);
     } else {
       // bookId/bookTitle may change without a session switch — do not reload disk
       // (that would clobber an in-flight optimistic stream).
@@ -226,6 +234,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
       return;
     }
     stoppingRef.current = true;
+    userStopRef.current = true;
     abortRef.current?.abort();
     abortRef.current = null;
     // Tell the sidecar to cancel the turn now: plugin-http defers the socket
@@ -267,6 +276,8 @@ export function useEveAgent(options: UseEveAgentOptions) {
       // This send is intentional (incl. Stop → resend). Clear the prior Stop latch
       // now; re-check after awaits so a Stop during teardown still cancels us.
       stoppingRef.current = false;
+      userStopRef.current = false;
+      setStopped(false);
 
       const prior = turnPromiseRef.current;
       const turn = (async () => {
@@ -311,6 +322,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
               id: q.id,
               text: q.text,
               chapterTitle: q.chapterTitle,
+              ...(q.cfi ? { cfi: q.cfi } : {}),
             }))
           : undefined;
 
@@ -427,6 +439,14 @@ export function useEveAgent(options: UseEveAgentOptions) {
             const dropIds = new Set([optimisticUserId, assistantId].filter(Boolean) as string[]);
             setMessages((prev) => prev.filter((m) => !dropIds.has(m.id)));
             setStatus('ready');
+            if (userStopRef.current) {
+              userStopRef.current = false;
+              setStopped(true);
+              // The server dropped this turn; hand the question back unless the
+              // user already typed the next one.
+              setComposer((prev) => (prev.trim() ? prev : text));
+              input?.onSendFailed?.(quotes);
+            }
             return;
           }
           setError(err instanceof Error ? err : new Error(String(err)));
@@ -477,6 +497,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
     composer,
     setComposer,
     inFlightTools,
+    stopped,
     send,
     stop,
     reset,

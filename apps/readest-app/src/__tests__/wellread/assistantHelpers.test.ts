@@ -21,7 +21,6 @@ import { hydrateEveMessagesForDisplay } from '@/services/wellread/assistant/quot
 import {
   formatWorkDuration,
   shouldPushAgentSessionToStore,
-  shouldShowPendingReply,
 } from '@/services/wellread/assistant/sessionUi';
 
 describe('isReadingAssistantAvailable', () => {
@@ -243,63 +242,6 @@ describe('summarizeToolTrace', () => {
       label: 'Searched extract',
       count: 1,
     });
-  });
-});
-
-describe('shouldShowPendingReply', () => {
-  it('is false when not busy', () => {
-    expect(shouldShowPendingReply(false, [{ role: 'user', content: 'hi' }])).toBe(false);
-  });
-
-  it('is true on a later turn while waiting after prior assistant replies', () => {
-    expect(
-      shouldShowPendingReply(true, [
-        { role: 'user', content: 'first' },
-        { role: 'assistant', content: 'answer one' },
-        { role: 'user', content: 'second' },
-      ]),
-    ).toBe(true);
-  });
-
-  it('is false once the current turn has assistant text', () => {
-    expect(
-      shouldShowPendingReply(true, [
-        { role: 'user', content: 'first' },
-        { role: 'assistant', content: 'answer one' },
-        { role: 'user', content: 'second' },
-        { role: 'assistant', content: 'answer two' },
-      ]),
-    ).toBe(false);
-  });
-
-  it('is false when the current turn only has reasoning so far', () => {
-    expect(
-      shouldShowPendingReply(true, [
-        { role: 'user', content: 'why?' },
-        { role: 'assistant', content: '', reasoning: 'Let me think…' },
-      ]),
-    ).toBe(false);
-  });
-
-  it('is false when the current turn only has tool parts so far', () => {
-    expect(
-      shouldShowPendingReply(true, [
-        { role: 'user', content: 'why?' },
-        {
-          role: 'assistant',
-          content: '',
-          parts: [
-            {
-              type: 'dynamic-tool',
-              toolCallId: 't1',
-              toolName: 'grep',
-              state: 'input-available',
-              input: {},
-            },
-          ],
-        },
-      ]),
-    ).toBe(false);
   });
 });
 

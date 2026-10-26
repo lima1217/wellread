@@ -24,6 +24,12 @@ type ReadingAssistantState = {
   clearPendingQuotes: () => void;
   /** Put quotes back on the live bar (e.g. after a failed send). */
   restorePendingQuotes: (quotes: PendingQuote[]) => void;
+  /** Unsent composer text per bookId; survives panel close and book switches. */
+  drafts: Record<string, string>;
+  setDraft: (bookId: string, text: string) => void;
+  /** Reading position before the first citation jump, for "Back to where I was". */
+  jumpOrigin: { bookKey: string; cfi: string } | null;
+  setJumpOrigin: (origin: { bookKey: string; cfi: string } | null) => void;
 };
 
 export const useReadingAssistantStore = create<ReadingAssistantState>((set) => ({
@@ -72,4 +78,12 @@ export const useReadingAssistantStore = create<ReadingAssistantState>((set) => (
       }
       return { pendingQuotes: merged };
     }),
+  drafts: {},
+  setDraft: (bookId, text) =>
+    set((state) => {
+      const { [bookId]: _prev, ...rest } = state.drafts;
+      return { drafts: text ? { ...rest, [bookId]: text } : rest };
+    }),
+  jumpOrigin: null,
+  setJumpOrigin: (origin) => set({ jumpOrigin: origin }),
 }));

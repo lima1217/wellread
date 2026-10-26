@@ -5,6 +5,7 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
   ChevronUpIcon,
+  CornerUpLeftIcon,
   NotebookPenIcon,
   PencilIcon,
   RotateCcwIcon,
@@ -34,15 +35,20 @@ import {
 } from '@/services/wellread/assistant/composerBusyPolicy';
 import { reloadEveIfNeeded } from '@/services/wellread/assistant/reloadEveIfNeeded';
 import {
+  classifyAssistantError,
+  liveActivity,
   shouldPushAgentSessionToStore,
-  shouldShowPendingReply,
+  type AssistantErrorKind,
 } from '@/services/wellread/assistant/sessionUi';
+import { describeToolStep } from '@/services/wellread/assistant/displayParts';
+import { jumpToCfi, returnFromJump } from '@/services/wellread/assistant/readerJump';
 import { isPersistedMessageId, useEveAgent } from '@/services/wellread/assistant/useEveAgent';
 import {
   useReadingAssistantStore,
   type PendingQuote,
 } from '@/services/wellread/assistant/readingAssistantStore';
 import { AssistantPartsView } from './AssistantPartsView';
+import { useToolStepLabel } from './AssistantTools';
 import {
   assistantWorkedMs,
   CopyMessageButton,
@@ -51,6 +57,8 @@ import {
   PendingQuoteBar,
   PendingReplyDots,
   QuoteStack,
+  SuggestionChips,
+  type Suggestion,
 } from './AssistantMessageChrome';
 import { markdownBodyClass, messageTypeClass, focusRing } from './AssistantMarkdown';
 import {
@@ -102,6 +110,10 @@ export const ReadingAssistantChat = ({
   const removePendingQuote = useReadingAssistantStore((s) => s.removePendingQuote);
   const clearPendingQuotes = useReadingAssistantStore((s) => s.clearPendingQuotes);
   const restorePendingQuotes = useReadingAssistantStore((s) => s.restorePendingQuotes);
+  const setDraft = useReadingAssistantStore((s) => s.setDraft);
+  const jumpOrigin = useReadingAssistantStore((s) => s.jumpOrigin);
+  const setJumpOrigin = useReadingAssistantStore((s) => s.setJumpOrigin);
+  const toolStepLabel = useToolStepLabel();
 
   const sessionId = activeBookId === bookId ? activeSessionId : null;
   const modelConfig = mergeModelConfig(settings.modelConfig);
@@ -133,6 +145,7 @@ export const ReadingAssistantChat = ({
     spoilerGuard,
     shareAnnotations,
     beforeTurn,
+    initialComposer: useReadingAssistantStore.getState().drafts[bookId],
     getReaderState: () => {
       const progress = useReaderStore.getState().getProgress(bookKey);
       if (!progress?.location && !progress?.sectionLabel) return null;
@@ -176,13 +189,20 @@ export const ReadingAssistantChat = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const canSend = Boolean(agent.composer.trim()) && !shouldBlockComposerSubmit(busy);
-  const showPendingReply = shouldShowPendingReply(busy, agent.messages);
+  const activity = liveActivity(busy, agent.messages, agent.inFlightTools);
+  const activityLabel =
+    activity?.kind === 'tool' ? `${toolStepLabel(describeToolStep(activity.tool))}…` : undefined;
 
   /** Edit-and-resend target: the user turn being replaced and its quotes. */
   const [editing, setEditing] = useState<{ id: string; quotes: PendingQuote[] } | null>(null);
   useEffect(() => {
     setEditing(null);
   }, [sessionId]);
+
+  // Keep unsent text per book; an edit-in-progress is tied to a message, not a draft.
+  useEffect(() => {
+    if (!editing) setDraft(bookId, agent.composer);
+  }, [agent.composer, bookId, editing, setDraft]);
 
   const handleSend = useCallback(() => {
     if (!agent.composer.trim() || shouldBlockComposerSubmit(busy)) return;
@@ -223,7 +243,7 @@ export const ReadingAssistantChat = ({
     });
   }, [agent, busy, lastUser]);
 
-  const starters = [
+  const starters: Suggestion[] = [
     { label: _('Summarize this chapter'), message: _('Summarize the chapter I am reading.') },
     {
       label: _('Explain this page'),
@@ -239,6 +259,54 @@ export const ReadingAssistantChat = ({
         ]
       : []),
   ];
+  const quoteActions: Suggestion[] = [
+    { label: _('Explain'), message: `/skill:explain ${_('the quoted passage')}` },
+    { label: _('Translate'), message: `/skill:translate ${_('the quoted passage')}` },
+    {
+      label: _('Connect to earlier'),
+      message: _('How does the quoted passage connect to what came before?'),
+    },
+  ];
+  const followUps: Suggestion[] = [
+    { label: _('Tell me more'), message: _('Go deeper on that.') },
+    { label: _('Give an example'), message: _('Give me a concrete example from the book.') },
+    { label: _('Quiz me'), message: '/skill:socratic-check' },
+  ];
+  const lastMessage = agent.messages[agent.messages.length - 1];
+  const showFollowUps =
+    !busy &&
+    !agent.error &&
+    !agent.stopped &&
+    pendingQuotes.length === 0 &&
+    lastMessage?.role === 'assistant' &&
+    Boolean(lastMessage.content.trim());
+
+  const openAISettings = useCallback(() => {
+    const { setSettingsDialogBookKey, setSettingsDialogOpen, setActiveSettingsItemId } =
+      useSettingsStore.getState();
+    setSettingsDialogBookKey(bookKey);
+    setActiveSettingsItemId('settings.ai.enableAssistant');
+    setSettingsDialogOpen(true);
+  }, [bookKey]);
+
+  // A failure before the turn landed puts the question back in the composer;
+  // after it landed, the persisted user turn can be regenerated.
+  const handleRetry = useCallback(() => {
+    if (agent.composer.trim()) handleSend();
+    else handleRegenerate();
+  }, [agent.composer, handleRegenerate, handleSend]);
+  const canRetry = !busy && (Boolean(agent.composer.trim()) || canRegenerate);
+
+  const errorText: Record<AssistantErrorKind, string> = {
+    auth: _('The model rejected the API key. Check it in AI settings.'),
+    rateLimit: _('The model is rate-limited or out of quota. Wait a moment, then retry.'),
+    context: _('This conversation is too long for the model. Start a new chat to continue.'),
+    network: _('Couldn’t reach the model. Check your connection, then retry.'),
+    other: _('Something went wrong with this reply.'),
+  };
+  const errorKind = agent.error ? classifyAssistantError(agent.error.message) : null;
+
+  const handleJump = useCallback((cfi: string) => void jumpToCfi(bookKey, cfi), [bookKey]);
 
   const slash = useComposerSlash({
     composer: agent.composer,
@@ -281,7 +349,7 @@ export const ReadingAssistantChat = ({
     if (!el || !stickToBottomRef.current) return;
     el.scrollTop = el.scrollHeight;
     setShowJumpToLatest(false);
-  }, [agent.messages, showPendingReply, agent.error]);
+  }, [agent.messages, activityLabel, activity?.kind, agent.error, showFollowUps]);
 
   const jumpToLatest = useCallback(() => {
     const el = scrollRef.current;
@@ -310,7 +378,10 @@ export const ReadingAssistantChat = ({
         quotes={pendingQuotes}
         onRemove={removePendingQuote}
         onClear={clearPendingQuotes}
-      />
+        onJump={handleJump}
+      >
+        <SuggestionChips suggestions={quoteActions} disabled={busy} onPick={sendPreset} />
+      </PendingQuoteBar>
       <div
         ref={scrollRef}
         className='min-h-0 flex-1 space-y-8 overflow-y-auto overscroll-contain px-4 py-5 touch-pan-y'
@@ -321,24 +392,10 @@ export const ReadingAssistantChat = ({
           setShowJumpToLatest(!atBottom);
         }}
       >
-        {agent.messages.length === 0 && !busy ? (
+        {agent.messages.length === 0 && !busy && pendingQuotes.length === 0 ? (
           <div className='flex flex-col items-start gap-2 pt-2 font-sans'>
             <p className='text-base-content/50 text-sm'>{_('Ask about this book, or try:')}</p>
-            <div className='flex flex-wrap gap-1.5'>
-              {starters.map((s) => (
-                <button
-                  key={s.label}
-                  type='button'
-                  className={clsx(
-                    'eink-bordered border-base-content/15 hover:bg-base-200 rounded-full border px-3 py-1 text-sm transition-colors',
-                    focusRing,
-                  )}
-                  onClick={() => sendPreset(s.message)}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
+            <SuggestionChips suggestions={starters} onPick={sendPreset} />
           </div>
         ) : null}
         {agent.messages.map((msg, index) => {
@@ -359,7 +416,7 @@ export const ReadingAssistantChat = ({
               )}
             >
               {msg.role === 'user' && msg.quotes?.length ? (
-                <QuoteStack quotes={msg.quotes} />
+                <QuoteStack quotes={msg.quotes} onJump={handleJump} />
               ) : null}
               {msg.role === 'assistant' ? (
                 <div className={markdownBodyClass} onCopy={copySelectionWithoutCitations}>
@@ -410,11 +467,53 @@ export const ReadingAssistantChat = ({
             </div>
           );
         })}
-        {showPendingReply ? <PendingReplyDots /> : null}
-        {agent.error ? (
-          <p className={clsx('text-error select-text text-pretty', messageTypeClass)} role='alert'>
-            {agent.error.message}
-          </p>
+        {showFollowUps ? (
+          <div className='-mt-5'>
+            <SuggestionChips suggestions={followUps} onPick={sendPreset} />
+          </div>
+        ) : null}
+        {activity ? <PendingReplyDots label={activityLabel} /> : null}
+        {agent.error && errorKind ? (
+          <div className={clsx('flex flex-col items-start gap-2', messageTypeClass)} role='alert'>
+            <p className='text-error text-pretty'>{errorText[errorKind]}</p>
+            <p className='text-base-content/45 select-text break-words font-sans text-[0.8em]'>
+              {agent.error.message}
+            </p>
+            <div className='flex gap-1.5 font-sans text-sm'>
+              {errorKind === 'auth' ? (
+                <button
+                  type='button'
+                  className={clsx('btn btn-contrast h-8 min-h-0 rounded-lg px-3', focusRing)}
+                  onClick={openAISettings}
+                >
+                  {_('Open AI settings')}
+                </button>
+              ) : errorKind === 'context' ? (
+                <button
+                  type='button'
+                  className={clsx('btn btn-contrast h-8 min-h-0 rounded-lg px-3', focusRing)}
+                  onClick={() => setActiveSession(null, bookId)}
+                >
+                  {_('New chat')}
+                </button>
+              ) : null}
+              {canRetry ? (
+                <button
+                  type='button'
+                  className={clsx(
+                    'btn h-8 min-h-0 rounded-lg px-3',
+                    errorKind === 'auth' || errorKind === 'context'
+                      ? 'btn-ghost eink-bordered'
+                      : 'btn-contrast',
+                    focusRing,
+                  )}
+                  onClick={handleRetry}
+                >
+                  {_('Retry')}
+                </button>
+              ) : null}
+            </div>
+          </div>
         ) : null}
       </div>
       {showJumpToLatest && agent.messages.length > 0 ? (
@@ -442,6 +541,29 @@ export const ReadingAssistantChat = ({
           handleSend();
         }}
       >
+        {jumpOrigin?.bookKey === bookKey ? (
+          <div className='text-base-content/60 flex items-center gap-1.5 px-1.5 pb-1 font-sans text-xs'>
+            <button
+              type='button'
+              className={clsx(
+                'hover:text-base-content flex flex-1 items-center gap-1.5 text-start',
+                focusRing,
+              )}
+              onClick={() => void returnFromJump()}
+            >
+              <CornerUpLeftIcon size={11} aria-hidden='true' />
+              {_('Back to where I was reading')}
+            </button>
+            <MessageActionButton label={_('Dismiss')} onClick={() => setJumpOrigin(null)}>
+              <XIcon size={12} aria-hidden='true' />
+            </MessageActionButton>
+          </div>
+        ) : null}
+        {agent.stopped && !busy ? (
+          <div className='text-base-content/60 px-1.5 pb-1 font-sans text-xs' role='status'>
+            {_('Stopped. Your question is back in the box — edit it or send again.')}
+          </div>
+        ) : null}
         {editing ? (
           <div className='text-base-content/60 flex items-center gap-1.5 px-1.5 pb-1 font-sans text-xs'>
             <PencilIcon size={11} aria-hidden='true' />
@@ -468,6 +590,7 @@ export const ReadingAssistantChat = ({
             ref={slash.composerRef}
             name='assistant-message'
             aria-label={_('Message')}
+            placeholder={_('Ask about this book · / for skills')}
             autoComplete='off'
             spellCheck
             disabled={isComposerTextInputDisabled(busy)}
@@ -488,121 +611,90 @@ export const ReadingAssistantChat = ({
             }}
           />
           <div className='flex items-center gap-0.5 px-2 pb-2 pt-0.5 font-sans text-sm select-none touch-manipulation'>
-            <div
-              className={clsx('dropdown dropdown-top', busy && 'pointer-events-none opacity-50')}
-            >
-              <button
-                type='button'
-                tabIndex={0}
-                className={clsx(composerSelectTrigger, 'max-w-[9.5rem]', focusRing)}
-                disabled={busy}
-                aria-label={_('Model')}
-                aria-haspopup='listbox'
-                onClick={(e) => e.currentTarget.focus()}
+            {modelConfig.profiles.length > 1 ? (
+              <div
+                className={clsx('dropdown dropdown-top', busy && 'pointer-events-none opacity-50')}
               >
-                <span className='truncate' translate='no'>
-                  {activeProfile?.modelId ?? _('Model')}
-                </span>
-                <ChevronUpIcon size={12} className='shrink-0 opacity-40' aria-hidden='true' />
-              </button>
-              <ul
-                tabIndex={0}
-                role='listbox'
-                className={clsx(composerSelectMenu, 'max-h-48 min-w-[10rem]')}
-              >
-                {modelConfig.profiles.map((profile) => {
-                  const isActive = profile.id === modelConfig.activeProfileId;
-                  return (
-                    <li
-                      key={profile.id}
-                      role='option'
-                      aria-selected={isActive}
-                      tabIndex={0}
-                      className={clsx(
-                        composerSelectItem,
-                        focusRing,
-                        isActive && composerSelectItemActive,
-                      )}
-                      onClick={() => {
-                        void handleSelectProfile(profile.id);
-                        (document.activeElement as HTMLElement | null)?.blur();
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
+                <button
+                  type='button'
+                  tabIndex={0}
+                  className={clsx(composerSelectTrigger, 'max-w-[9.5rem]', focusRing)}
+                  disabled={busy}
+                  aria-label={_('Model')}
+                  aria-haspopup='listbox'
+                  onClick={(e) => e.currentTarget.focus()}
+                >
+                  <span className='truncate' translate='no'>
+                    {activeProfile?.modelId ?? _('Model')}
+                  </span>
+                  <ChevronUpIcon size={12} className='shrink-0 opacity-40' aria-hidden='true' />
+                </button>
+                <ul
+                  tabIndex={0}
+                  role='listbox'
+                  className={clsx(composerSelectMenu, 'max-h-48 min-w-[10rem]')}
+                >
+                  {modelConfig.profiles.map((profile) => {
+                    const isActive = profile.id === modelConfig.activeProfileId;
+                    return (
+                      <li
+                        key={profile.id}
+                        role='option'
+                        aria-selected={isActive}
+                        tabIndex={0}
+                        className={clsx(
+                          composerSelectItem,
+                          focusRing,
+                          isActive && composerSelectItemActive,
+                        )}
+                        onClick={() => {
                           void handleSelectProfile(profile.id);
                           (document.activeElement as HTMLElement | null)?.blur();
-                        }
-                      }}
-                    >
-                      <ComposerSelectCheck active={isActive} />
-                      <span className='min-w-0 flex-1 truncate' translate='no'>
-                        {profile.modelId}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-            <div
-              className={clsx('dropdown dropdown-top', busy && 'pointer-events-none opacity-50')}
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            void handleSelectProfile(profile.id);
+                            (document.activeElement as HTMLElement | null)?.blur();
+                          }
+                        }}
+                      >
+                        <ComposerSelectCheck active={isActive} />
+                        <span className='min-w-0 flex-1 truncate' translate='no'>
+                          {profile.modelId}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : (
+              <span
+                className='text-base-content/55 max-w-[9.5rem] truncate px-2 text-[0.85em]'
+                translate='no'
+              >
+                {activeProfile?.modelId ?? _('Model')}
+              </span>
+            )}
+            <button
+              type='button'
+              className={clsx(
+                composerSelectTrigger,
+                'pe-2',
+                thinkingMode === 'think' && 'text-base-content bg-base-200/70',
+                focusRing,
+              )}
+              disabled={busy}
+              aria-pressed={thinkingMode === 'think'}
+              title={
+                thinkingMode === 'think'
+                  ? _('Think: reasons before answering. Tap for Fast.')
+                  : _('Fast: answers right away. Tap for Think.')
+              }
+              onClick={() => handleSelectThinkingMode(thinkingMode === 'think' ? 'fast' : 'think')}
             >
-              <button
-                type='button'
-                tabIndex={0}
-                className={clsx(composerSelectTrigger, focusRing)}
-                disabled={busy}
-                aria-label={thinkingMode === 'think' ? _('Think') : _('Fast')}
-                aria-haspopup='listbox'
-                onClick={(e) => e.currentTarget.focus()}
-              >
-                <span className='truncate'>
-                  {thinkingMode === 'think' ? _('Think') : _('Fast')}
-                </span>
-                <ChevronUpIcon size={12} className='shrink-0 opacity-40' aria-hidden='true' />
-              </button>
-              <ul
-                tabIndex={0}
-                role='listbox'
-                className={clsx(composerSelectMenu, 'min-w-[7.5rem]')}
-              >
-                {(
-                  [
-                    { id: 'think' as const, label: _('Think') },
-                    { id: 'fast' as const, label: _('Fast') },
-                  ] as const
-                ).map((option) => {
-                  const isActive = option.id === thinkingMode;
-                  return (
-                    <li
-                      key={option.id}
-                      role='option'
-                      aria-selected={isActive}
-                      tabIndex={0}
-                      className={clsx(
-                        composerSelectItem,
-                        focusRing,
-                        isActive && composerSelectItemActive,
-                      )}
-                      onClick={() => {
-                        handleSelectThinkingMode(option.id);
-                        (document.activeElement as HTMLElement | null)?.blur();
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleSelectThinkingMode(option.id);
-                          (document.activeElement as HTMLElement | null)?.blur();
-                        }
-                      }}
-                    >
-                      <ComposerSelectCheck active={isActive} />
-                      <span className='min-w-0 flex-1 truncate'>{option.label}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+              {thinkingMode === 'think' ? _('Think') : _('Fast')}
+            </button>
             <button
               type={busy ? 'button' : 'submit'}
               className={clsx(
