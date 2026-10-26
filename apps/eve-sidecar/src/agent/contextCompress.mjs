@@ -286,7 +286,7 @@ export function buildCompressPrompt(input) {
     'cfi_refs: …',
     'Keep: user goals, key conclusions, named characters/plot points, CFIs or chapter refs (copy epubcfi(...) values from [cited: ...] lines verbatim), unresolved threads.',
     'Drop: chit-chat, repeated tool narration, and tool errors that were later resolved.',
-    `At most ${maxChars} characters total. Plain labeled lines only — no markdown headings, no bullet lists.`,
+    `At most ${maxChars} characters total, as plain text: one labeled line per label.`,
   ].join(' ');
 }
 

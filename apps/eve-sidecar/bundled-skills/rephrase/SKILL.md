@@ -1,13 +1,13 @@
 ---
 name: rephrase
-description: rephrase — reword a selected quote without jargon, in plain coherent language. Use after highlighting text, or when the user says "rephrase", "simplify", "put it another way", or that the wording is too dense.
+description: Rewords a passage in plain, coherent language while keeping every detail. Use when the user finds a highlighted or quoted passage too dense and wants it said more simply.
 ---
 
 # Rephrase
 
-Rephrase it. Stop using jargon and speak coherently. State it more simply and concisely, like one human talking to another. Respond in Chinese only.
+Rephrase it in everyday words and coherent sentences, like one human talking to another.
 
-Rephrasing is not compression — keep the full meaning and every detail intact.
+Simplify the wording only: the full meaning and every detail stay.
 
 ## Target text
 
@@ -22,10 +22,10 @@ Text after `/skill:rephrase` is an extra instruction; honor it, but stay on the 
 
 ## Done when
 
-The target text has been reworded with all details preserved; no preamble, no "here is the rephrase" filler.
+The target text has been reworded with all details preserved, and the reply opens with the rephrase itself.
 
 ## Output
 
 Give the rephrase directly. When the original has several points, state each one clearly.
 
-Hard guardrails (rephrase body): rewrite em dashes (`—` `–` `―` `--`) and contrastive pairs (`不是……而是……` and similar) into equivalent affirmative sentences or split into two; no emoji.
+Hard guardrails (rephrase body): rewrite em dashes (`—` `–` `―` `--`) and contrastive pairs (`不是……而是……` and similar) into equivalent affirmative sentences or split into two.

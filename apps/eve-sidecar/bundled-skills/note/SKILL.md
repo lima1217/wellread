@@ -1,6 +1,6 @@
 ---
 name: note
-description: note — OKF notes package for the current book. Use when taking chapter notes, persisting highlights, distilling a chat into notes, querying notes, auditing notes, or scaffolding a package.
+description: Maintains the current book's OKF notes package. Use to write chapter notes, persist highlights, distill a chat into notes, query or lint the notes, or bootstrap the package.
 ---
 
 # note
@@ -27,7 +27,7 @@ Before writing (if not read this session): `read_file` `/workspace/skills/note/P
 | **quote** | highlight to persist | its chapter or concept/claim |
 | **chat** | distill a conversation | file per PACKAGE "page selection"; distill into independently readable pages |
 
-Material: this session → Pending Quote → slash args → Extract (`focus_chunks` / `section_chunks` / `resolve_section`; do not spin on `extract_status: missing`) → existing package (`notes_index`, root `index.md`).
+Material: this session → Pending Quote → slash args → Extract (`focus_text` / `read_section_text` / `resolve_section`; on `extract_status: missing`, work from the conversation) → existing package (`notes_index`, root `index.md`).
 
 `write_file` only when the user explicitly asks to save / ingest / distill / bootstrap / lint-and-fix; otherwise list the pages to write with their key points and wait for confirmation ("write directly" skips confirmation). Writable paths: see AGENTS.
 
@@ -66,7 +66,7 @@ Done when: each page has path + type + reason; each durable claim has a cfi or e
 
 For this turn's subset:
 
-- **Content pages** (under `sources|chapters|concepts|frameworks|claims|glossary|questions`): use `write_file` with a **`draft`** (`type`/`title`/`material`, etc.); the sidecar generates frontmatter + body per the OKF JSON schema and writes it; on failure it retries, and if still failing, rewrite the draft and call again. Do not hand-write a full YAML blob as `content`.
+- **Content pages** (under `sources|chapters|concepts|frameworks|claims|glossary|questions`): use `write_file` with a **`draft`** (`type`/`title`/`material`, etc.); the sidecar generates frontmatter + body per the OKF JSON schema and writes it; on failure it retries, and if still failing, rewrite the draft and call again. Content pages always go through `draft`; `content` is for navigation and log pages.
 - **Navigation and log** (root/directory `index.md`, `log.md`): keep writing via `content` raw text.
 - **batch** multiple `write_file` calls in the same step (main page + touched index + log). On conflict, revise and cross-reference; major tensions go into root `index.md` and questions. Leftover pages → **handoff**.
 

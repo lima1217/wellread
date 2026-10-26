@@ -19,7 +19,7 @@ export const MIN_FINAL_MAX_OUTPUT_TOKENS = 1024;
 export const HARD_FINAL_MAX_OUTPUT_TOKENS = 32_768;
 
 export const TOOLS_EXHAUSTED_SYSTEM_PROMPT =
-  'Tool budget is spent. Do not call tools again; give the complete answer from the tool results you already have.';
+  'Tool budget is spent and tools are closed for this turn: give the complete answer now from the tool results you already have.';
 
 /**
  * @param {unknown} [limit]

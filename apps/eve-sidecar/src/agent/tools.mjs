@@ -404,7 +404,7 @@ export function createReadingTools() {
   return {
     read_file: tool({
       description:
-        'Read UTF-8 text at an absolute /workspace path (extract chunks, or /workspace/skills/<id>/… package files). At most 8 read/search tools (read_file/grep/glob/resolve_section) may run in parallel per step.',
+        'Read UTF-8 text at an absolute /workspace path (extract chunks, notes, annotations, or /workspace/skills/<id>/… package files). Counts toward the ≤8 parallel read/search tools per step.',
       inputSchema: z.object({
         path: z.string().describe('Absolute workspace path starting with /workspace'),
       }),
@@ -604,7 +604,7 @@ export function createReadingTools() {
 
     resolve_section: tool({
       description:
-        "List this book's extract chunk paths for one spine section (by sectionIndex and/or chapter title). Prefer this over globbing extract chunks/*.md. When both are set, sectionIndex wins. Then read_file the returned paths in order (≤8 read/search tools per step).",
+        "List this book's extract chunk paths for one spine section (by sectionIndex and/or chapter title; sectionIndex wins when both are set). Use it to find a section's chunks; read_file the paths you need in order, or read_section_text for the whole section. Counts toward the ≤8 parallel read/search tools per step.",
       inputSchema: z.object({
         sectionIndex: z
           .number()
@@ -658,7 +658,7 @@ export function createReadingTools() {
     }),
     read_section_text: tool({
       description:
-        "Read the full concatenated text of one book section/chapter in a single call, so you can summarize or explain a whole chapter without hundreds of read_file round-trips. Prefer this over resolve_section + repeated read_file for whole-chapter tasks. Counts toward the ≤8 parallel read/search tools per step.",
+        "Read the full concatenated text of one book section/chapter in a single call: the tool for whole-chapter tasks (summarize, explain, translate a chapter). Counts toward the ≤8 parallel read/search tools per step.",
       inputSchema: z.object({
         sectionIndex: z
           .number()
