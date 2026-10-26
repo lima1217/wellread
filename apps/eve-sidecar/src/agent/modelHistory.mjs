@@ -7,6 +7,7 @@
  * (historyCompact.mjs); the current turn's tool steps stay verbatim.
  */
 
+import { compactEnvelopeFocusText } from './focusText.mjs';
 import { compactHistoryToolResults } from './historyCompact.mjs';
 
 /**
@@ -39,7 +40,8 @@ export function buildModelMessages(input) {
         typeof message.modelContent === 'string' && message.modelContent.length > 0
           ? message.modelContent
           : message.content;
-      out.push({ role: 'user', content: content ?? '' });
+      // Earlier turns replay a stub for inlined focus text (current turn below stays verbatim).
+      out.push({ role: 'user', content: compactEnvelopeFocusText(content ?? '') });
       continue;
     }
     if (message.role !== 'assistant') continue;

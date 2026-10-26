@@ -22,6 +22,8 @@ function logJson(payload) {
  *   extractStatus?: string,
  *   focusVia?: string | null,
  *   focusCount?: number,
+ *   focusInlined?: number,
+ *   memoryEntries?: number,
  *   sectionVia?: string | null,
  *   sectionCount?: number,
  *   skillId?: string | null,
@@ -30,6 +32,13 @@ function logJson(payload) {
  */
 export function logTurnContract(fields) {
   logJson({ type: 'eve.turn_contract', ...fields });
+}
+
+/**
+ * @param {{ sessionId?: string, dropped: number }} fields
+ */
+export function logCitationCheck(fields) {
+  logJson({ type: 'eve.citation_check', ...fields });
 }
 
 /**

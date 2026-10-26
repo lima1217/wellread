@@ -13,6 +13,7 @@ export declare const ENVELOPE_KEYS: Readonly<{
   focusChunksVia: 'focus_chunks_via';
   focusChunkCount: 'focus_chunk_count';
   focusChunks: 'focus_chunks';
+  focusText: 'focus_text';
   sectionChunksVia: 'section_chunks_via';
   sectionChunkCount: 'section_chunk_count';
   sectionChunksNote: 'section_chunks_note';

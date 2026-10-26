@@ -184,7 +184,7 @@ function loadBookIndex(booksRoot, bookId) {
  * @param {string} body
  * @param {string[]} terms
  */
-function snippetFor(body, terms) {
+export function snippetFor(body, terms) {
   const flat = body.replace(/\s+/g, ' ').trim();
   const lower = flat.toLowerCase();
   let best = -1;

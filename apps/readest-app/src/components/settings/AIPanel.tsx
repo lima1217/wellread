@@ -122,7 +122,9 @@ const AIPanel: React.FC = () => {
         />
         <SettingsSwitchRow
           label={_('Share highlights and notes')}
-          description={_('Let the assistant read your annotations for the current book')}
+          description={_(
+            'Let the assistant read your annotations, including those exported from other books',
+          )}
           checked={settings.assistantShareAnnotations !== false}
           onChange={() =>
             void saveSysSettings(

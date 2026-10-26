@@ -43,6 +43,7 @@ async function* streamEveTurnRetrying(
     thinkingMode: ThinkingMode;
     readerState?: ReaderState | null;
     spoilerGuard?: boolean;
+    shareAnnotations?: boolean;
     truncateFrom?: string;
   },
 ): AsyncGenerator<EveStreamEvent> {
@@ -84,6 +85,8 @@ export type UseEveAgentOptions = {
   getReaderState?: () => ReaderState | null | undefined;
   /** Hide book text past the reader's position from the assistant (per turn). */
   spoilerGuard?: boolean;
+  /** false: other books' highlights/notes stay out of the assistant's reach. */
+  shareAnnotations?: boolean;
   /** Runs before each turn is posted (e.g. annotations export); failures are ignored. */
   beforeTurn?: () => Promise<void>;
 };
@@ -128,12 +131,14 @@ export function useEveAgent(options: UseEveAgentOptions) {
   /** Always call latest getReaderState without putting it in sendTurn deps. */
   const getReaderStateRef = useRef(getReaderState);
   const spoilerGuardRef = useRef(options.spoilerGuard === true);
+  const shareAnnotationsRef = useRef(options.shareAnnotations !== false);
   const beforeTurnRef = useRef(options.beforeTurn);
   const bookIdRef = useRef(bookId);
   const bookTitleRef = useRef(bookTitle);
   useEffect(() => {
     getReaderStateRef.current = getReaderState;
     spoilerGuardRef.current = options.spoilerGuard === true;
+    shareAnnotationsRef.current = options.shareAnnotations !== false;
     beforeTurnRef.current = options.beforeTurn;
     bookIdRef.current = bookId;
     bookTitleRef.current = bookTitle;
@@ -348,6 +353,7 @@ export function useEveAgent(options: UseEveAgentOptions) {
               thinkingMode,
               readerState: readerState ?? undefined,
               ...(spoilerGuardRef.current ? { spoilerGuard: true } : {}),
+              ...(shareAnnotationsRef.current ? {} : { shareAnnotations: false }),
               ...(truncateFrom ? { truncateFrom } : {}),
             },
           )) {

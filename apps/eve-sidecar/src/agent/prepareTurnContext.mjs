@@ -8,7 +8,9 @@ import {
   resolveTurnModelPresentation,
 } from '../createModel.mjs';
 import { shouldAttachNativeWebSearch } from '../createModel.adapters.mjs';
+import { createCitationVerifier } from './citationGuard.mjs';
 import { readExtractStatus } from './extractMeta.mjs';
+import { readFocusChunkTexts } from './focusText.mjs';
 import { listNotesIndex } from './notesIndex.mjs';
 import {
   buildReadingContextEnvelope,
@@ -23,6 +25,7 @@ import {
 } from './resolveSectionChunks.mjs';
 import { discoverSkills } from './skills/discover.mjs';
 import { readAnnotationsStatus } from './annotations.mjs';
+import { readReaderMemory } from './readerMemory.mjs';
 import { createSpoilerGuard } from './spoilerGuard.mjs';
 import { parseSlashInvocation } from './skills/invoke.mjs';
 import {
@@ -57,6 +60,7 @@ function withVisiblePaths(resolved, guard) {
  *   baseURL?: string | null,
  *   readerState?: { chapter?: string | null, cfi?: string | null, sectionIndex?: number | null } | null,
  *   spoilerGuard?: boolean,
+ *   shareAnnotations?: boolean, // false: other books' annotation exports stay private
  *   maxToolRounds?: number,
  *   finalMaxOutputTokens?: number,
  *   tools?: import('ai').ToolSet, // schema tools self-gate; bare tools wrapped in bindTurnTools
@@ -115,6 +119,11 @@ export function prepareTurnContext(input) {
       : null,
     spoilerGuard,
   );
+  const focusTexts =
+    booksRoot && focusChunks?.paths.length
+      ? readFocusChunkTexts({ booksRoot, bookId: session.bookId, paths: focusChunks.paths })
+      : [];
+  const memory = booksRoot ? readReaderMemory(booksRoot, session.bookId) : null;
   const annotations = booksRoot ? readAnnotationsStatus(booksRoot, session.bookId) : null;
   const extractStatus = booksRoot
     ? readExtractStatus(booksRoot, session.bookId)
@@ -137,6 +146,7 @@ export function prepareTurnContext(input) {
     notesIndex,
     extractStatus,
     focusChunks,
+    focusTexts,
     sectionChunks,
     annotations,
     spoilerGuard: spoilerGuard ? { limitCfi: spoilerGuard.limitCfi } : null,
@@ -146,6 +156,7 @@ export function prepareTurnContext(input) {
     bookTitle: session.bookTitle,
     skills,
     webSearchEnabled,
+    memory,
   });
   // System stays stable across turns (provider prompt caching); the per-turn
   // envelope is prepended to this turn's user message and persisted with it,
@@ -164,6 +175,8 @@ export function prepareTurnContext(input) {
     extractStatus: extractStatus.status,
     focusVia: focusChunks?.via ?? null,
     focusCount: focusChunks?.count ?? 0,
+    focusInlined: focusTexts.length,
+    memoryEntries: memory ? memory.reader.length + memory.book.length : 0,
     sectionVia: sectionChunks?.via ?? null,
     sectionCount: sectionChunks?.count ?? 0,
     skillId: parseSlashInvocation(input.userMessage)?.skillId ?? null,
@@ -178,6 +191,8 @@ export function prepareTurnContext(input) {
     composeGenerateTextFn: input.composeGenerateTextFn,
     abortSignal: input.abortSignal,
     contextWindowTokens: input.contextWindowTokens,
+    bookTitle: session.bookTitle,
+    shareAnnotations: input.shareAnnotations,
     spoilerGuard,
   });
   const tools = maybeAttachNativeWebSearch(bound.tools, {
@@ -185,6 +200,14 @@ export function prepareTurnContext(input) {
     apiMode: input.apiMode,
   });
   const { toolsContext, runtimeContext, parallelBudget } = bound;
+  // Seeded before this turn's user message is pushed; tool outputs stream in.
+  const citationVerifier = createCitationVerifier({
+    booksRoot,
+    bookId: session.bookId,
+    spoilerGuard,
+    messages: session.messages,
+    currentUserModelContent: modelContent,
+  });
 
   const maxToolRounds = resolveMaxToolRounds(
     input.maxToolRounds ?? process.env.EVE_MAX_TOOL_ROUNDS,
@@ -204,6 +227,7 @@ export function prepareTurnContext(input) {
     toolsContext,
     runtimeContext,
     parallelBudget,
+    citationVerifier,
     maxToolRounds,
     finalMaxOutputTokens,
   };
