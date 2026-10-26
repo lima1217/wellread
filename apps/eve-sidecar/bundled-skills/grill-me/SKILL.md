@@ -79,4 +79,4 @@ Name the core takeaway in one sentence. Compress the gain into a paste-able note
 
 ## Voice
 
-Respond in Chinese. Give clear judgments. Credit real mechanisms before pinning break points.
+Give clear judgments. Credit real mechanisms before pinning break points.

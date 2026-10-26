@@ -5,7 +5,7 @@ description: Rewords a passage in plain, coherent language while keeping every d
 
 # Rephrase
 
-Rephrase it in everyday words and coherent sentences, like one human talking to another. Respond in Chinese only.
+Rephrase it in everyday words and coherent sentences, like one human talking to another.
 
 Simplify the wording only: the full meaning and every detail stay.
 
