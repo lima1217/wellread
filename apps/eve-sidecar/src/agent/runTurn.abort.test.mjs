@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { runTurn, consumeUIMessageStream } from './runTurn.mjs';
+import { truncateSessionFrom } from './sessionStore.mjs';
 
 /**
  * @returns {import('./sessionStore.mjs').Session}
@@ -121,6 +122,38 @@ describe('runTurn abort', () => {
       session.messages.some((m) => m.role === 'assistant'),
       false,
     );
+  });
+
+  it('restores the replaced exchange when a regenerate turn is stopped', async () => {
+    const session = emptySession();
+    session.messages = [
+      { id: 'u1', role: 'user', content: 'first', createdAt: 1 },
+      { id: 'a1', role: 'assistant', content: 'answer one', createdAt: 2 },
+      { id: 'u2', role: 'user', content: 'second', createdAt: 3 },
+      { id: 'a2', role: 'assistant', content: 'answer two', createdAt: 4 },
+    ];
+    const truncation = truncateSessionFrom(session, 'u2');
+    assert.ok(truncation);
+    const ac = new AbortController();
+    /** @type {string[][]} */
+    const persisted = [];
+
+    await run({
+      model: /** @type {any} */ (abortableModel(ac)),
+      session,
+      userMessage: 'second, rephrased',
+      getBooksRoot: () => '/tmp/books-should-not-matter',
+      abortSignal: ac.signal,
+      persistSession: (s) => persisted.push(s.messages.map((m) => m.id)),
+      onDropUser: () => truncation.restore(),
+    });
+
+    const ids = ['u1', 'a1', 'u2', 'a2'];
+    assert.deepEqual(
+      session.messages.map((m) => m.id),
+      ids,
+    );
+    assert.deepEqual(persisted.at(-1), ids);
   });
 
   it('resolves finished when the turn is aborted even if the stream is not drained', async () => {

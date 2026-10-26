@@ -34,6 +34,7 @@ Fail-closed at boot: missing `EVE_LOOPBACK_TOKEN` exits non-zero unless `EVE_ALL
 | `EVE_BOOKS_ROOT` | for tools/skills | Host Books directory mapped to `/workspace` |
 | `EVE_MODEL_BASE_URL` | no | OpenAI-compatible base (default DeepSeek) |
 | `EVE_MODEL_API_KEY` | for turns | Empty → `modelReady: false`, turns return 503 |
+| `EVE_MODEL_API_KEY_STDIN` | no | `1` = read the API key from stdin until EOF instead of `EVE_MODEL_API_KEY` (the desktop app does this so the key is not in the process environment) |
 | `EVE_MODEL_ID` | no | Model id |
 | `EVE_MODEL_CONTEXT_WINDOW` | no | Token budget for compress / context |
 | `EVE_MODEL_API_MODE` | no | `chat` (default) or `responses` (enables DeepSeek web_search) |

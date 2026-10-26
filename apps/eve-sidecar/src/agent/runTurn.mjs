@@ -69,6 +69,7 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   generateTextFn?: import('ai').generateText, // context compression only
  *   composeGenerateTextFn?: import('ai').generateText, // write_file(draft) only
  *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
+ *   onDropUser?: () => void, // runs after an aborted/failed/empty turn drops its user message
  *   tools?: import('ai').ToolSet, // prefer readingToolContextSchema (+ parallelGate); bare tools get wrap fallback
  * }} input
  * @returns {ReadableStream<import('ai').UIMessageChunk> & { finished: Promise<void> }}
@@ -144,6 +145,8 @@ export function runTurn(input) {
     if (last && last.id === userId && last.role === 'user') {
       session.messages.pop();
     }
+    // Regenerate / edit-and-resend: put the replaced exchange back.
+    input.onDropUser?.();
     persistSession?.(session);
   };
 
