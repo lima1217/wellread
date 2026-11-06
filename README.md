@@ -57,6 +57,7 @@ For a multi-platform cloud-capable reader, see [Upstream](#upstream).
 | OPDS / Calibre catalogs | Browse online catalogs (optional network) | ✅ |
 | Translation providers | Translate via configured providers (e.g. DeepL, Yandex) | ✅ |
 | Reading Assistant | Book-aware chat through the local eve sidecar | ✅ |
+| External agents (MCP) | Let Claude Code or other MCP clients read along ([setup](./apps/readest-app/docs/external-agents-mcp.md)) | ✅ |
 | Accessibility | Keyboard navigation and VoiceOver-oriented flows | ✅ |
 | Visual and focus aids | Reading ruler, paragraph mode, and speed reading | ✅ |
 

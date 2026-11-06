@@ -104,6 +104,9 @@ flowchart TB
   `ensureEveSidecar.ts` + `eveConnectionStore.ts` + `assistant/*`
 - Security model: listen on loopback only, random bearer token, book tools
   sandboxed to the library Books tree
+- External agents: `POST /mcp` (MCP-only token, published in
+  `mcp-endpoint.json` under the sidecar data dir) reached via the stdio bridge
+  `mcpBridge.mjs`; see [`external-agents-mcp.md`](./external-agents-mcp.md)
 
 ### 2.2 Runtime config
 

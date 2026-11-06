@@ -9,24 +9,13 @@ import {
 } from '../createModel.mjs';
 import { shouldAttachNativeWebSearch } from '../createModel.adapters.mjs';
 import { createCitationVerifier } from './citationGuard.mjs';
-import { readExtractStatus } from './extractMeta.mjs';
-import { readFocusChunkTexts } from './focusText.mjs';
-import { listNotesIndex } from './notesIndex.mjs';
 import {
-  buildReadingContextEnvelope,
   buildSystemPrompt,
   collectPriorSources,
   prependReadingContext,
 } from './prompt.mjs';
-import {
-  resolveChunksForCfi,
-  resolveFocusChunks,
-  resolveSectionChunksForReader,
-} from './resolveSectionChunks.mjs';
+import { buildReadingSnapshot } from './readingSnapshot.mjs';
 import { discoverSkills } from './skills/discover.mjs';
-import { readAnnotationsStatus } from './annotations.mjs';
-import { readReaderMemory } from './readerMemory.mjs';
-import { createSpoilerGuard } from './spoilerGuard.mjs';
 import { parseSlashInvocation } from './skills/invoke.mjs';
 import {
   resolveFinalMaxOutputTokens,
@@ -35,20 +24,6 @@ import {
 import { logTurnContract } from './turnLog.mjs';
 import { bindTurnTools, maybeAttachNativeWebSearch } from './turnTools.mjs';
 import { prepareUserTurn } from './userTurn.mjs';
-
-/**
- * Drop envelope chunk paths the spoiler guard hides (count follows).
- * @template {{ paths: string[], count: number } | null} T
- * @param {T} resolved
- * @param {import('./spoilerGuard.mjs').SpoilerGuard | null} guard
- * @returns {T}
- */
-function withVisiblePaths(resolved, guard) {
-  if (!resolved || !guard) return resolved;
-  const { paths, hidden } = guard.filterPaths(resolved.paths);
-  if (!hidden) return resolved;
-  return { ...resolved, paths, count: Math.max(0, resolved.count - hidden) };
-}
 
 /**
  * @param {{
@@ -89,67 +64,22 @@ export function prepareTurnContext(input) {
   }
 
   // Caller has not pushed this turn's user message yet.
-  const priorSources = collectPriorSources(session.messages);
-  const notesIndex = booksRoot
-    ? listNotesIndex(booksRoot, session.bookId)
-    : [];
-  const spoilerGuard = createSpoilerGuard({
-    enabled: input.spoilerGuard,
-    booksRoot,
-    bookId: session.bookId,
-    readerState: input.readerState,
-  });
-  const sectionChunks = withVisiblePaths(
-    booksRoot
-      ? resolveSectionChunksForReader({
-          booksRoot,
-          bookId: session.bookId,
-          readerState: input.readerState,
-        })
-      : null,
+  const {
+    envelope,
     spoilerGuard,
-  );
-  const focusChunks = withVisiblePaths(
-    booksRoot
-      ? resolveFocusChunks({
-          booksRoot,
-          bookId: session.bookId,
-          readerState: input.readerState,
-        })
-      : null,
-    spoilerGuard,
-  );
-  const focusTexts =
-    booksRoot && focusChunks?.paths.length
-      ? readFocusChunkTexts({ booksRoot, bookId: session.bookId, paths: focusChunks.paths })
-      : [];
-  const memory = booksRoot ? readReaderMemory(booksRoot, session.bookId) : null;
-  const annotations = booksRoot ? readAnnotationsStatus(booksRoot, session.bookId) : null;
-  const extractStatus = booksRoot
-    ? readExtractStatus(booksRoot, session.bookId)
-    : { status: 'missing', chunkCount: 0, schemaVersion: null };
-  // Selection anchors → the extract chunk(s) that hold each quote.
-  const quotes = prepared.quotes.map((q) =>
-    q.cfi && booksRoot
-      ? {
-          ...q,
-          chunks: resolveChunksForCfi({ booksRoot, bookId: session.bookId, cfi: q.cfi }),
-        }
-      : q,
-  );
-  const envelope = buildReadingContextEnvelope({
-    bookId: session.bookId,
-    bookTitle: session.bookTitle,
-    readerState: input.readerState,
-    quotes,
-    priorSources,
-    notesIndex,
     extractStatus,
     focusChunks,
     focusTexts,
     sectionChunks,
-    annotations,
-    spoilerGuard: spoilerGuard ? { limitCfi: spoilerGuard.limitCfi } : null,
+    memory,
+  } = buildReadingSnapshot({
+    booksRoot,
+    bookId: session.bookId,
+    bookTitle: session.bookTitle,
+    readerState: input.readerState,
+    spoilerGuard: input.spoilerGuard,
+    quotes: prepared.quotes,
+    priorSources: collectPriorSources(session.messages),
   });
   const instructions = buildSystemPrompt({
     bookId: session.bookId,

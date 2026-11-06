@@ -41,6 +41,7 @@ import {
   type AssistantErrorKind,
 } from '@/services/wellread/assistant/sessionUi';
 import { describeToolStep } from '@/services/wellread/assistant/displayParts';
+import { readerStateFromProgress } from '@/services/wellread/assistant/readerLive';
 import { jumpToCfi, returnFromJump } from '@/services/wellread/assistant/readerJump';
 import { isPersistedMessageId, useEveAgent } from '@/services/wellread/assistant/useEveAgent';
 import {
@@ -146,19 +147,7 @@ export const ReadingAssistantChat = ({
     shareAnnotations,
     beforeTurn,
     initialComposer: useReadingAssistantStore.getState().drafts[bookId],
-    getReaderState: () => {
-      const progress = useReaderStore.getState().getProgress(bookKey);
-      if (!progress?.location && !progress?.sectionLabel) return null;
-      const sectionIndex =
-        typeof progress.index === 'number' && Number.isFinite(progress.index) && progress.index >= 0
-          ? Math.floor(progress.index)
-          : undefined;
-      return {
-        ...(progress.sectionLabel ? { chapter: progress.sectionLabel } : {}),
-        ...(progress.location ? { cfi: progress.location } : {}),
-        ...(sectionIndex !== undefined ? { sectionIndex } : {}),
-      };
-    },
+    getReaderState: () => readerStateFromProgress(useReaderStore.getState().getProgress(bookKey)),
   });
 
   const prevAgentSessionIdRef = useRef<string | null | undefined>(undefined);

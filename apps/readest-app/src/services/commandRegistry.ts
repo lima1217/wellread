@@ -539,6 +539,12 @@ const aiPanelItems = [
     keywords: ['api', 'mode', 'chat', 'completions', 'responses', 'openai'],
     section: 'AI',
   },
+  {
+    id: 'settings.ai.externalAgents',
+    labelKey: _('External Agents (MCP)'),
+    keywords: ['mcp', 'claude', 'claude code', 'agent', 'external', 'cursor', 'connect'],
+    section: 'AI',
+  },
 ];
 
 // custom panel items

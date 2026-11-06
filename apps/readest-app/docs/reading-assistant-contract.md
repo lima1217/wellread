@@ -69,6 +69,10 @@ Bundled under `apps/eve-sidecar/bundled-skills/`. Slash `/skill:<id>` expands in
 
 Offline gates: `apps/eve-sidecar/eval/readingContract.eval.test.mjs` (included in `npm test`).
 
+## External agents (MCP)
+
+`POST /mcp` on the sidecar serves the same tool set to external MCP clients (Claude Code, …) through the stdio bridge `server/mcpBridge.mjs`, plus `get_reading_state` (this contract's `<reading_context>` + `<reader_memory>`, built by `agent/readingSnapshot.mjs` like a turn) and `get_selection`. Book, position, selection, Pending Quotes, `spoilerGuard` and `shareAnnotations` come from the host's live push (`PUT /eve/v1/reader/live`), not a turn body. Skills are MCP prompts expanding like `/skill:<id>`. No citation guard: replies do not come back through the sidecar. Setup and auth: [`external-agents-mcp.md`](./external-agents-mcp.md).
+
 ## Observability
 
 Set `EVE_TURN_LOG=1` on the sidecar to emit JSON lines (`type: eve.turn_contract`) with extract/focus/section/skill/quote counts.

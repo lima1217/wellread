@@ -27,6 +27,15 @@ import { normalizeReaderState } from '../agent/prompt.mjs';
 import { runTurn } from '../agent/runTurn.mjs';
 import { discoverSkills } from '../agent/skills/discover.mjs';
 import { deleteNote, listNotes, readNote, writeNote } from './notesApi.mjs';
+import { createMcpServer } from './mcp.mjs';
+import {
+  createMcpToken,
+  mcpBridgeCommand,
+  mcpEndpointPath,
+  removeMcpEndpoint,
+  writeMcpEndpoint,
+} from './mcpEndpoint.mjs';
+import { createReaderLiveStore, normalizeReaderLive } from './readerLive.mjs';
 import {
   buildAllowedOriginSet,
   corsHeaders as buildCorsHeaders,
@@ -105,6 +114,16 @@ try {
 
 const sessions = createSessionStore(dataDir);
 const turnGate = createTurnInFlightGate();
+const readerLive = createReaderLiveStore();
+// MCP-only token: written to the endpoint file for external agents; it opens
+// /mcp and nothing else (the loopback token stays with the desktop host).
+const mcpToken = createMcpToken();
+const mcp = createMcpServer({
+  getBooksRoot,
+  getLive: readerLive.get,
+  getModel: () => (modelReady ? languageModel : null),
+  getContextWindowTokens: () => modelContextWindowTokens,
+});
 
 function getBooksRoot() {
   if (!booksRootEnv) {
@@ -156,13 +175,45 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  const url = new URL(req.url || '/', `http://${HOST}`);
+  const path = url.pathname.replace(/\/$/, '') || '/';
+
+  // External agents (MCP Streamable HTTP, stateless JSON). Browsers never get
+  // here with the MCP token; any Origin header is refused (DNS rebinding).
+  if (path === '/mcp') {
+    if (!tokenMatches(req.headers.authorization, mcpToken) || req.headers.origin) {
+      sendJson(res, 401, { error: 'unauthorized' }, req);
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.writeHead(405, { allow: 'POST' });
+      res.end();
+      return;
+    }
+    try {
+      const reply = await mcp.handleBody(await readJson(req));
+      if (reply === null) {
+        res.writeHead(202);
+        res.end();
+      } else {
+        sendJson(res, 200, reply, req);
+      }
+    } catch (error) {
+      if (sendBodyError(res, req, error)) return;
+      sendJson(
+        res,
+        500,
+        { jsonrpc: '2.0', id: null, error: { code: -32603, message: String(error) } },
+        req,
+      );
+    }
+    return;
+  }
+
   if (!checkAuth(req)) {
     unauthorized(res, req);
     return;
   }
-
-  const url = new URL(req.url || '/', `http://${HOST}`);
-  const path = url.pathname.replace(/\/$/, '') || '/';
 
   try {
     if (req.method === 'GET' && (path === '/eve/v1' || path === '/eve/v1/')) {
@@ -185,6 +236,37 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && path === '/health') {
       res.writeHead(200, { 'content-type': 'text/plain', ...corsHeaders(req) });
       res.end('ok');
+      return;
+    }
+
+    // Live reader state for external agents (MCP): the open book, position,
+    // selection, Pending Quotes and the assistant settings that gate tools.
+    if (path === '/eve/v1/reader/live') {
+      if (req.method === 'PUT') {
+        const state = normalizeReaderLive(await readJson(req));
+        if (!state) {
+          sendJson(res, 400, { error: 'bookId_invalid' }, req);
+          return;
+        }
+        readerLive.set(state);
+        sendJson(res, 200, { ok: true }, req);
+        return;
+      }
+      if (req.method === 'DELETE') {
+        readerLive.clear(url.searchParams.get('bookId') || undefined);
+        res.writeHead(204, corsHeaders(req));
+        res.end();
+        return;
+      }
+    }
+
+    if (req.method === 'GET' && path === '/eve/v1/mcp') {
+      sendJson(
+        res,
+        200,
+        { ...mcpBridgeCommand(dataDir), endpointFile: mcpEndpointPath(dataDir) },
+        req,
+      );
       return;
     }
 
@@ -475,6 +557,7 @@ const server = http.createServer(async (req, res) => {
 // and broadcasts the new PORT instead of serving from a corrupt process.
 process.on('uncaughtException', (err) => {
   console.error('[eve-sidecar] uncaughtException', err);
+  removeMcpEndpoint(dataDir);
   process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
@@ -485,10 +568,12 @@ const preferredPort = Number(process.env.PORT || process.env.NITRO_PORT || '0');
 server.listen(preferredPort, HOST, () => {
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : preferredPort;
+  writeMcpEndpoint(dataDir, { url: `http://${HOST}:${port}/mcp`, token: mcpToken });
   console.log(`Listening http://${HOST}:${port}/`);
 });
 
 function shutdown() {
+  removeMcpEndpoint(dataDir);
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 2000).unref();
 }
