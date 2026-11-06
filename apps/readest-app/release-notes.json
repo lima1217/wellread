@@ -1,5 +1,12 @@
 {
   "releases": {
+    "1.3.2": {
+      "date": "2026-11-06",
+      "notes": [
+        "Upgrade Tauri to 2.12 (tauri 2.12.5, wry 0.57, tao 0.37) with the latest webview runtime fixes",
+        "Assistant: replies follow Grice's cooperative principle — as much as the question needs, only what the book supports, on topic, and clearly written"
+      ]
+    },
     "1.3.1": {
       "date": "2026-11-06",
       "notes": [
