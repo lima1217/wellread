@@ -1,11 +1,14 @@
 [workspace]
 members = [
   "apps/readest-app/src-tauri",
-  "packages/tauri/crates/tauri",
   "packages/tauri-plugins/plugins/fs"
 ]
 exclude = [
-  "packages/qcms"
+  "packages/qcms",
+  # The vendored tauri fork is its own workspace (its crates inherit
+  # `workspace.dependencies`/`workspace.lints` from packages/tauri/Cargo.toml
+  # since upstream 2.12); it is consumed via [patch.crates-io] below.
+  "packages/tauri"
 ]
 resolver = "2"
 
@@ -40,14 +43,12 @@ rust-version = "1.77.2"
 [patch.crates-io]
 tauri = { path = "packages/tauri/crates/tauri" }
 tauri-plugin-fs = { path = "packages/tauri-plugins/plugins/fs" }
-# Xcode 26.2 (Swift 6.2) broke upstream swift-rs 1.0.7's per-swiftc target
-# override; the vendored copy cross-compiles via `--triple`/`--sdk` instead.
-# Upstream is unmaintained (last release 2024). See packages/swift-rs.
+# Xcode 26.2 (Swift 6.2) broke swift-rs's per-swiftc target override for
+# cross builds. Upstream 1.0.9 only switches to `--triple`/`--sdk` on Xcode 27;
+# the vendored copy (1.0.9 + READEST PATCH) does so for every cross build.
+# See packages/swift-rs/src-rs/build.rs.
 swift-rs = { path = "packages/swift-rs" }
-# tao 0.35.3 + a use-after-free fix in the iOS scene-configuration callback
-# (configuration_for_connecting_scene_session returned a raw borrow of a
-# Retained it dropped; UIKit then retained a freed UISceneConfiguration and
-# the app SIGSEGVed at launch on real devices whenever an
-# UIApplicationSceneManifest is present - i.e. the CarPlay scene). See
-# packages/tao/src/platform_impl/ios/view.rs; worth an upstream PR.
-tao = { path = "packages/tao" }
+# No tao patch: tauri 2.12 uses tao 0.37, whose iOS
+# configuration_for_connecting_scene_session already returns the
+# UISceneConfiguration autoreleased (the use-after-free packages/tao fixed
+# for 0.35.3).
