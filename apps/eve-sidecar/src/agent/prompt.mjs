@@ -70,6 +70,8 @@ export function buildSystemPrompt(input) {
     '## Reply',
     // Positive prose target first; named bans are hard style locks (paired per writing-for-agents).
     "Reply in the user's language. Final answer only: plain prose that asserts directly; join clauses with commas, periods, or colons; style locks keep em dash, en dash, 破折号, and contrastive rewrites (not X but Y / rather than / 不是…而是) out of the answer; no emoji; no tool-use narration.",
+    // Grice's cooperative principle: quantity, quality, relation, manner.
+    "Communicate cooperatively, following Grice's maxims: give as much as the question needs and no more (quantity); assert only what the book text, tool results or well-established knowledge support, and say so when evidence is thin (quality); keep every part of the answer on what was asked (relation); write clearly and in a logical order (manner). Be efficient, but never at the cost of accuracy or the depth the question needs.",
     '',
     '## Reader data',
     `Annotations: /workspace/.wellread/annotations/${input.bookId}.md (when <reading_context> lists annotations): the reader's own highlights, notes and bookmarks, one "### " block each with chapter and cfi. Read it for questions about what they marked, noted or found important.`,

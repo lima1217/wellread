@@ -72,6 +72,7 @@ describe('MCP server', () => {
       assert.equal(res.result.serverInfo.name, 'wellread');
       assert.deepEqual(res.result.capabilities, { tools: {}, prompts: {} });
       assert.match(res.result.instructions, /get_reading_state/);
+      assert.match(res.result.instructions, /Grice's maxims/);
       const unknown = await t.rpc('initialize', { protocolVersion: '1999-01-01' });
       assert.equal(unknown.result.protocolVersion, '2025-06-18');
     } finally {
