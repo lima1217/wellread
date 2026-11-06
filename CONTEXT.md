@@ -56,9 +56,13 @@ Canonical: 选区进 Pending Quote，不进 composer 草稿。
 
 回复中 `[标题](<epubcfi(…)>)` 引用的 cfi 必须出现在工具结果、`<reading_context>` 或本书 section index 的 chunk 边界里，否则在流式输出中删除该引用。
 
+## Reader Action（阅读器动作）
+
+助手在阅读器里像读者一样动手：翻页、跳转、高亮、批注、书签、改/删标注。内置 Reading Assistant 与 External Agent 共用同一组工具（`readerActions.mjs`）；sidecar 排队、打开该书的阅读器窗口执行，产物是普通 BookNote，与读者自己做的无差别。
+
 ## External Agent（外部 Agent / MCP）
 
-通过 MCP 接入的外部 agent（Claude Code 等）。仅在 Wellread 打开且启用 AI 时可用；作用于当前打开的书，工具集与 Reading Assistant 相同，另加 `get_reading_state` / `get_selection`，以及在阅读器里动手的 Reader Action（翻页、跳转、高亮、批注、书签、改/删标注；产物是普通 BookNote，与读者自己做的无差别）。阅读位置、选区、Pending Quote 与防剧透/共享标注设置由宿主实时推送（Reader Live），不随 turn 发送。见 [`external-agents-mcp.md`](./apps/readest-app/docs/external-agents-mcp.md)。
+通过 MCP 接入的外部 agent（Claude Code 等）。仅在 Wellread 打开且启用 AI 时可用；作用于当前打开的书，工具集与 Reading Assistant 相同，另加 `get_reading_state` / `get_selection`，工具含 Reader Action。阅读位置、选区、Pending Quote 与防剧透/共享标注设置由宿主实时推送（Reader Live），不随 turn 发送。见 [`external-agents-mcp.md`](./apps/readest-app/docs/external-agents-mcp.md)。
 
 ## Thinking Mode（Think/Fast）
 

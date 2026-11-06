@@ -3,9 +3,9 @@
 Wellread runs an [MCP](https://modelcontextprotocol.io) server, so an agent
 you already use, such as Claude Code or any other MCP client, can help you read.
 It works on the book open in Wellread and has the same tools as the built-in
-Reading Assistant, plus live views of what you are doing in the reader, and it
-can act in the reader the way you do: turn pages, jump to a passage, highlight,
-annotate, bookmark, and edit or delete highlights and notes.
+Reading Assistant, including acting in the reader the way you do (turn pages,
+jump to a passage, highlight, annotate, bookmark, edit or delete highlights and
+notes), plus live views of what you are doing in the reader.
 
 It works only **while Wellread is open with AI enabled**: the server lives in
 the local eve sidecar, which runs only when Settings → AI → Enable AI is on.

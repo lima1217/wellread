@@ -497,6 +497,7 @@ const server = http.createServer(async (req, res) => {
             readerState,
             spoilerGuard,
             shareAnnotations,
+            runReaderCommand: readerCommands.run,
             // runTurn owns mid-turn + onFinish persistence via this callback.
             persistSession: (s) => sessions.save(s),
             onDropUser: () => truncation?.restore(),

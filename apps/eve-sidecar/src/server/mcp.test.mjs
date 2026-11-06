@@ -237,8 +237,9 @@ describe('MCP server', () => {
         args: { text: 'Ishmael', note: 'narrator', color: 'blue' },
       });
 
+      // Reader soft fails come back like any tool's envelope (not a protocol error).
       const missing = await t.call('delete_annotation', { id: 'nope' });
-      assert.equal(missing.isError, true);
+      assert.equal(JSON.parse(missing.content[0].text).error, 'not_found');
 
       const bad = await t.call('highlight', { text: 'x', color: 'pink' });
       assert.equal(bad.isError, true);

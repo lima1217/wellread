@@ -30,6 +30,16 @@ Sidecar `extract_status`: `ready` | `stale` (usable via scan, missing index/sche
 | `write_file` | `{ ok, path }` (+ `composed: true` when `draft` used) | OKF gate / realpath deny; `compose_failed` / `compose_unavailable` / `invalid_args` / `too_many_parallel_compose` for `draft` |
 | `search_library` | `{ ok, hits: [{ bookId, bookTitle?, kind: note\|annotation\|memory, path, heading?, score, snippet }], totalMatches, booksSearched }` | `invalid_args` / `not_found` (nothing saved for other books) |
 | `remember` | `{ ok, scope, path, added, removed, entries, notFound? }` | `invalid_args` (empty / entry > 280 chars) / `memory_full` (> 40 entries) / `denied` |
+| `open_in_reader` | `{ ok, text?, position: { cfi, chapter } }` | `not_found` (passage / section) / `invalid_cfi` / `unsupported_format` (text in PDF/comics) |
+| `turn_page` | `{ ok, position }` | — |
+| `highlight` | `{ ok, annotation: { id, cfi, text, note?, style, color, chapter }, updatedExisting? }` | `not_found` / `invalid_cfi` / `unsupported_format` |
+| `add_bookmark` | `{ ok, bookmark }` | `not_found` / `no_position` |
+| `list_annotations` | `{ ok, total, annotations: [{ id, type, cfi, chapter, text?, note?, style?, color? }] }` (book order) | — |
+| `update_annotation` / `delete_annotation` | `{ ok, annotation }` / `{ ok, deleted }` | `not_found` (id) |
+
+Every reader action can also soft-fail with `reader_timeout` (no reader window answered in 20 s), `not_ready` (book still loading) or `reader_unavailable` (no reader channel).
+
+**Reader actions** (`open_in_reader` … `delete_annotation`, `agent/readerActions.mjs`): the in-app assistant and MCP agents act in the open reader the way the reader does. The sidecar queues each call (`server/readerCommands.mjs`, passed to the turn as `runReaderCommand`); the reader window showing the book long-polls it and runs it (`useAgentReaderCommands` → `agentReaderCommands.ts`), so highlights, notes and bookmarks are ordinary BookNote records. Passages are quoted text located in the section DOM (`locatePassage.ts`): the given section, else the one holding `cfi`, else the current section, then the whole book. Writes count against the write parallel budget, navigation against the read budget.
 
 **Cross-book reach (`search_library`, `read_file`):** other books expose only what the reader wrote: OKF notes packages, `annotations/<bookId>.md` exports (only while the turn does not send `shareAnnotations: false`) and `memory/books/<bookId>.md`. Other books' extract stays denied (the reader may not have read that far). Results have every `epubcfi(…)` stripped, and the citation guard never accepts a cfi seen through them: those cfi values point into another book.
 
@@ -71,7 +81,7 @@ Offline gates: `apps/eve-sidecar/eval/readingContract.eval.test.mjs` (included i
 
 ## External agents (MCP)
 
-`POST /mcp` on the sidecar serves the same tool set to external MCP clients (Claude Code, …) through the stdio bridge `server/mcpBridge.mjs`, plus `get_reading_state` (this contract's `<reading_context>` + `<reader_memory>`, built by `agent/readingSnapshot.mjs` like a turn) and `get_selection`. Book, position, selection, Pending Quotes, `spoilerGuard` and `shareAnnotations` come from the host's live push (`PUT /eve/v1/reader/live`), not a turn body. Skills are MCP prompts expanding like `/skill:<id>`. MCP-only reader actions (`open_in_reader`, `turn_page`, `highlight`, `add_bookmark`, `list_annotations`, `update_annotation`, `delete_annotation`) are queued by `server/readerCommands.mjs` and run by the reader window (`useAgentReaderCommands`); they write ordinary BookNote records. The in-app assistant does not get them. No citation guard: replies do not come back through the sidecar. Setup and auth: [`external-agents-mcp.md`](./external-agents-mcp.md).
+`POST /mcp` on the sidecar serves the same tool set to external MCP clients (Claude Code, …) through the stdio bridge `server/mcpBridge.mjs`, plus `get_reading_state` (this contract's `<reading_context>` + `<reader_memory>`, built by `agent/readingSnapshot.mjs` like a turn) and `get_selection`. Book, position, selection, Pending Quotes, `spoilerGuard` and `shareAnnotations` come from the host's live push (`PUT /eve/v1/reader/live`), not a turn body. Skills are MCP prompts expanding like `/skill:<id>`. Reader actions are the same tools as in-app (see the table above). No citation guard: replies do not come back through the sidecar. Setup and auth: [`external-agents-mcp.md`](./external-agents-mcp.md).
 
 ## Observability
 

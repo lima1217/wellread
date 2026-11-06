@@ -66,9 +66,41 @@ export function useToolStepLabel() {
       case 'web_search':
         return detail ? _('Searched the web for “{{detail}}”', { detail }) : _('Searched the web');
       default:
-        return detail;
+        return readerActionLabel(d) ?? detail;
     }
   };
+
+  /** Reader actions; a failed one says what was attempted. */
+  function readerActionLabel(d: ToolStepDescription): string | null {
+    const detail = d.detail ?? '';
+    let label: string;
+    switch (d.kind) {
+      case 'open_passage':
+        label = detail ? _('Opened {{detail}} in the reader', { detail }) : _('Opened a passage');
+        break;
+      case 'turn_page':
+        label = _('Turned {{count}} page(s)', { count: d.count ?? 1 });
+        break;
+      case 'highlight':
+        label = _('Highlighted “{{detail}}”', { detail });
+        break;
+      case 'annotate':
+        label = _('Annotated “{{detail}}”', { detail });
+        break;
+      case 'bookmark':
+        label = detail ? _('Bookmarked “{{detail}}”', { detail }) : _('Bookmarked this page');
+        break;
+      case 'edit_annotation':
+        label = _('Edited a highlight or note');
+        break;
+      case 'delete_annotation':
+        label = _('Deleted a highlight or note');
+        break;
+      default:
+        return null;
+    }
+    return d.failed ? _('Could not: {{action}}', { action: label }) : label;
+  }
 }
 
 export function ToolStep({ tool }: { tool: SessionToolTrace }) {

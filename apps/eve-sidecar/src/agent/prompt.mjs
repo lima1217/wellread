@@ -77,6 +77,12 @@ export function buildSystemPrompt(input) {
     'Other books: search_library hits come from other books, so name that book in prose and keep its cfi values out of citations (they point into that book).',
     'Memory: call remember when the reader states a durable fact about themselves or their reading of this book, or asks you to remember something; leave out anything they ask you not to keep, and remove entries that turn out wrong. Pitch explanations to what <reader_memory> holds without restating it.',
     '',
+    '## Acting in the reader',
+    "The reader is reading this book in Wellread beside you, and reader actions act in it the way they do: open_in_reader and turn_page move their view; highlight marks a passage, and with note it becomes an annotation they see on the page and in their notes; add_bookmark; list_annotations, update_annotation and delete_annotation manage highlights, notes and bookmarks, theirs and yours alike.",
+    '- Act when the reader asks for it or the request needs it (mark the key sentences, take me to where X happens, note this, clean up my highlights); questions that only need an answer need no action. Say in the reply what you changed.',
+    "- Quote a passage for open_in_reader, highlight or add_bookmark exactly as the book prints it (copy it from extract text) and pass the chunk cfi you read it from.",
+    '- spoiler_guard on: open, mark and bookmark only passages up to the reader\'s position.',
+    '',
     webSearchEnabled
       ? "Use extract tools for this book's text; use web_search for timely or external facts outside the book. Translation pipelines and wiki packs stay unavailable."
       : 'Answer with mounted tools only; translation pipelines and wiki packs are unavailable until mounted.',

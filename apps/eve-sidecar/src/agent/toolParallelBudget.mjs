@@ -21,10 +21,20 @@ export const READ_PARALLEL_TOOL_NAMES = new Set([
   'read_section_text',
   'search_book',
   'search_library',
+  'list_annotations',
+  'open_in_reader',
+  'turn_page',
 ]);
 
 /** @type {ReadonlySet<string>} */
-export const WRITE_PARALLEL_TOOL_NAMES = new Set(['write_file', 'remember']);
+export const WRITE_PARALLEL_TOOL_NAMES = new Set([
+  'write_file',
+  'remember',
+  'highlight',
+  'add_bookmark',
+  'update_annotation',
+  'delete_annotation',
+]);
 
 /**
  * @typedef {{

@@ -139,6 +139,13 @@ export type ToolStepDescription = {
     | 'web_search'
     | 'remember'
     | 'read_memory'
+    | 'open_passage'
+    | 'turn_page'
+    | 'highlight'
+    | 'annotate'
+    | 'bookmark'
+    | 'edit_annotation'
+    | 'delete_annotation'
     | 'other';
   /** Chapter title, query, pattern or file name when known. */
   detail?: string;
@@ -146,7 +153,50 @@ export type ToolStepDescription = {
   count?: number;
   /** Result withheld by the spoiler guard (whole or partly). */
   spoilerHidden?: boolean;
+  /** A reader action that did not go through (passage not found, reader closed…). */
+  failed?: boolean;
 };
+
+const PASSAGE_LABEL_MAX = 40;
+
+function shortPassage(text: string | undefined): string | undefined {
+  if (!text) return undefined;
+  const oneLine = text.replace(/\s+/g, ' ');
+  return oneLine.length > PASSAGE_LABEL_MAX ? `${oneLine.slice(0, PASSAGE_LABEL_MAX)}…` : oneLine;
+}
+
+/** Steps where the assistant acted in the reader rather than read. */
+function describeReaderAction(
+  name: string,
+  args: Record<string, unknown>,
+  result: Record<string, unknown>,
+): ToolStepDescription | null {
+  const failed = result['ok'] === false ? { failed: true } : {};
+  const passage = shortPassage(str(args['text']));
+  const withPassage = passage ? { detail: passage } : {};
+  switch (name) {
+    case 'highlight':
+      return { kind: str(args['note']) ? 'annotate' : 'highlight', ...withPassage, ...failed };
+    case 'open_in_reader': {
+      const chapter = str(asRecord(result['position'])['chapter']);
+      return { kind: 'open_passage', ...(chapter ? { detail: chapter } : withPassage), ...failed };
+    }
+    case 'turn_page': {
+      const pages = typeof args['pages'] === 'number' ? args['pages'] : 1;
+      return { kind: 'turn_page', count: pages, ...failed };
+    }
+    case 'add_bookmark':
+      return { kind: 'bookmark', ...withPassage, ...failed };
+    case 'list_annotations':
+      return { kind: 'read_annotations', ...failed };
+    case 'update_annotation':
+      return { kind: 'edit_annotation', ...failed };
+    case 'delete_annotation':
+      return { kind: 'delete_annotation', ...failed };
+    default:
+      return null;
+  }
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -188,6 +238,8 @@ export function describeToolStep(tool: {
   const extra = spoilerHidden ? { spoilerHidden } : {};
   const hitCount = Array.isArray(result['hits']) ? result['hits'].length : undefined;
   const path = str(args['path']);
+  const action = describeReaderAction(tool.name, args, result);
+  if (action) return action;
   switch (tool.name) {
     case 'read_section_text': {
       const title = str(result['title']) ?? str(args['title']);

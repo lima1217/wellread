@@ -43,6 +43,7 @@ import { prepareUserTurn } from './userTurn.mjs';
  *   composeGenerateTextFn?: typeof import('ai').generateText,
  *   abortSignal?: AbortSignal,
  *   contextWindowTokens?: number,
+ *   runReaderCommand?: import('./tools.mjs').ReadingToolContext['runReaderCommand'],
  * }} input
  */
 export function prepareTurnContext(input) {
@@ -124,6 +125,7 @@ export function prepareTurnContext(input) {
     bookTitle: session.bookTitle,
     shareAnnotations: input.shareAnnotations,
     spoilerGuard,
+    runReaderCommand: input.runReaderCommand,
   });
   const tools = maybeAttachNativeWebSearch(bound.tools, {
     baseURL: input.baseURL,
