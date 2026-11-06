@@ -58,6 +58,9 @@ describe('buildSystemPrompt', () => {
     assert.match(prompt, /asserts directly/i);
     assert.match(prompt, /commas, periods, or colons/i);
     assert.match(prompt, /style locks/i);
+    assert.match(prompt, /Grice's maxims/);
+    assert.match(prompt, /\(quantity\).*\(quality\).*\(relation\).*\(manner\)/);
+    assert.match(prompt, /never at the cost of accuracy/);
     assert.match(prompt, /破折号/);
     assert.match(prompt, /不是…而是/);
     assert.doesNotMatch(prompt, /—|–|——/);
