@@ -71,7 +71,7 @@ Offline gates: `apps/eve-sidecar/eval/readingContract.eval.test.mjs` (included i
 
 ## External agents (MCP)
 
-`POST /mcp` on the sidecar serves the same tool set to external MCP clients (Claude Code, …) through the stdio bridge `server/mcpBridge.mjs`, plus `get_reading_state` (this contract's `<reading_context>` + `<reader_memory>`, built by `agent/readingSnapshot.mjs` like a turn) and `get_selection`. Book, position, selection, Pending Quotes, `spoilerGuard` and `shareAnnotations` come from the host's live push (`PUT /eve/v1/reader/live`), not a turn body. Skills are MCP prompts expanding like `/skill:<id>`. No citation guard: replies do not come back through the sidecar. Setup and auth: [`external-agents-mcp.md`](./external-agents-mcp.md).
+`POST /mcp` on the sidecar serves the same tool set to external MCP clients (Claude Code, …) through the stdio bridge `server/mcpBridge.mjs`, plus `get_reading_state` (this contract's `<reading_context>` + `<reader_memory>`, built by `agent/readingSnapshot.mjs` like a turn) and `get_selection`. Book, position, selection, Pending Quotes, `spoilerGuard` and `shareAnnotations` come from the host's live push (`PUT /eve/v1/reader/live`), not a turn body. Skills are MCP prompts expanding like `/skill:<id>`. MCP-only reader actions (`open_in_reader`, `turn_page`, `highlight`, `add_bookmark`, `list_annotations`, `update_annotation`, `delete_annotation`) are queued by `server/readerCommands.mjs` and run by the reader window (`useAgentReaderCommands`); they write ordinary BookNote records. The in-app assistant does not get them. No citation guard: replies do not come back through the sidecar. Setup and auth: [`external-agents-mcp.md`](./external-agents-mcp.md).
 
 ## Observability
 

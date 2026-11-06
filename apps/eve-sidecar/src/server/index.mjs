@@ -36,6 +36,7 @@ import {
   writeMcpEndpoint,
 } from './mcpEndpoint.mjs';
 import { createReaderLiveStore, normalizeReaderLive } from './readerLive.mjs';
+import { createReaderCommandQueue } from './readerCommands.mjs';
 import {
   buildAllowedOriginSet,
   corsHeaders as buildCorsHeaders,
@@ -115,6 +116,7 @@ try {
 const sessions = createSessionStore(dataDir);
 const turnGate = createTurnInFlightGate();
 const readerLive = createReaderLiveStore();
+const readerCommands = createReaderCommandQueue();
 // MCP-only token: written to the endpoint file for external agents; it opens
 // /mcp and nothing else (the loopback token stays with the desktop host).
 const mcpToken = createMcpToken();
@@ -123,6 +125,7 @@ const mcp = createMcpServer({
   getLive: readerLive.get,
   getModel: () => (modelReady ? languageModel : null),
   getContextWindowTokens: () => modelContextWindowTokens,
+  runReaderCommand: readerCommands.run,
 });
 
 function getBooksRoot() {
@@ -258,6 +261,27 @@ const server = http.createServer(async (req, res) => {
         res.end();
         return;
       }
+    }
+
+    // Reader commands (MCP reader actions): the reader window showing a book
+    // long-polls for its commands, runs them, and posts each result back.
+    if (req.method === 'GET' && path === '/eve/v1/reader/commands') {
+      const bookId = url.searchParams.get('bookId') || '';
+      if (!isSafeBookIdSegment(bookId)) {
+        sendJson(res, 400, { error: 'bookId_invalid' }, req);
+        return;
+      }
+      const gone = new AbortController();
+      res.on('close', () => gone.abort());
+      const commands = await readerCommands.take(bookId, { signal: gone.signal });
+      if (!gone.signal.aborted) sendJson(res, 200, { commands }, req);
+      return;
+    }
+    const commandResultMatch = path.match(/^\/eve\/v1\/reader\/commands\/([A-Za-z0-9_]+)\/result$/);
+    if (req.method === 'POST' && commandResultMatch) {
+      const accepted = readerCommands.complete(commandResultMatch[1], await readJson(req));
+      sendJson(res, accepted ? 200 : 404, { ok: accepted }, req);
+      return;
     }
 
     if (req.method === 'GET' && path === '/eve/v1/mcp') {

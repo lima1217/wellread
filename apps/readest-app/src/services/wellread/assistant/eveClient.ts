@@ -218,6 +218,32 @@ export async function clearReaderLive(bookId: string): Promise<void> {
   });
 }
 
+/** A reader action an external agent asked for (MCP); see agentReaderCommands.ts. */
+export type ReaderCommandWire = { id: string; type: string; args: Record<string, unknown> };
+
+/** Long-poll (≤25 s) for commands addressed to this book. */
+export async function pollReaderCommands(
+  bookId: string,
+  signal: AbortSignal,
+): Promise<ReaderCommandWire[]> {
+  const { baseUrl, token } = base();
+  const res = await eveFetch(
+    `${baseUrl}/eve/v1/reader/commands?bookId=${encodeURIComponent(bookId)}`,
+    { headers: authHeaders(token), signal },
+  );
+  if (!res.ok) throw new Error(`poll reader commands failed: ${res.status}`);
+  return ((await res.json()) as { commands?: ReaderCommandWire[] }).commands ?? [];
+}
+
+export async function postReaderCommandResult(id: string, result: unknown): Promise<void> {
+  const { baseUrl, token } = base();
+  await eveFetch(`${baseUrl}/eve/v1/reader/commands/${encodeURIComponent(id)}/result`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify(result),
+  });
+}
+
 /** How an MCP client launches the Wellread bridge (bundled Node + script + endpoint file). */
 export type McpConnectInfo = { command: string; args: string[]; endpointFile: string };
 

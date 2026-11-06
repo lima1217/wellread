@@ -43,11 +43,11 @@ function seedBook() {
   return root;
 }
 
-function setup(liveBody) {
+function setup(liveBody, runReaderCommand) {
   const root = seedBook();
   const live = createReaderLiveStore();
   if (liveBody) live.set(normalizeReaderLive(liveBody));
-  const server = createMcpServer({ getBooksRoot: () => root, getLive: live.get });
+  const server = createMcpServer({ getBooksRoot: () => root, getLive: live.get, runReaderCommand });
   let id = 0;
   const rpc = (method, params) => server.handleMessage({ jsonrpc: '2.0', id: ++id, method, params });
   const call = async (name, args = {}) => {
@@ -85,16 +85,23 @@ describe('MCP server', () => {
       const { result } = await t.rpc('tools/list');
       const names = result.tools.map((x) => x.name).sort();
       assert.deepEqual(names, [
+        'add_bookmark',
+        'delete_annotation',
         'get_reading_state',
         'get_selection',
         'glob',
         'grep',
+        'highlight',
+        'list_annotations',
+        'open_in_reader',
         'read_file',
         'read_section_text',
         'remember',
         'resolve_section',
         'search_book',
         'search_library',
+        'turn_page',
+        'update_annotation',
         'write_file',
       ]);
       const readFile = result.tools.find((x) => x.name === 'read_file');
@@ -201,6 +208,54 @@ describe('MCP server', () => {
       assert.match(bad.content[0].text, /invalid_args/);
       const unknown = await t.call('rm_rf');
       assert.equal(unknown.isError, true);
+    } finally {
+      t.cleanup();
+    }
+  });
+
+  it('routes reader actions to the open book and returns the reader result', async () => {
+    const calls = [];
+    const t = setup(reading, async (bookId, type, args) => {
+      calls.push({ bookId, type, args });
+      return type === 'delete_annotation'
+        ? { ok: false, error: 'not_found', message: 'no annotation with that id' }
+        : { ok: true, id: 'n1', cfi: 'epubcfi(/6/2!/4/2,/1:0,/1:7)' };
+    });
+    try {
+      const listed = (await t.rpc('tools/list')).result.tools;
+      const del = listed.find((x) => x.name === 'delete_annotation');
+      assert.equal(del.annotations.destructiveHint, true);
+      const hl = listed.find((x) => x.name === 'highlight');
+      assert.deepEqual(hl.inputSchema.required, ['text']);
+
+      const made = await t.call('highlight', { text: 'Ishmael', note: 'narrator', color: 'blue' });
+      assert.equal(made.isError, undefined);
+      assert.equal(JSON.parse(made.content[0].text).id, 'n1');
+      assert.deepEqual(calls[0], {
+        bookId: 'bk1',
+        type: 'highlight',
+        args: { text: 'Ishmael', note: 'narrator', color: 'blue' },
+      });
+
+      const missing = await t.call('delete_annotation', { id: 'nope' });
+      assert.equal(missing.isError, true);
+
+      const bad = await t.call('highlight', { text: 'x', color: 'pink' });
+      assert.equal(bad.isError, true);
+      const empty = await t.call('open_in_reader', {});
+      assert.match(empty.content[0].text, /text, cfi or sectionIndex/);
+      assert.equal(calls.length, 2);
+    } finally {
+      t.cleanup();
+    }
+  });
+
+  it('refuses reader actions with no book open', async () => {
+    const t = setup(undefined, async () => ({ ok: true }));
+    try {
+      const res = await t.call('turn_page', { direction: 'next' });
+      assert.equal(res.isError, true);
+      assert.match(res.content[0].text, /no_book_open/);
     } finally {
       t.cleanup();
     }
