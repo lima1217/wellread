@@ -40,7 +40,7 @@ const DEFAULT_OPTIONS: ChunkOptions = {
 
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
 
-interface TextSlice {
+export interface TextSlice {
   node: Text;
   /** Cumulative character offset of this text node's first char within the section's flat string. */
   cumStart: number;
@@ -50,7 +50,7 @@ interface TextSlice {
  * Walk the document body collecting text nodes alongside their position in
  * the flat concatenated string we use for break-point detection.
  */
-function collectTextNodes(doc: Document): { slices: TextSlice[]; flatText: string } {
+export function collectTextNodes(doc: Document): { slices: TextSlice[]; flatText: string } {
   const body = doc.body ?? doc.documentElement;
   if (!body) return { slices: [], flatText: '' };
 
@@ -85,7 +85,10 @@ function collectTextNodes(doc: Document): { slices: TextSlice[]; flatText: strin
  * Map a cumulative character offset to a (text node, offset-within-node) pair.
  * Caller guarantees `0 <= offset <= flatText.length`.
  */
-function offsetToNode(slices: TextSlice[], offset: number): { node: Text; offset: number } | null {
+export function offsetToNode(
+  slices: TextSlice[],
+  offset: number,
+): { node: Text; offset: number } | null {
   if (slices.length === 0) return null;
   // Binary search for the slice whose cumStart <= offset < next cumStart.
   let lo = 0;

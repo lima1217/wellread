@@ -60,6 +60,7 @@ function hasReadingContextSchema(def) {
  *   bookTitle?: string | null,
  *   shareAnnotations?: boolean,
  *   spoilerGuard?: import('./spoilerGuard.mjs').SpoilerGuard | null,
+ *   runReaderCommand?: import('./tools.mjs').ReadingToolContext['runReaderCommand'],
  * }} input
  * @returns {{
  *   tools: import('ai').ToolSet,
@@ -101,6 +102,7 @@ export function bindTurnTools(input) {
       : {}),
     ...(input.shareAnnotations === false ? { shareAnnotations: false } : {}),
     ...(input.spoilerGuard ? { spoilerGuard: input.spoilerGuard } : {}),
+    ...(input.runReaderCommand ? { runReaderCommand: input.runReaderCommand } : {}),
   };
   return {
     tools,

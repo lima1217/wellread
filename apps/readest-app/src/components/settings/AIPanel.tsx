@@ -17,6 +17,7 @@ import NavigationRow from './primitives/NavigationRow';
 import SettingsSwitchRow from './primitives/SettingsSwitchRow';
 import ModelProvidersPanel from './ModelProvidersPanel';
 import ManageSkillsPanel from './ManageSkillsPanel';
+import ExternalAgentsSection from './ExternalAgentsSection';
 
 type SubPage = 'providers' | 'skills' | null;
 
@@ -162,6 +163,8 @@ const AIPanel: React.FC = () => {
           onClick={() => setSubPage('skills')}
         />
       </BoxedList>
+
+      <ExternalAgentsSection />
     </div>
   );
 };

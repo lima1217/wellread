@@ -32,6 +32,7 @@ import { SPOILER_GUARD_MESSAGE } from './spoilerGuard.mjs';
 import { BOOK_SEARCH_MAX_LIMIT, searchBook } from './bookSearch.mjs';
 import { LIBRARY_SEARCH_MAX_LIMIT, searchLibrary } from './librarySearch.mjs';
 import { MEMORY_ENTRIES_MAX, updateReaderMemory } from './readerMemory.mjs';
+import { createReaderActionTools } from './readerActions.mjs';
 import {
   MAX_PARALLEL_COMPOSE,
   composeGate,
@@ -345,6 +346,12 @@ export const readingToolContextSchema = z.object({
           typeof /** @type {{ isPathHidden?: unknown }} */ (v).isPathHidden === 'function'),
     )
     .optional(),
+  /**
+   * Optional: queue a reader action for the reader window showing `bookId`
+   * and resolve with its result (server/readerCommands.mjs). Absent → the
+   * reader action tools answer reader_unavailable.
+   */
+  runReaderCommand: z.custom((v) => typeof v === 'function').optional(),
 });
 
 /**
@@ -359,6 +366,7 @@ export const readingToolContextSchema = z.object({
  *   bookTitle?: string,
  *   shareAnnotations?: boolean,
  *   spoilerGuard?: import('./spoilerGuard.mjs').SpoilerGuard | null,
+ *   runReaderCommand?: (bookId: string, type: string, args: Record<string, unknown>) => Promise<unknown>,
  * }} ReadingToolContext
  */
 
@@ -900,6 +908,7 @@ export function createReadingTools() {
         }
       },
     }),
+    ...createReaderActionTools(readingToolContextSchema),
   };
 }
 

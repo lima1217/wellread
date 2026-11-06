@@ -71,6 +71,7 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000;
  *   persistSession?: (session: import('./sessionStore.mjs').Session) => void,
  *   onDropUser?: () => void, // runs after an aborted/failed/empty turn drops its user message
  *   tools?: import('ai').ToolSet, // prefer readingToolContextSchema (+ parallelGate); bare tools get wrap fallback
+ *   runReaderCommand?: import('./tools.mjs').ReadingToolContext['runReaderCommand'], // reader actions
  * }} input
  * @returns {ReadableStream<import('ai').UIMessageChunk> & { finished: Promise<void> }}
  */
@@ -127,6 +128,7 @@ export function runTurn(input) {
     composeGenerateTextFn: input.composeGenerateTextFn,
     abortSignal,
     contextWindowTokens: input.contextWindowTokens,
+    runReaderCommand: input.runReaderCommand,
   });
 
   const userMsg = {

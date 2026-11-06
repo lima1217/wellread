@@ -188,6 +188,72 @@ export async function deleteEveNote(bookId: string, path: string): Promise<void>
   if (!res.ok) throw new Error(`delete note failed: ${res.status}`);
 }
 
+/** What external agents (MCP) see of the reader; see apps/eve-sidecar/src/server/readerLive.mjs. */
+export type ReaderLivePayload = {
+  bookId: string;
+  bookTitle?: string;
+  readerState?: ReaderState | null;
+  /** Text selected in the reader right now. */
+  selection?: PendingQuoteForTurn | null;
+  pendingQuotes: PendingQuoteForTurn[];
+  spoilerGuard: boolean;
+  shareAnnotations: boolean;
+};
+
+export async function putReaderLive(payload: ReaderLivePayload): Promise<void> {
+  const { baseUrl, token } = base();
+  const res = await eveFetch(`${baseUrl}/eve/v1/reader/live`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`push reader state failed: ${res.status}`);
+}
+
+export async function clearReaderLive(bookId: string): Promise<void> {
+  const { baseUrl, token } = base();
+  await eveFetch(`${baseUrl}/eve/v1/reader/live?bookId=${encodeURIComponent(bookId)}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+}
+
+/** A reader action an external agent asked for (MCP); see agentReaderCommands.ts. */
+export type ReaderCommandWire = { id: string; type: string; args: Record<string, unknown> };
+
+/** Long-poll (≤25 s) for commands addressed to this book. */
+export async function pollReaderCommands(
+  bookId: string,
+  signal: AbortSignal,
+): Promise<ReaderCommandWire[]> {
+  const { baseUrl, token } = base();
+  const res = await eveFetch(
+    `${baseUrl}/eve/v1/reader/commands?bookId=${encodeURIComponent(bookId)}`,
+    { headers: authHeaders(token), signal },
+  );
+  if (!res.ok) throw new Error(`poll reader commands failed: ${res.status}`);
+  return ((await res.json()) as { commands?: ReaderCommandWire[] }).commands ?? [];
+}
+
+export async function postReaderCommandResult(id: string, result: unknown): Promise<void> {
+  const { baseUrl, token } = base();
+  await eveFetch(`${baseUrl}/eve/v1/reader/commands/${encodeURIComponent(id)}/result`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify(result),
+  });
+}
+
+/** How an MCP client launches the Wellread bridge (bundled Node + script + endpoint file). */
+export type McpConnectInfo = { command: string; args: string[]; endpointFile: string };
+
+export async function getMcpConnectInfo(): Promise<McpConnectInfo> {
+  const { baseUrl, token } = base();
+  const res = await eveFetch(`${baseUrl}/eve/v1/mcp`, { headers: authHeaders(token) });
+  if (!res.ok) throw new Error(`get MCP info failed: ${res.status}`);
+  return (await res.json()) as McpConnectInfo;
+}
+
 function noteQuery(bookId: string, path: string): string {
   return `bookId=${encodeURIComponent(bookId)}&path=${encodeURIComponent(path)}`;
 }
