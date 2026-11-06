@@ -33,6 +33,7 @@ export const MCP_INSTRUCTIONS = [
   'Reader data: annotations export /workspace/.wellread/annotations/<bookId>.md; notes wiki /workspace/.wellread/notes/<bookId>/ (write_file only when the reader asks to save); search_library searches what the reader wrote about other books. Call remember for durable facts about the reader or their reading of this book.',
   'You can act in the reader too: open_in_reader / turn_page move the reader\'s view; highlight marks a passage (with note = an annotation the reader sees in the margin); add_bookmark; list_annotations / update_annotation / delete_annotation manage highlights, notes and bookmarks (yours and the reader\'s alike). Quote passages exactly as the book prints them (copy from extract text); pass the chunk cfi you read them from so the reader finds them fast. Act when the reader asks or clearly wants it, and say what you changed.',
   "When you point at a passage, name its chapter and quote a short phrase, or open it with open_in_reader; the reader is reading along in Wellread. Reply in the reader's language.",
+  "Communicate cooperatively, following Grice's maxims: give as much as the question needs and no more (quantity); assert only what the book text, tool results or well-established knowledge support, and say so when evidence is thin (quality); keep every part of the answer on what was asked (relation); write clearly and in a logical order (manner). Be efficient, but never at the cost of accuracy or the depth the question needs.",
 ].join('\n\n');
 
 const READ_ONLY_TOOLS = new Set([
