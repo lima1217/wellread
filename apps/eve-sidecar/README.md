@@ -1,6 +1,6 @@
 # @wellread/eve-sidecar
 
-Loopback HTTP sidecar for wellread’s Reading Assistant. Speaks an eve-compatible `/eve/v1` surface: sessions, streaming turns (AI SDK UIMessage chunks), Books FS tools, and `/skill:<id>` packages.
+Loopback HTTP sidecar for wellread’s Reading Assistant. Speaks an eve-compatible `/eve/v1` surface: sessions, streaming turns (AI SDK UIMessage chunks), Books FS tools, reader actions, and `/skill:<id>` packages. It also serves an [MCP](https://modelcontextprotocol.io) endpoint (`POST /mcp`) so external agents such as Claude Code can use the same tools on the book open in Wellread — see [`external-agents-mcp.md`](../readest-app/docs/external-agents-mcp.md).
 
 Rust boots this process from `apps/readest-app/src-tauri/src/eve_sidecar.rs` (random port, Bearer token, model env). The webview talks to it via `@tauri-apps/plugin-http` (`eveFetch`), which bypasses browser CORS.
 
@@ -9,7 +9,9 @@ Rust boots this process from `apps/readest-app/src-tauri/src/eve_sidecar.rs` (ra
 | Path | Role |
 | --- | --- |
 | `src/server/` | HTTP handshake, auth, CORS, turn gate |
-| `src/agent/` | `runTurn`, prompts, tools, session store, skills |
+| `src/server/mcp*.mjs` | MCP server (`mcp.mjs`), stdio bridge for clients (`mcpBridge.mjs`), endpoint file (`mcpEndpoint.mjs`) |
+| `src/server/reader*.mjs` | Live reader state pushed by the app (`readerLive.mjs`) and the reader command queue (`readerCommands.mjs`) |
+| `src/agent/` | `runTurn`, prompts, tools, reader actions (`readerActions.mjs`), reading snapshot, session store, skills |
 | `src/books/` | `/workspace` path sandbox over Books root |
 | `src/createModel*.mjs` | OpenAI-compatible model wiring + host adapters |
 | `bundled-skills/` | Default skill packages shipped with the sidecar |
@@ -52,6 +54,7 @@ Fail-closed at boot: missing `EVE_LOOPBACK_TOKEN` exits non-zero unless `EVE_ALL
 - `EVE_ALLOW_NO_TOKEN=1` disables Bearer checks. Combined with a browser page whose Origin is on the allowlist, that page can drive the loopback API. Keep that flag off outside local debug.
 - Session ids must match `ses_` + 16 lowercase hex; path traversal after URL-decode is rejected.
 - Books writes are confined to `/workspace/.wellread/` (notes package rules + realpath sandbox).
+- `/mcp` uses its own **MCP-only token** (not `EVE_LOOPBACK_TOKEN`). It is generated per launch and written with the URL to `<EVE_DATA_DIR>/mcp-endpoint.json` (mode 0600, removed on shutdown). That token opens `/mcp` and nothing else, and any request to `/mcp` carrying an `Origin` header is refused (DNS rebinding).
 
 ## API sketch
 
@@ -65,6 +68,13 @@ Fail-closed at boot: missing `EVE_LOOPBACK_TOKEN` exits non-zero unless `EVE_ALL
 | `GET/POST` | `/eve/v1/sessions` | List / create (`bookId` required) |
 | `GET/DELETE` | `/eve/v1/sessions/:id` | Load / remove (turn mutex on DELETE) |
 | `POST` | `/eve/v1/sessions/:id/turns` | Stream UIMessage chunks. Body: `message`, optional `thinkingMode`, `readerState`, `spoilerGuard: true`, `truncateFrom: <user message id>` (regenerate / edit: drops that turn and everything after; 409 `truncate_target_not_found` otherwise) |
+| `POST` | `/eve/v1/sessions/:id/turns/cancel` | Abort the running turn |
+| `POST` | `/eve/v1/test-model-connection` | Probe a model endpoint (`baseURL`, `apiKey`, optional `apiMode`) |
+| `PUT/DELETE` | `/eve/v1/reader/live` | Live reader state for MCP: book, position, selection, Pending Quotes, `spoilerGuard`, `shareAnnotations` (DELETE `?bookId=` clears) |
+| `GET` | `/eve/v1/reader/commands?bookId=` | Long-poll: the reader window takes queued reader actions for its book |
+| `POST` | `/eve/v1/reader/commands/:id/result` | The reader window reports a command's result (404 if unknown / expired) |
+| `GET` | `/eve/v1/mcp` | Bridge launch command (`command`, `args`) + `endpointFile`, for Settings → AI → External Agents |
+| `POST` | `/mcp` | MCP Streamable HTTP (stateless JSON-RPC: `initialize`, `tools/*`, `prompts/*`). MCP token only; see above |
 
 ## `.output` packaging
 
@@ -75,6 +85,8 @@ Fail-closed at boot: missing `EVE_LOOPBACK_TOKEN` exits non-zero unless `EVE_ALL
 .output/bundled-skills/    # default skills
 .output/node_modules/      # production deps (no pnpm symlinks)
 ```
+
+`.output/server/mcpBridge.mjs` is what MCP clients launch (with the app's bundled `node`); it has no dependencies and re-reads `mcp-endpoint.json` on every message, so sidecar restarts are invisible to the client.
 
 Tauri registers `../../eve-sidecar/.output` as a bundle resource and spawns vendored Node with `NODE_PATH` pointing at `.output/node_modules`. Do not hand-edit `.output`; rebuild after source changes.
 

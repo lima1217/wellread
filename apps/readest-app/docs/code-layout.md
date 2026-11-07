@@ -14,7 +14,7 @@ exists for UI work without Rust; it is not a product download. Mobile / Windows
 | --- | --- |
 | `apps/readest-app/src` | Next.js / React app |
 | `apps/readest-app/src-tauri` | Tauri native shell (macOS product path) |
-| `apps/eve-sidecar` | Loopback Reading Assistant process (bundled Node + `.output`) |
+| `apps/eve-sidecar` | Loopback Reading Assistant process (bundled Node + `.output`); also the MCP server for external agents |
 
 Rust modules worth knowing: `eve_sidecar.rs`, parsers, `dir_scanner.rs`,
 `transfer_file.rs`, `clip_url.rs`, `macos/`.
@@ -90,13 +90,23 @@ supports local replica-shaped persistence—not hosted multi-device sync APIs.
 `wellread/`:
 
 - `eveSidecar.ts`, `eveConnectionStore.ts`, `eveListen.ts`
-- `assistant/` — eve client, fetch, agent hook, session helpers
+- `assistant/` — eve client, fetch, agent hook, session helpers, `readerLive.ts`
+  (live reader state pushed to the sidecar for MCP)
+- `agent/` — `locatePassage.ts` (quoted passage → DOM range for reader actions)
 - `extract/` — book extract / CFI chunking for assistant context
 - `modelConfig.ts`, `modelApiKey.ts`, `ensureEveSidecar.ts`,
   `testModelConnection.ts`
 
+Reader-side glue for agents lives in `src/app/reader`:
+`hooks/useReaderLivePublisher.ts` (pushes book / position / selection / Pending
+Quotes / settings), `hooks/useAgentReaderCommands.ts` +
+`utils/agentReaderCommands.ts` (run reader actions as ordinary BookNote edits).
+The MCP setup UI is `src/components/settings/ExternalAgentsSection.tsx`.
+
 Sidecar implementation lives in `apps/eve-sidecar` (`server/`, `agent/`,
-`books/`). Shared SessionMessage ↔ UIMessage conversion lives in
+`books/`); MCP is `server/mcp.mjs` + `mcpBridge.mjs` + `mcpEndpoint.mjs`,
+reader actions are `agent/readerActions.mjs` + `server/readerCommands.mjs`
+(see [`external-agents-mcp.md`](./external-agents-mcp.md)). Shared SessionMessage ↔ UIMessage conversion lives in
 `packages/eve-message` (`@wellread/eve-message`). Turns stream AI SDK UIMessage
 SSE (not custom NDJSON) — see `docs/architecture.md` §6.3.
 
@@ -114,7 +124,7 @@ the old cloud inbox / email-to-library product path is gone.
 ## Practical mental model
 
 1. **macOS product I/O** → `src-tauri` + `nativeAppService`
-2. **Reading Assistant** → `src/services/wellread` + `apps/eve-sidecar`
+2. **Reading Assistant / external agents (MCP)** → `src/services/wellread` + `apps/eve-sidecar`
 3. **Reader / library UI** → `src/app/{reader,library}` + Foliate
 4. **Optional network features** → client services + thin `src/app/api` proxies
 5. **Library bytes** → local disk only
