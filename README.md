@@ -7,6 +7,8 @@
 It is built with [Next.js 16](https://github.com/vercel/next.js) and [Tauri v2](https://github.com/tauri-apps/tauri),
 on top of the [Foliate](https://github.com/johnfactotum/foliate) / [foliate-js](https://github.com/johnfactotum/foliate-js)
 lineage, and adds an on-device **Reading Assistant** via an embedded eve sidecar.
+The same sidecar serves an **MCP server**, so Claude Code or any other MCP client
+can read along with you and act in the reader (turn pages, highlight, annotate).
 
 [![OS][badge-platforms]][link-gh-releases]
 [![AGPL Licence][badge-license]](LICENSE)
@@ -18,6 +20,7 @@ lineage, and adds an on-device **Reading Assistant** via an embedded eve sidecar
 
 <p align="center">
   <a href="#features">Features</a> ·
+  <a href="#external-agents-mcp">External agents (MCP)</a> ·
   <a href="#downloads">Downloads</a> ·
   <a href="#documentation">Documentation</a> ·
   <a href="#building-from-source">Building from source</a> ·
@@ -36,6 +39,7 @@ lineage, and adds an on-device **Reading Assistant** via an embedded eve sidecar
 | **Ships as** | macOS Apple Silicon app (`.dmg`) with in-app updater |
 | **Data** | Local library on disk — no Wellread account, no hosted sync, no billing |
 | **AI** | Optional Reading Assistant; your model endpoint + API key; loopback eve sidecar |
+| **External agents** | Local MCP server (stdio bridge) for Claude Code, Claude Desktop, Cursor, …; brings its own model, no API key in Wellread |
 | **Not shipping** | Windows / Linux / Android / iOS / App Store / Flathub / hosted web app builds |
 
 For a multi-platform cloud-capable reader, see [Upstream](#upstream).
@@ -56,10 +60,27 @@ For a multi-platform cloud-capable reader, see [Upstream](#upstream).
 | Library management | Organize, sort, and manage your ebook library | ✅ |
 | OPDS / Calibre catalogs | Browse online catalogs (optional network) | ✅ |
 | Translation providers | Translate via configured providers (e.g. DeepL, Yandex) | ✅ |
-| Reading Assistant | Book-aware chat through the local eve sidecar | ✅ |
-| External agents (MCP) | Let Claude Code or other MCP clients read along ([setup](./apps/readest-app/docs/external-agents-mcp.md)) | ✅ |
+| Reading Assistant | Book-aware chat through the local eve sidecar, with skills (`/explain`, `/note`, …), reader memory and spoiler guard | ✅ |
+| Reader actions | The assistant can turn pages, jump to a passage, highlight, annotate and bookmark — saved as your ordinary notes | ✅ |
+| External agents (MCP) | Let Claude Code or other MCP clients read along and act in the reader ([setup](./apps/readest-app/docs/external-agents-mcp.md)) | ✅ |
 | Accessibility | Keyboard navigation and VoiceOver-oriented flows | ✅ |
 | Visual and focus aids | Reading ruler, paragraph mode, and speed reading | ✅ |
+
+## External agents (MCP)
+
+With **Settings → AI → Enable AI** on and Wellread open, any MCP client can work
+on the book you have open, using the same tools as the built-in Reading Assistant
+plus `get_reading_state` / `get_selection`.
+
+1. Wellread → Settings → AI → **External Agents (MCP)** → Claude Code → **Copy**.
+2. Run the copied `claude mcp add --scope user wellread -- …` command once, then check with `claude mcp list`.
+3. Open a book, start `claude`, and ask e.g. "Explain what I selected" or
+   "Highlight the sentences that carry this chapter's argument and note why".
+   Skills show up as `/mcp__wellread__explain`, `/mcp__wellread__note`, …
+
+For Claude Desktop, Cursor and other clients, copy the `mcpServers` JSON entry
+from the same settings section instead. Details, the tool list and the security
+model: [`external-agents-mcp.md`](./apps/readest-app/docs/external-agents-mcp.md).
 
 ## Downloads
 
@@ -76,9 +97,11 @@ Unsigned builds may be blocked by Gatekeeper on first open: right-click the app 
 | --- | --- |
 | [`CONTEXT.md`](./CONTEXT.md) | Domain glossary (Reading Assistant, Books, Skill, …) |
 | [`apps/readest-app/docs/architecture.md`](./apps/readest-app/docs/architecture.md) | Process boundaries, eve sidecar, local-first constraints |
-| [`apps/readest-app/docs/reading-assistant-contract.md`](./apps/readest-app/docs/reading-assistant-contract.md) | Extract / tools / reading_context / skill contract |
+| [`apps/readest-app/docs/reading-assistant-contract.md`](./apps/readest-app/docs/reading-assistant-contract.md) | Extract / tools / reader actions / reading_context / skill contract |
+| [`apps/readest-app/docs/external-agents-mcp.md`](./apps/readest-app/docs/external-agents-mcp.md) | Connect Claude Code and other MCP clients; tools, auth and data flow |
 | [`apps/readest-app/docs/code-layout.md`](./apps/readest-app/docs/code-layout.md) | Directory map |
 | [`apps/readest-app/AGENTS.md`](./apps/readest-app/AGENTS.md) | Dev commands and agent rules |
+| [`apps/eve-sidecar/README.md`](./apps/eve-sidecar/README.md) | Sidecar env, HTTP API (incl. `/mcp`), packaging |
 | [`apps/eve-sidecar/AGENTS.md`](./apps/eve-sidecar/AGENTS.md) | Sidecar invariants and touch points |
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Build prerequisites and contribution flow |
 | [Project wiki][link-gh-wiki] | Extra notes |

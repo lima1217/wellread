@@ -34,6 +34,8 @@ flowchart LR
         Disk["Local library + settings<br/>Books / Turso / keychain"]
     end
 
+    Agent["External agent<br/>(Claude Code, …)"]
+
     subgraph Optional["Optional network"]
         Model["User-chosen model API<br/>(OpenAI-compatible / …)"]
         Catalogs["OPDS / metadata / dict / translators"]
@@ -42,6 +44,7 @@ flowchart LR
     UI -- invoke --> Tauri
     Tauri -- spawn + loopback HTTP --> Eve
     UI -- fetch 127.0.0.1 --> Eve
+    Agent -- "stdio → mcpBridge → POST /mcp" --> Eve
     Tauri --> Disk
     UI --> Disk
     Eve -- HTTPS --> Model
@@ -106,7 +109,14 @@ flowchart TB
   sandboxed to the library Books tree
 - External agents: `POST /mcp` (MCP-only token, published in
   `mcp-endpoint.json` under the sidecar data dir) reached via the stdio bridge
-  `mcpBridge.mjs`; see [`external-agents-mcp.md`](./external-agents-mcp.md)
+  `mcpBridge.mjs`; see [`external-agents-mcp.md`](./external-agents-mcp.md).
+  The reader pushes live state (`PUT /eve/v1/reader/live`) so MCP tools know the
+  open book, position and selection without a turn
+- Reader actions (both in-app assistant and MCP): the sidecar queues commands
+  (`readerCommands.mjs`); the reader window long-polls
+  `GET /eve/v1/reader/commands`, runs them with the same code as the reader's
+  own clicks, and posts results back. Highlights / notes / bookmarks the agent
+  makes are ordinary BookNote records
 
 ### 2.2 Runtime config
 
@@ -211,6 +221,12 @@ product.
   (`modelConfig.ts`, `modelApiKey.ts`)
 - Book context: extract / CFI chunking under `services/wellread/extract`
 - Runtime: eve sidecar agent loop, tool rounds, scoped Books search
+- Reader actions: `open_in_reader`, `turn_page`, `highlight`, `add_bookmark`,
+  `list_annotations`, `update_annotation`, `delete_annotation`
+  (`agent/readerActions.mjs`, run in the reader via
+  `useAgentReaderCommands` → `agentReaderCommands.ts`)
+- External agents: same tool set over MCP (`POST /mcp`), see
+  [`external-agents-mcp.md`](./external-agents-mcp.md)
 - Shared message conversion: `packages/eve-message` (`@wellread/eve-message`) —
   SessionMessage ↔ AI SDK UIMessage; sessions persist ordered `parts`
 - Contract SSOT: [`reading-assistant-contract.md`](./reading-assistant-contract.md)
